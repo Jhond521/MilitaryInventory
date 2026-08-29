@@ -1,0 +1,32 @@
+[project]
+name = "armory-inventory"
+version = "0.1.0"
+description = "SIGA — Sistema de Inventario y Gestión de Armamento (Batallón de Selva No. 52)"
+requires-python = ">=3.12"
+dependencies = [
+    "django>=5.2,<6.0",
+    "psycopg[binary]>=3.2",
+    "dj-database-url>=2.2",
+    "python-dotenv>=1.0",
+    "gunicorn>=23.0",
+    "whitenoise>=6.7",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-django>=4.9",
+    "ruff>=0.6",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["**/migrations/*"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "DJ"]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings"
+python_files = ["tests.py", "test_*.py", "*_tests.py"]

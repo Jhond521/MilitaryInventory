@@ -1,0 +1,36 @@
+# Environment
+.env
+.env.local
+*.local
+
+# Editors
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Coverage / test artifacts
+coverage/
+.coverage
+htmlcov/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Django
+db.sqlite3
+staticfiles/
+media/
