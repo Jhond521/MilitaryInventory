@@ -35,7 +35,7 @@ pip install -e . --group dev      # or: pip install django psycopg[binary] dj-da
 # first-time setup
 cp .env.example .env              # then edit values
 python manage.py migrate
-python manage.py seed_initial     # seeds 1 unidad, 7 compañías, 2 depósitos, 23 tipos
+python manage.py seed_initial     # seeds 1 unidad, 7 compañías, 2 depósitos, 28 pelotones, 24 tipos
 python manage.py createsuperuser  # first admin (email is the login)
 
 # run in development
@@ -62,20 +62,34 @@ docker compose up
 ## Project layout
 
 ```
-config/            # Django project: settings, urls, wsgi/asgi
+config/            # Django project: settings, urls (incl. /manifest.json, /sw.js), wsgi/asgi
 apps/accounts/     # custom User (email login), roles (ADMIN/ENLACE), email allowlist backend
-apps/inventory/    # domain: Unidad, Compania, Deposito, Soldado, TipoArmamento, Armamento, Movimiento, CampoPersonalizado
+apps/inventory/    # domain: Unidad, Compania, Deposito, Peloton, Soldado, TipoArmamento,
+                   #         Armamento, Movimiento, CampoPersonalizado, Existencia, Prestamo
   management/commands/seed_initial.py   # idempotent master-data seed
+static/            # manifest.json, sw.js, icons/ (PWA — RF-17)
+templates/admin/   # base_site.html override wiring the manifest + service worker into the admin UI
 docs/              # PRD (Spanish), backlog (Spanish), ADRs
 ```
 
 ## Domain rules that matter
 
 - A weapon (`Armamento`) belongs to exactly one company and is **never** transferred
-  between companies (PRD NO-3).
+  between companies (PRD NO-3). Every `TipoArmamento` is either `SERIE` (individual,
+  used by `Armamento`) or `CANTIDAD` (stock, used by `Existencia`) — `Armamento.clean()`
+  rejects a `CANTIDAD` tipo, `Existencia.clean()` rejects a `SERIE` one.
 - Location is a two-state field: `EN_MANO` (needs a `soldado` of the same company)
   or `DEPOSITO` (needs a `deposito`). `Armamento.clean()` enforces both — call
   `full_clean()` before saving from views.
+- A soldier belongs to exactly one `Peloton` of their own company (`Soldado.clean()`
+  checks this); a weapon has no pelotón of its own — `Armamento.peloton_actual` derives
+  it from the soldier currently holding it, and is `None` while in depósito (RF-16).
+- Ammunition/quantity stock (`Existencia`) **does** cross companies via `Prestamo`
+  (RF-15) — the only exception to the no-transfer rule above, which applies to
+  serialized weapons only. `Prestamo.save()` atomically debits the origin
+  `Existencia` and credits (or creates) the destination one; `Prestamo.clean()`
+  validates the tipo, the quantity and that enough stock exists — always call
+  `full_clean()` before `save()`.
 - Custom fields (`CampoPersonalizado` + `Armamento.datos_extra` JSON) apply **only**
   to weapons. Soldiers and weapon types have a fixed schema (PRD NO-2).
 - Every entrega/devolución must create a `Movimiento` row (who, when, type) for
@@ -116,6 +130,13 @@ docs/              # PRD (Spanish), backlog (Spanish), ADRs
 - The current build uses the Django admin as the UI. The custom operator screens
   (company selector, guided entrega/devolución, global search) are backlog stories
   H-08…H-11 and are not built yet.
+- `/manifest.json` and `/sw.js` are served straight from `static/` via dedicated
+  views in `config/urls.py` (not through whitenoise's hashed static pipeline, and
+  not under `/static/`) so the service worker's default scope covers the whole
+  origin. `templates/admin/base_site.html` links the manifest and registers the
+  worker on every admin page — that's the whole PWA story until T-06/H-17 build
+  the real mobile-first templates and bottom nav. The app icon is a placeholder
+  (`static/icons/icon.svg`); swap it for the battalion crest before shipping RF-17.
 - Local dev uses SQLite by default (empty `DATABASE_URL`). To mirror prod, set
   `DATABASE_URL` to Postgres or run `docker compose up`.
 - `AUTH_USER_MODEL` is custom (`accounts.User`) — this was set before the first

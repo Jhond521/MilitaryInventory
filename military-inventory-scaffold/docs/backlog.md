@@ -160,13 +160,19 @@ El corazón del sistema.
 
 ## Actualizaciones v1.1–v1.3 (nuevas historias)
 
-Derivadas del PRD actualizado; pendientes de ajustar el modelo del scaffold.
+Derivadas del PRD actualizado. T-07 (Hecho) alineó el modelo del scaffold; las
+historias H-14…H-17 siguen pendientes en su parte de interfaz/UI.
 
 - H-14 — Pelotones: 4 por compañía; pelotón como dato del soldado (editable), mostrado en inventario/detalle/entrega; el arma deriva su pelotón del soldado (RF-16)
+  - **Estado**: modelo listo (T-07) — `Peloton`, `Soldado.peloton` (validado contra su compañía) y `Armamento.peloton_actual` (derivado, `None` en depósito). Falta mostrarlo en pantallas propias (H-08…H-11).
 - H-15 — Existencias por cantidad: munición y cascos por cantidad; carga desde "CARGOS SAP" (RF-14)
+  - **Estado**: modelo listo (T-07) — `Existencia` (tipo + compañía + depósito + lote opcional + cantidad), gestionable desde el admin. Falta el importador desde "CARGOS SAP" (fase siguiente) y una pantalla de ajuste guiado.
 - H-16 — Préstamo de munición entre compañías con saldos y trazabilidad (RF-15)
+  - **Estado**: modelo listo (T-07) — `Prestamo` ajusta atómicamente las existencias de origen/destino y valida tipo, cantidad y saldo disponible; gestionable desde el admin. Falta la pantalla guiada de préstamo.
 - H-17 — App móvil responsive e instalable (PWA): manifest, service worker, íconos, navegación móvil (RF-17)
+  - **Estado**: parcialmente cubierto por T-07 (manifest + service worker servidos y enlazados desde el admin, ícono placeholder). Faltan las plantillas mobile-first y la navegación inferior.
 - T-07 — Ajustar modelos del scaffold: separar control por SERIE vs CANTIDAD, agregar Pelotón, existencias y préstamos
+  - **Estado**: Hecho — ver detalle de estado en cada historia (H-14…H-17) arriba.
 
 ## Orden sugerido para arrancar
 

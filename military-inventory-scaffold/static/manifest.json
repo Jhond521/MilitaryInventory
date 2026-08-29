@@ -1,0 +1,20 @@
+{
+  "name": "SIGA — Inventario de Armamento",
+  "short_name": "SIGA",
+  "description": "Sistema de Inventario y Gestión de Armamento — Batallón de Selva No. 52",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b1f13",
+  "theme_color": "#0b1f13",
+  "lang": "es-CO",
+  "icons": [
+    {
+      "src": "/static/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -5,7 +5,10 @@ from .models import (
     CampoPersonalizado,
     Compania,
     Deposito,
+    Existencia,
     Movimiento,
+    Peloton,
+    Prestamo,
     Soldado,
     TipoArmamento,
     Unidad,
@@ -30,15 +33,26 @@ class DepositoAdmin(admin.ModelAdmin):
     search_fields = ("nombre",)
 
 
+@admin.register(Peloton)
+class PelotonAdmin(admin.ModelAdmin):
+    list_display = ("nombre", "compania")
+    list_filter = ("compania",)
+    search_fields = ("nombre",)
+    autocomplete_fields = ("compania",)
+
+
 @admin.register(Soldado)
 class SoldadoAdmin(admin.ModelAdmin):
-    list_display = ("apellidos_nombres", "compania")
-    list_filter = ("compania",)
+    list_display = ("apellidos_nombres", "compania", "peloton")
+    list_filter = ("compania", "peloton")
     search_fields = ("apellidos_nombres",)
+    autocomplete_fields = ("compania", "peloton")
 
 
 @admin.register(TipoArmamento)
 class TipoArmamentoAdmin(admin.ModelAdmin):
+    list_display = ("nombre", "control")
+    list_filter = ("control",)
     search_fields = ("nombre",)
 
 
@@ -66,12 +80,17 @@ class ArmamentoAdmin(admin.ModelAdmin):
         "ubicacion",
         "deposito",
         "soldado",
+        "peloton_actual",
         "estado",
     )
     list_filter = ("compania", "ubicacion", "estado", "deposito", "tipo")
     search_fields = ("numero_serie", "soldado__apellidos_nombres", "tipo__nombre")
     autocomplete_fields = ("tipo", "compania", "deposito", "soldado")
     inlines = [MovimientoInline]
+
+    @admin.display(description="Pelotón")
+    def peloton_actual(self, obj):
+        return obj.peloton_actual
 
 
 @admin.register(Movimiento)
@@ -80,3 +99,28 @@ class MovimientoAdmin(admin.ModelAdmin):
     list_filter = ("tipo", "fecha")
     search_fields = ("armamento__numero_serie", "soldado__apellidos_nombres")
     readonly_fields = ("fecha",)
+
+
+@admin.register(Existencia)
+class ExistenciaAdmin(admin.ModelAdmin):
+    list_display = ("tipo", "compania", "deposito", "lote", "cantidad")
+    list_filter = ("compania", "deposito", "tipo")
+    search_fields = ("tipo__nombre", "lote")
+    autocomplete_fields = ("tipo", "compania", "deposito")
+
+
+@admin.register(Prestamo)
+class PrestamoAdmin(admin.ModelAdmin):
+    list_display = (
+        "fecha",
+        "tipo",
+        "lote",
+        "cantidad",
+        "compania_origen",
+        "compania_destino",
+        "usuario",
+    )
+    list_filter = ("tipo", "compania_origen", "compania_destino")
+    search_fields = ("tipo__nombre", "lote")
+    readonly_fields = ("fecha",)
+    autocomplete_fields = ("tipo", "deposito", "compania_origen", "compania_destino")

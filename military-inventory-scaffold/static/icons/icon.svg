@@ -1,0 +1,9 @@
+<!-- Placeholder app icon (green shield). Replace with the real escudo del
+     Batallón de Selva No. 52 before shipping RF-17 / T-06. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#0b1f13"/>
+  <path d="M256 64 L416 128 V240 C416 336 344 416 256 448 C168 416 96 336 96 240 V128 Z"
+        fill="#1f6b3a" stroke="#e7e2c9" stroke-width="10"/>
+  <text x="256" y="290" font-family="Georgia, serif" font-size="140" fill="#e7e2c9"
+        text-anchor="middle">S</text>
+</svg>

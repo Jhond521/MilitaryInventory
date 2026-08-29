@@ -24,7 +24,7 @@ pip install django "psycopg[binary]" dj-database-url python-dotenv gunicorn whit
 cp .env.example .env            # fill in the values
 
 python manage.py migrate
-python manage.py seed_initial   # 1 unidad, 7 compañías, 2 depósitos, 23 tipos de armamento
+python manage.py seed_initial   # 1 unidad, 7 compañías, 2 depósitos, 28 pelotones, 24 tipos
 python manage.py createsuperuser
 ```
 

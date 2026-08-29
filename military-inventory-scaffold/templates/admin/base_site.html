@@ -1,0 +1,16 @@
+{% extends "admin/base_site.html" %}
+{# Hooks the PWA manifest + service worker into the current UI (Django admin).
+   Full mobile-first templates land with T-06 / H-17; this just makes the app
+   installable today (RF-17). #}
+{% block extrahead %}
+{{ block.super }}
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0b1f13">
+<script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    });
+  }
+</script>
+{% endblock %}
