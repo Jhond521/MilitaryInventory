@@ -20,11 +20,11 @@ git clone <repo-url>
 cd armory-inventory
 python -m venv .venv
 . .venv/bin/activate            # Windows: .venv\Scripts\activate
-pip install django "psycopg[binary]" dj-database-url python-dotenv gunicorn whitenoise pytest pytest-django ruff
+pip install django "psycopg[binary]" dj-database-url python-dotenv gunicorn whitenoise openpyxl pytest pytest-django ruff
 cp .env.example .env            # fill in the values
 
 python manage.py migrate
-python manage.py seed_initial   # 1 unidad, 7 compañías, 2 depósitos, 28 pelotones, 24 tipos
+python manage.py seed_initial   # 1 unidad, 7 compañías, 2 depósitos, 28 pelotones, 29 tipos
 python manage.py createsuperuser
 ```
 

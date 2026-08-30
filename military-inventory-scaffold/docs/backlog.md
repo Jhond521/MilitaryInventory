@@ -166,14 +166,31 @@ El corazón del sistema.
 
 ### Épica E-04 — Carga inicial
 
-#### H-13 — Importar el inventario del Excel
+#### H-13 — Importar el inventario del Excel ✅
 
 - **Requerimiento**: RF-13
-- **Estado**: Pendiente
+- **Estado**: Hecho (a falta del Excel real para verificar contra él)
 - **Historia**: Como equipo, cargamos el inventario inicial (Excel por compañías) antes de operar.
 - **Criterios de aceptación**:
-  - [ ] Script/management command que lee el Excel entregado y crea armamento con serie, tipo, compañía y ubicación.
-  - [ ] Valida unicidad de serie y reporta conflictos antes de cargar.
+  - [x] Script/management command que lee el Excel entregado y crea armamento con serie, tipo, compañía y ubicación.
+  - [x] Valida unicidad de serie y reporta conflictos antes de cargar.
+- **Notas técnicas**: `python manage.py importar_armamento archivo.xlsx [--deposito NOMBRE] [--dry-run]`
+  (`apps/inventory/management/commands/importar_armamento.py`). Valida el archivo completo
+  antes de crear nada — todo o nada: si hay un solo conflicto (serie repetida en el archivo
+  o ya existente en la base, tipo/depósito no reconocido, serie o denominación vacía), no crea
+  ningún registro y reporta todos los conflictos encontrados. Todo lo importado queda "en
+  depósito" (asignar soldados es un paso posterior, RF-10).
+  - **Supuesto (a confirmar contra el Excel real, P-1/P-6 aún pendientes)**: David todavía no
+    ha entregado `ACTIVOS FIJOS COMPAÑIA.xlsx`, así que el comando asume una estructura
+    normalizada razonable (documentada en su docstring) en vez del layout real de "bloques
+    por denominación" del archivo — una hoja por compañía, fila de encabezados con columnas
+    Serie/Denominación/Depósito. Cuando llegue el archivo real, validar contra él y, si el
+    layout no calza, adaptar la detección de encabezados/bloques del comando (el núcleo de
+    validación y reporte de conflictos debería servir igual).
+  - Al escribir esto se notó que el catálogo sembrado (`seed_initial`) no tenía Pistolas ni
+    Visores nocturnos pese a estar en el Anexo A del PRD — se agregaron 5 tipos nuevos (todos
+    por SERIE): PISTOLA PX4 STORM, PISTOLA PRIETO BERETTA, VISOR NOCTURNO AN PVS 14, VISOR
+    NOCTURNO AN PVS 7B, VISOR NOCTURNO DUAL/DOBLE (24 → 29 tipos).
 
 ## Fase 2 — Siguiente
 
@@ -216,8 +233,12 @@ historias H-14…H-17 siguen pendientes en su parte de interfaz/UI.
 
 ## Orden sugerido para arrancar
 
-1. H-09 — Entregar/devolver con historial: es el flujo operativo central y el que más valor da sobre el Excel.
-2. H-08 — Selección de compañía: da el marco de trabajo diario a los usuarios.
-3. H-11 — Búsqueda global: la pregunta "¿dónde está la serie X?" es la razón de ser del sistema.
-4. H-03 — Permisos por rol: cierra el control de acceso antes de abrirlo a los 6 usuarios.
-5. H-13 — Carga inicial: para arrancar con datos reales.
+Las 5 completadas (✅ arriba). Siguiente candidato natural: H-10 (baja de
+armamento, cierra la Épica E-03) o H-12 (campos personalizados, ya tiene el
+modelo listo desde el scaffold).
+
+1. H-09 — Entregar/devolver con historial: es el flujo operativo central y el que más valor da sobre el Excel. ✅
+2. H-08 — Selección de compañía: da el marco de trabajo diario a los usuarios. ✅
+3. H-11 — Búsqueda global: la pregunta "¿dónde está la serie X?" es la razón de ser del sistema. ✅
+4. H-03 — Permisos por rol: cierra el control de acceso antes de abrirlo a los 6 usuarios. ✅
+5. H-13 — Carga inicial: para arrancar con datos reales (a falta del Excel real de David). ✅

@@ -47,6 +47,11 @@ TIPOS_ARMAMENTO = [
     ("MORTERO C-06 L/A DE 60MM", TipoArmamento.Control.SERIE),
     ("MORTERO SOLTAN", TipoArmamento.Control.SERIE),
     ("MORTERO B-500", TipoArmamento.Control.SERIE),
+    ("PISTOLA PX4 STORM", TipoArmamento.Control.SERIE),
+    ("PISTOLA PRIETO BERETTA", TipoArmamento.Control.SERIE),
+    ("VISOR NOCTURNO AN PVS 14", TipoArmamento.Control.SERIE),
+    ("VISOR NOCTURNO AN PVS 7B", TipoArmamento.Control.SERIE),
+    ("VISOR NOCTURNO DUAL/DOBLE", TipoArmamento.Control.SERIE),
 ]
 
 

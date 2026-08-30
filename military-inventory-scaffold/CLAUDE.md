@@ -30,12 +30,12 @@ change, write a new ADR instead of silently doing something different.
 python -m venv .venv && . .venv/bin/activate
 
 # install dependencies
-pip install -e . --group dev      # or: pip install django psycopg[binary] dj-database-url python-dotenv gunicorn whitenoise pytest pytest-django ruff
+pip install -e . --group dev      # or: pip install django psycopg[binary] dj-database-url python-dotenv gunicorn whitenoise openpyxl pytest pytest-django ruff
 
 # first-time setup
 cp .env.example .env              # then edit values
 python manage.py migrate
-python manage.py seed_initial     # seeds 1 unidad, 7 compañías, 2 depósitos, 28 pelotones, 24 tipos
+python manage.py seed_initial     # seeds 1 unidad, 7 compañías, 2 depósitos, 28 pelotones, 29 tipos
 python manage.py createsuperuser  # first admin (email is the login)
 
 # run in development
@@ -55,6 +55,11 @@ ruff check --fix .
 python manage.py makemigrations
 python manage.py migrate
 
+# import the initial serialized inventory from Excel (RF-13) — validates
+# everything first; creates nothing if there's a single conflict
+python manage.py importar_armamento ruta/archivo.xlsx --deposito Apiay --dry-run
+python manage.py importar_armamento ruta/archivo.xlsx --deposito Apiay
+
 # run everything with Postgres via Docker
 docker compose up
 ```
@@ -68,7 +73,8 @@ apps/accounts/     # custom User (email login), roles (ADMIN/ENLACE), email allo
 apps/inventory/    # domain: Unidad, Compania, Deposito, Peloton, Soldado, TipoArmamento,
                    #         Armamento, Movimiento, CampoPersonalizado, Existencia, Prestamo
   middleware.py, views.py, urls.py, context_processors.py   # compañía de trabajo (RF-02)
-  management/commands/seed_initial.py   # idempotent master-data seed
+  management/commands/seed_initial.py       # idempotent master-data seed
+  management/commands/importar_armamento.py # initial Excel load (RF-13, H-13)
 static/            # manifest.json, sw.js, icons/ (PWA — RF-17)
 templates/admin/   # base_site.html override wiring the manifest + service worker into the admin UI
 docs/              # PRD (Spanish), backlog (Spanish), ADRs
@@ -156,11 +162,20 @@ docs/              # PRD (Spanish), backlog (Spanish), ADRs
 
 - The current build uses the Django admin as the UI. H-09 (entregar/devolver) ships
   as admin actions ("Entregar a un soldado" / "Devolver a depósito" on the Armamento
-  changelist, `apps/inventory/admin.py`) with an intermediate confirmation page, and
-  H-08 (compañía de trabajo) ships as a redirect-to-selector plus a default admin
-  queryset filter — neither is a dedicated screen. The remaining custom operator
-  screens (a guided entrega/devolución UI, global search) are backlog story H-11 and
-  are not built yet.
+  changelist, `apps/inventory/admin.py`) with an intermediate confirmation page, H-08
+  (compañía de trabajo) ships as a redirect-to-selector plus a default admin queryset
+  filter, and H-11 (búsqueda global) reuses the admin's own search box (expanded
+  `search_fields`) — none of these are dedicated screens. A guided operator UI
+  purpose-built for entrega/devolución/búsqueda is still backlog stories H-10, H-12.
+- `python manage.py importar_armamento` (H-13, RF-13) assumes a **normalized** Excel
+  format documented in its own docstring (one worksheet per company, header row with
+  Serie/Denominación/Depósito columns) — David's real `ACTIVOS FIJOS COMPAÑIA.xlsx`
+  wasn't available while writing it (P-1/P-6 in the PRD are still open), so its real
+  sheet-per-company "bloques por denominación" layout is unverified. When the real
+  file arrives, either adapt it into this flat shape first or extend the command's
+  header-detection to parse the real block structure — the validation/reporting core
+  (duplicate series, unknown tipo/depósito, atomic all-or-nothing) should carry over
+  either way.
 - `/manifest.json` and `/sw.js` are served straight from `static/` via dedicated
   views in `config/urls.py` (not through whitenoise's hashed static pipeline, and
   not under `/static/`) so the service worker's default scope covers the whole

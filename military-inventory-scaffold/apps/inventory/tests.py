@@ -1,8 +1,11 @@
 import json
+import os
+import tempfile
 
+import openpyxl
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
-from django.core.management import call_command
+from django.core.management import CommandError, call_command
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
@@ -30,6 +33,21 @@ _PLAIN_STATIC_STORAGE = {
 }
 
 
+def _crear_excel(hojas):
+    """hojas: {nombre_hoja: [[fila...], ...]}, primera fila = encabezados.
+    Devuelve la ruta de un archivo .xlsx temporal (quien llama lo borra)."""
+    workbook = openpyxl.Workbook()
+    workbook.remove(workbook.active)
+    for nombre, filas in hojas.items():
+        hoja = workbook.create_sheet(title=nombre)
+        for fila in filas:
+            hoja.append(fila)
+    archivo_temporal = tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False)
+    workbook.save(archivo_temporal.name)
+    archivo_temporal.close()
+    return archivo_temporal.name
+
+
 class SeedCommandTests(TestCase):
     def test_seed_is_idempotent_and_creates_master_data(self):
         call_command("seed_initial")
@@ -38,7 +56,7 @@ class SeedCommandTests(TestCase):
         self.assertEqual(Compania.objects.count(), 7)
         self.assertEqual(Deposito.objects.count(), 2)
         self.assertEqual(Peloton.objects.count(), 28)  # 4 por compañía x 7
-        self.assertEqual(TipoArmamento.objects.count(), 24)
+        self.assertEqual(TipoArmamento.objects.count(), 29)
 
     def test_seed_marks_control_por_serie_y_cantidad(self):
         call_command("seed_initial")
@@ -670,3 +688,147 @@ class RolePermissionsTests(TestCase):
         self._login_con_compania(self.admin_no_super)
         response = self.client.get(reverse("admin:accounts_user_changelist"))
         self.assertEqual(response.status_code, 200)
+
+
+class ImportarArmamentoTests(TestCase):
+    """Carga inicial del inventario serializado desde Excel (RF-13, H-13)."""
+
+    def setUp(self):
+        self.unidad = Unidad.objects.create(nombre="Batallón de Prueba")
+        self.alcatraz = Compania.objects.create(unidad=self.unidad, nombre="Alcatraz")
+        self.bisonte = Compania.objects.create(unidad=self.unidad, nombre="Bisonte")
+        self.apiay = Deposito.objects.create(nombre="Apiay")
+        self.caruru = Deposito.objects.create(nombre="Caruru")
+        self.fusil = TipoArmamento.objects.create(
+            nombre="FUSIL AR CAL. 5.56 MM", control=TipoArmamento.Control.SERIE
+        )
+        self.municion = TipoArmamento.objects.create(
+            nombre="MUNICION CAL 5.56MM", control=TipoArmamento.Control.CANTIDAD
+        )
+        self._archivos = []
+        self.addCleanup(self._borrar_archivos)
+
+    def _borrar_archivos(self):
+        for ruta in self._archivos:
+            os.unlink(ruta)
+
+    def _importar(self, hojas, **opciones):
+        ruta = _crear_excel(hojas)
+        self._archivos.append(ruta)
+        call_command("importar_armamento", ruta, **opciones)
+
+    def test_importa_armamento_por_hoja_de_compania(self):
+        self._importar({
+            "Alcatraz": [
+                ["Serie", "Denominación", "Depósito"],
+                ["ALC-001", "FUSIL AR CAL. 5.56 MM", "Apiay"],
+                ["ALC-002", "FUSIL AR CAL. 5.56 MM", "Apiay"],
+            ],
+            "Bisonte": [
+                ["Serie", "Denominación", "Depósito"],
+                ["BIS-001", "FUSIL AR CAL. 5.56 MM", "Caruru"],
+            ],
+        })
+        self.assertEqual(Armamento.objects.count(), 3)
+        arma = Armamento.objects.get(numero_serie="ALC-001")
+        self.assertEqual(arma.compania, self.alcatraz)
+        self.assertEqual(arma.tipo, self.fusil)
+        self.assertEqual(arma.deposito, self.apiay)
+        self.assertEqual(arma.ubicacion, Armamento.Ubicacion.DEPOSITO)
+
+    def test_usa_deposito_global_cuando_la_hoja_no_trae_columna(self):
+        self._importar(
+            {"Alcatraz": [["Serie", "Denominación"], ["ALC-010", "FUSIL AR CAL. 5.56 MM"]]},
+            deposito="Apiay",
+        )
+        arma = Armamento.objects.get(numero_serie="ALC-010")
+        self.assertEqual(arma.deposito, self.apiay)
+
+    def test_hoja_sin_compania_conocida_se_omite_con_aviso(self):
+        self._importar({
+            "Resumen": [["Serie", "Denominación"], ["X-1", "FUSIL AR CAL. 5.56 MM"]],
+            "Alcatraz": [
+                ["Serie", "Denominación", "Depósito"],
+                ["ALC-020", "FUSIL AR CAL. 5.56 MM", "Apiay"],
+            ],
+        })
+        self.assertEqual(Armamento.objects.count(), 1)
+        self.assertFalse(Armamento.objects.filter(numero_serie="X-1").exists())
+
+    def test_serie_duplicada_en_archivo_bloquea_toda_la_carga(self):
+        with self.assertRaises(CommandError):
+            self._importar({
+                "Alcatraz": [
+                    ["Serie", "Denominación", "Depósito"],
+                    ["ALC-030", "FUSIL AR CAL. 5.56 MM", "Apiay"],
+                    ["ALC-030", "FUSIL AR CAL. 5.56 MM", "Apiay"],
+                ],
+            })
+        self.assertEqual(Armamento.objects.count(), 0)
+
+    def test_serie_ya_existente_en_bd_bloquea_toda_la_carga(self):
+        Armamento.objects.create(
+            numero_serie="ALC-999", tipo=self.fusil, compania=self.alcatraz,
+            ubicacion=Armamento.Ubicacion.DEPOSITO, deposito=self.apiay,
+        )
+        with self.assertRaises(CommandError):
+            self._importar({
+                "Alcatraz": [
+                    ["Serie", "Denominación", "Depósito"],
+                    ["ALC-999", "FUSIL AR CAL. 5.56 MM", "Apiay"],
+                    ["ALC-040", "FUSIL AR CAL. 5.56 MM", "Apiay"],
+                ],
+            })
+        self.assertFalse(Armamento.objects.filter(numero_serie="ALC-040").exists())
+
+    def test_tipo_no_reconocido_bloquea_toda_la_carga(self):
+        with self.assertRaises(CommandError):
+            self._importar({
+                "Alcatraz": [
+                    ["Serie", "Denominación", "Depósito"],
+                    ["ALC-050", "RIFLE INEXISTENTE", "Apiay"],
+                ],
+            })
+        self.assertEqual(Armamento.objects.count(), 0)
+
+    def test_tipo_por_cantidad_no_se_reconoce_para_serializados(self):
+        with self.assertRaises(CommandError):
+            self._importar({
+                "Alcatraz": [
+                    ["Serie", "Denominación", "Depósito"],
+                    ["ALC-060", "MUNICION CAL 5.56MM", "Apiay"],
+                ],
+            })
+        self.assertEqual(Armamento.objects.count(), 0)
+
+    def test_normaliza_errores_de_tipeo_conocidos(self):
+        visor = TipoArmamento.objects.create(
+            nombre="VISORES NOCTURNOS AN PVS 14", control=TipoArmamento.Control.SERIE
+        )
+        self._importar({
+            "Alcatraz": [
+                ["Serie", "Denominación", "Depósito"],
+                ["ALC-070", "VOSIRES NOCTURNOS AN PVS 14", "Apiay"],
+            ],
+        })
+        arma = Armamento.objects.get(numero_serie="ALC-070")
+        self.assertEqual(arma.tipo, visor)
+
+    def test_sin_deposito_ni_columna_bloquea_la_carga(self):
+        with self.assertRaises(CommandError):
+            self._importar({
+                "Alcatraz": [["Serie", "Denominación"], ["ALC-080", "FUSIL AR CAL. 5.56 MM"]],
+            })
+        self.assertEqual(Armamento.objects.count(), 0)
+
+    def test_dry_run_no_crea_nada(self):
+        self._importar(
+            {
+                "Alcatraz": [
+                    ["Serie", "Denominación", "Depósito"],
+                    ["ALC-090", "FUSIL AR CAL. 5.56 MM", "Apiay"],
+                ],
+            },
+            dry_run=True,
+        )
+        self.assertEqual(Armamento.objects.count(), 0)
