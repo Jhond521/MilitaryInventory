@@ -16,6 +16,7 @@ from .models import (
     TipoArmamento,
     Unidad,
 )
+from .views import SESSION_KEY
 
 # Los tests que renderizan una página completa del admin usan almacenamiento
 # de estáticos simple: el manifest de whitenoise solo existe tras
@@ -293,6 +294,9 @@ class ArmamentoMovimientoAdminViewTests(TestCase):
             email="admin@example.com", password="x"
         )
         self.client.force_login(self.admin_user)
+        session = self.client.session
+        session[SESSION_KEY] = self.comp_a.pk
+        session.save()
 
     def test_entregar_view_confirms_and_creates_movimiento(self):
         url = reverse("admin:inventory_armamento_entregar")
@@ -328,3 +332,89 @@ class ArmamentoMovimientoAdminViewTests(TestCase):
                 armamento=self.arma, tipo=Movimiento.Tipo.DEVOLUCION
             ).exists()
         )
+
+
+@override_settings(STORAGES=_PLAIN_STATIC_STORAGE)
+class CompaniaContextoTests(TestCase):
+    """Selección de compañía de trabajo (RF-02, H-08)."""
+
+    def setUp(self):
+        self.unidad = Unidad.objects.create(nombre="Batallón de Prueba")
+        self.comp_a = Compania.objects.create(unidad=self.unidad, nombre="A")
+        self.comp_b = Compania.objects.create(unidad=self.unidad, nombre="B")
+        self.deposito = Deposito.objects.create(nombre="Apiay")
+        self.tipo = TipoArmamento.objects.create(
+            nombre="FUSIL AR CAL. 5.56 MM", control=TipoArmamento.Control.SERIE
+        )
+        Armamento.objects.create(
+            numero_serie="S-A1", tipo=self.tipo, compania=self.comp_a,
+            ubicacion=Armamento.Ubicacion.DEPOSITO, deposito=self.deposito,
+        )
+        Armamento.objects.create(
+            numero_serie="S-B1", tipo=self.tipo, compania=self.comp_b,
+            ubicacion=Armamento.Ubicacion.DEPOSITO, deposito=self.deposito,
+        )
+        self.admin_user = get_user_model().objects.create_superuser(
+            email="admin@example.com", password="x"
+        )
+        self.client.force_login(self.admin_user)
+
+    def test_sin_compania_en_sesion_redirige_al_selector(self):
+        response = self.client.get(reverse("admin:index"))
+        self.assertRedirects(response, "/compania/?next=/", fetch_redirect_response=False)
+
+    def test_selector_esta_exento_de_su_propio_redirect(self):
+        response = self.client.get(reverse("inventory:elegir_compania"))
+        self.assertEqual(response.status_code, 200)
+
+    def test_elegir_compania_guarda_en_sesion_y_redirige(self):
+        response = self.client.post(
+            reverse("inventory:elegir_compania"),
+            {"compania": self.comp_a.pk, "next": reverse("admin:index")},
+        )
+        self.assertRedirects(response, reverse("admin:index"))
+        self.assertEqual(self.client.session[SESSION_KEY], self.comp_a.pk)
+
+        # ya no redirige a partir de aquí en la misma sesión.
+        response = self.client.get(reverse("admin:index"))
+        self.assertEqual(response.status_code, 200)
+
+    def test_changelist_filtra_por_defecto_a_la_compania_en_sesion(self):
+        session = self.client.session
+        session[SESSION_KEY] = self.comp_a.pk
+        session.save()
+
+        response = self.client.get(reverse("admin:inventory_armamento_changelist"))
+        self.assertContains(response, "S-A1")
+        self.assertNotContains(response, "S-B1")
+
+    def test_filtro_explicito_de_compania_anula_el_contexto_por_defecto(self):
+        session = self.client.session
+        session[SESSION_KEY] = self.comp_a.pk
+        session.save()
+
+        response = self.client.get(
+            reverse("admin:inventory_armamento_changelist"), {"compania__id__exact": self.comp_b.pk}
+        )
+        self.assertContains(response, "S-B1")
+        self.assertNotContains(response, "S-A1")
+
+    def test_ver_todas_companias_anula_el_contexto_por_defecto(self):
+        session = self.client.session
+        session[SESSION_KEY] = self.comp_a.pk
+        session.save()
+
+        response = self.client.get(
+            reverse("admin:inventory_armamento_changelist"), {"ver_todas_companias": "1"}
+        )
+        self.assertContains(response, "S-A1")
+        self.assertContains(response, "S-B1")
+
+    def test_boton_cambiar_compania_aparece_en_el_admin(self):
+        session = self.client.session
+        session[SESSION_KEY] = self.comp_a.pk
+        session.save()
+
+        response = self.client.get(reverse("admin:index"))
+        self.assertContains(response, "cambiar compañía")
+        self.assertContains(response, "Compañía:")

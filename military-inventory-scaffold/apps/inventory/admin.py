@@ -17,6 +17,38 @@ from .models import (
     TipoArmamento,
     Unidad,
 )
+from .views import SESSION_KEY
+
+
+class CompaniaContextoMixin:
+    """Filtra el changelist por la compañía de trabajo en sesión (RF-02) a
+    menos que el usuario ya haya elegido un filtro de compañía explícito, o
+    haya pedido ver todas (S-2: la selección es un valor por defecto, no una
+    restricción). El enlace "ver todas" del header pasa `?ver_todas_companias=1`
+    porque el enlace "Todo" del propio filtro de Django, al ser el único
+    filtro activo, genera una cadena de consulta vacía indistinguible de una
+    visita nueva a la página. Ese parámetro no es un lookup de campo real, así
+    que hay que quitarlo de `request.GET` antes de que el propio changelist de
+    Django intente validarlo/usarlo como filtro (fallaría con
+    `IncorrectLookupParameters`) — se guarda como atributo en `request` para
+    que `get_queryset` todavía sepa qué se pidió."""
+
+    def changelist_view(self, request, extra_context=None):
+        if "ver_todas_companias" in request.GET:
+            request._ver_todas_companias = True
+            params = request.GET.copy()
+            params.pop("ver_todas_companias")
+            request.GET = params
+        return super().changelist_view(request, extra_context)
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        pidio_ver_todas = getattr(request, "_ver_todas_companias", False)
+        if "compania__id__exact" not in request.GET and not pidio_ver_todas:
+            compania_id = request.session.get(SESSION_KEY)
+            if compania_id:
+                qs = qs.filter(compania_id=compania_id)
+        return qs
 
 
 @admin.register(Unidad)
@@ -46,7 +78,7 @@ class PelotonAdmin(admin.ModelAdmin):
 
 
 @admin.register(Soldado)
-class SoldadoAdmin(admin.ModelAdmin):
+class SoldadoAdmin(CompaniaContextoMixin, admin.ModelAdmin):
     list_display = ("apellidos_nombres", "compania", "peloton")
     list_filter = ("compania", "peloton")
     search_fields = ("apellidos_nombres",)
@@ -95,7 +127,7 @@ class MovimientoInline(admin.TabularInline):
 
 
 @admin.register(Armamento)
-class ArmamentoAdmin(admin.ModelAdmin):
+class ArmamentoAdmin(CompaniaContextoMixin, admin.ModelAdmin):
     list_display = (
         "numero_serie",
         "tipo",

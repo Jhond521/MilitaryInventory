@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.contrib import admin
 from django.http import FileResponse, JsonResponse
-from django.urls import path
+from django.urls import include, path
 
 admin.site.site_header = "SIGA — Inventario de Armamento"
 admin.site.site_title = "SIGA"
@@ -33,5 +33,6 @@ urlpatterns = [
     path("health/", health, name="health"),
     path("manifest.json", pwa_manifest, name="pwa-manifest"),
     path("sw.js", pwa_service_worker, name="pwa-service-worker"),
+    path("", include("apps.inventory.urls")),
     path("", admin.site.urls),
 ]

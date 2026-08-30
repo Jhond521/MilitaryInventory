@@ -1,0 +1,27 @@
+{% extends "admin/base_site.html" %}
+
+{% block content_title %}<h1>{{ title }}</h1>{% endblock %}
+
+{% block content %}
+<p>
+  Esta es tu compañía de trabajo: los listados de inventario y soldados se
+  filtran a ella por defecto, pero puedes seguir viendo las demás y cambiarla
+  cuando quieras sin cerrar sesión.
+</p>
+<form method="post">
+  {% csrf_token %}
+  <input type="hidden" name="next" value="{{ next }}">
+  <ul style="list-style: none; padding: 0;">
+    {% for compania in companias %}
+    <li style="padding: 4px 0;">
+      <label>
+        <input type="radio" name="compania" value="{{ compania.pk }}"
+          {% if compania.pk == actual_id %}checked{% endif %}>
+        {{ compania.nombre }}
+      </label>
+    </li>
+    {% endfor %}
+  </ul>
+  <input type="submit" value="Continuar">
+</form>
+{% endblock %}

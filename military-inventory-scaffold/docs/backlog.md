@@ -79,14 +79,20 @@ El corazón del sistema.
   - [x] Arma con serie única, tipo y compañía; ubicación por defecto "en depósito".
   - [x] Validación de coherencia ubicación/soldado/depósito en `clean()`.
 
-#### H-08 — Selección de compañía de trabajo
+#### H-08 — Selección de compañía de trabajo ✅
 
 - **Requerimiento**: RF-02
-- **Estado**: Pendiente
+- **Estado**: Hecho
 - **Historia**: Como usuario, al ingresar elijo la compañía con la que trabajo y los listados se filtran a ella.
 - **Criterios de aceptación**:
-  - [ ] Selector de compañía tras el login; contexto guardado en sesión.
-  - [ ] Listados de inventario y soldados filtrados por el contexto; se puede cambiar sin cerrar sesión.
+  - [x] Selector de compañía tras el login; contexto guardado en sesión.
+  - [x] Listados de inventario y soldados filtrados por el contexto; se puede cambiar sin cerrar sesión.
+- **Notas técnicas**: `CompaniaContextMiddleware` (`apps/inventory/middleware.py`) manda a
+  `/compania/` (`apps/inventory/views.py::elegir_compania`) a quien no tiene compañía en
+  sesión; `CompaniaContextoMixin` (`admin.py`) filtra por defecto el changelist de
+  Armamento y Soldado. Header ("Compañía: X — ver todas — cambiar compañía") vía
+  `templates/admin/base_site.html` + `context_processors.compania_actual`. Es solo un
+  valor por defecto (S-2): "ver todas" y el filtro explícito de compañía lo desactivan.
 
 #### H-09 — Entregar y devolver con historial ✅
 

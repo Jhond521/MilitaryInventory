@@ -66,6 +66,7 @@ config/            # Django project: settings, urls (incl. /manifest.json, /sw.j
 apps/accounts/     # custom User (email login), roles (ADMIN/ENLACE), email allowlist backend
 apps/inventory/    # domain: Unidad, Compania, Deposito, Peloton, Soldado, TipoArmamento,
                    #         Armamento, Movimiento, CampoPersonalizado, Existencia, Prestamo
+  middleware.py, views.py, urls.py, context_processors.py   # compañía de trabajo (RF-02)
   management/commands/seed_initial.py   # idempotent master-data seed
 static/            # manifest.json, sw.js, icons/ (PWA — RF-17)
 templates/admin/   # base_site.html override wiring the manifest + service worker into the admin UI
@@ -97,6 +98,15 @@ docs/              # PRD (Spanish), backlog (Spanish), ADRs
   use `Armamento.entregar()`/`.devolver()` (transactional, validate company match
   and current ubicación) instead of setting `ubicacion`/`soldado`/`deposito` by hand.
 - Baja (decommission) keeps the row; it never deletes the weapon (RF-11).
+- The "compañía de trabajo" (RF-02, session key `apps.inventory.views.SESSION_KEY`) is a
+  **default filter, not a permission boundary** (PRD S-2) — every user can still see every
+  company. `CompaniaContextMiddleware` sends anyone without it to `/compania/`;
+  `CompaniaContextoMixin` (Armamento/Soldado admins) applies it to `get_queryset()` unless
+  the request explicitly filters by `compania__id__exact` or passes
+  `?ver_todas_companias=1` (the header's "ver todas" link — needed because Django's own
+  "Todo" filter link, when it's the only active filter, produces an empty query string
+  indistinguishable from a fresh page load). Don't add a company-scoped admin without
+  wiring it into this mixin, and don't reuse `ver_todas_companias` as a real field lookup.
 - Access is restricted to `settings.AUTHORIZED_EMAILS`; the `AllowlistModelBackend`
   rejects logins outside the list even if a user row exists.
 - The UI must stay responsive (mobile-first) and installable as a PWA: keep the web app
@@ -131,9 +141,11 @@ docs/              # PRD (Spanish), backlog (Spanish), ADRs
 
 - The current build uses the Django admin as the UI. H-09 (entregar/devolver) ships
   as admin actions ("Entregar a un soldado" / "Devolver a depósito" on the Armamento
-  changelist, `apps/inventory/admin.py`) with an intermediate confirmation page, not a
-  dedicated screen. The remaining custom operator screens (company selector, a guided
-  entrega/devolución UI, global search) are backlog stories H-08, H-11 and are not built yet.
+  changelist, `apps/inventory/admin.py`) with an intermediate confirmation page, and
+  H-08 (compañía de trabajo) ships as a redirect-to-selector plus a default admin
+  queryset filter — neither is a dedicated screen. The remaining custom operator
+  screens (a guided entrega/devolución UI, global search) are backlog story H-11 and
+  are not built yet.
 - `/manifest.json` and `/sw.js` are served straight from `static/` via dedicated
   views in `config/urls.py` (not through whitenoise's hashed static pipeline, and
   not under `/static/`) so the service worker's default scope covers the whole
