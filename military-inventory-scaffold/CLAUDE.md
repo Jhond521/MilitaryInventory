@@ -104,6 +104,17 @@ docs/              # PRD (Spanish), backlog (Spanish), ADRs
   accented characters as `\uXXXX`) so `icontains` search over it — RF-12 — actually
   matches Spanish text with tildes as typed. Reuse that encoder on any other
   JSONField that stores user-facing Spanish text.
+- `ArmamentoAdmin.get_form()`/`get_fieldsets()` (RF-08, H-12) dynamically add one
+  form field per `CampoPersonalizado` (named `campo_<pk>`, not real model fields) —
+  read `save_model()` before touching this. Two gotchas already hit here: (1) never
+  call `get_fieldsets()`/`get_fields()` from inside `get_form()` — both internally
+  call `self.get_form()`, which always resolves back to this override, so it's
+  infinite recursion; filter the `fields` list `_changeform_view` already passed in
+  instead of recomputing it. (2) When the user lacks `change` permission, Django's
+  read-only rendering (`AdminReadonlyField`) only knows how to read real model
+  attributes or ModelAdmin callables — never a bare `form.fields` entry — so the
+  per-`campo_<pk>` fields are swapped for one `campos_personalizados_resumen`
+  callable in that case; don't try to make the per-field inputs "read-only" instead.
 - Every entrega/devolución must create a `Movimiento` row (who, when, type) for
   traceability (RNF-03). Never mutate a weapon's location without logging it —
   use `Armamento.entregar()`/`.devolver()` (transactional, validate company match
@@ -170,10 +181,11 @@ docs/              # PRD (Spanish), backlog (Spanish), ADRs
   (baja) ship as admin actions on the Armamento changelist ("Entregar a un soldado" /
   "Devolver a depósito" / "Dar de baja", `apps/inventory/admin.py`) with an intermediate
   confirmation page each, H-08 (compañía de trabajo) ships as a redirect-to-selector
-  plus a default admin queryset filter, and H-11 (búsqueda global) reuses the admin's
-  own search box (expanded `search_fields`) — none of these are dedicated screens. A
-  guided, purpose-built operator UI is still backlog story H-12 (campos personalizados
-  is the only remaining gap in Fase 1's E-03 épica).
+  plus a default admin queryset filter, H-11 (búsqueda global) reuses the admin's own
+  search box (expanded `search_fields`), and H-12 (campos personalizados) dynamically
+  extends the Armamento change form — none of these are dedicated screens. Fase 1's
+  Épica E-03 (Armamento y movimientos) is now fully covered; a guided, purpose-built
+  operator UI (rather than admin actions/forms) is still Fase 2+ territory.
 - `python manage.py importar_armamento` (H-13, RF-13) assumes a **normalized** Excel
   format documented in its own docstring (one worksheet per company, header row with
   Serie/Denominación/Depósito columns) — David's real `ACTIVOS FIJOS COMPAÑIA.xlsx`

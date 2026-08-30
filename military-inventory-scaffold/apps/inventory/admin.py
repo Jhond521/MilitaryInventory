@@ -4,6 +4,8 @@ from django.core.exceptions import PermissionDenied
 from django.shortcuts import redirect, render
 from django.urls import path, reverse
 from django.utils import timezone
+from django.utils.html import format_html_join
+from django.utils.safestring import mark_safe
 
 from apps.accounts.admin_mixins import MovimientoRegistrableMixin, ViewOnlyForEnlaceMixin
 
@@ -134,6 +136,27 @@ class BajaForm(forms.Form):
     )
 
 
+def campo_nombre_de_campo(campo):
+    """Nombre técnico (HTML) del campo de formulario para un CampoPersonalizado."""
+    return f"campo_{campo.pk}"
+
+
+def campo_a_form_field(campo, valor_inicial):
+    """Construye el `forms.Field` para capturar un CampoPersonalizado según su
+    tipo (texto/número/fecha) — RF-08. Solo aplica al armamento: no hay
+    equivalente para Soldado ni TipoArmamento (NO-2)."""
+    if campo.tipo == CampoPersonalizado.Tipo.NUMERO:
+        return forms.DecimalField(required=False, label=campo.nombre, initial=valor_inicial)
+    if campo.tipo == CampoPersonalizado.Tipo.FECHA:
+        return forms.DateField(
+            required=False,
+            label=campo.nombre,
+            initial=valor_inicial,
+            widget=forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
+        )
+    return forms.CharField(required=False, label=campo.nombre, initial=valor_inicial)
+
+
 class MovimientoInline(admin.TabularInline):
     model = Movimiento
     extra = 0
@@ -170,10 +193,89 @@ class ArmamentoAdmin(ViewOnlyForEnlaceMixin, CompaniaContextoMixin, admin.ModelA
     autocomplete_fields = ("tipo", "compania", "deposito", "soldado")
     inlines = [MovimientoInline]
     actions = ["accion_entregar", "accion_devolver", "accion_dar_de_baja"]
+    # El JSON crudo no se edita a mano — get_form()/get_fieldsets() abajo
+    # generan un campo de formulario propio por cada CampoPersonalizado
+    # (RF-08) y save_model() los guarda en datos_extra.
+    exclude = ("datos_extra",)
 
     @admin.display(description="Pelotón")
     def peloton_actual(self, obj):
         return obj.peloton_actual
+
+    def get_form(self, request, obj=None, **kwargs):
+        # _changeform_view pasa fields=flatten_fieldsets(get_fieldsets(...)),
+        # que incluye los campo_<pk> agregados en get_fieldsets() de abajo —
+        # y modelform_factory revienta porque esos no son campos reales del
+        # modelo. Basta con quitarlos de la lista ya recibida (NO recalcular
+        # llamando a get_fieldsets()/get_fields() aquí: esas, internamente,
+        # vuelven a llamar a self.get_form() — con self siempre resuelto a
+        # esta clase — y eso es recursión infinita). Cuando `fields` llega
+        # como None (llamada interna de Django vía _get_form_for_get_fields,
+        # con change=False) se deja tal cual: ese caso no necesita filtro.
+        if kwargs.get("fields"):
+            kwargs["fields"] = [f for f in kwargs["fields"] if not f.startswith("campo_")]
+        form_class = super().get_form(request, obj, **kwargs)
+        if not self.has_change_permission(request, obj):
+            # Sin permiso de "change" Django ya vuelve todo el form de solo
+            # lectura; los campo_<pk> no son campos reales del modelo así que
+            # ese mecanismo no los cubre — más simple no agregarlos aquí y
+            # mostrarlos en su lugar como un resumen de solo lectura
+            # (campos_personalizados_resumen, en get_fieldsets()).
+            return form_class
+        campos = list(CampoPersonalizado.objects.all())
+
+        class ArmamentoConCamposForm(form_class):
+            def __init__(self, *args, **form_kwargs):
+                super().__init__(*args, **form_kwargs)
+                datos_extra = (self.instance.datos_extra or {}) if self.instance else {}
+                for campo in campos:
+                    self.fields[campo_nombre_de_campo(campo)] = campo_a_form_field(
+                        campo, datos_extra.get(campo.nombre)
+                    )
+
+        return ArmamentoConCamposForm
+
+    def get_fieldsets(self, request, obj=None):
+        fieldsets = list(super().get_fieldsets(request, obj))
+        campos = list(CampoPersonalizado.objects.all())
+        if not campos:
+            return fieldsets
+        if self.has_change_permission(request, obj):
+            campo_field_names = [campo_nombre_de_campo(c) for c in campos]
+        else:
+            # AdminReadonlyField solo sabe leer atributos reales del modelo o
+            # métodos del ModelAdmin — no entradas sueltas de form.fields —
+            # así que en modo solo-lectura se muestra un único resumen
+            # (campos_personalizados_resumen) en vez de un campo por cada uno.
+            campo_field_names = ["campos_personalizados_resumen"]
+        fieldsets.append(("Campos personalizados", {"fields": campo_field_names}))
+        return fieldsets
+
+    @admin.display(description="Campos personalizados")
+    def campos_personalizados_resumen(self, obj):
+        datos_extra = obj.datos_extra or {}
+        campos = CampoPersonalizado.objects.all()
+        if not campos:
+            return "—"
+        return format_html_join(
+            mark_safe("<br>"),
+            "{}: {}",
+            ((campo.nombre, datos_extra.get(campo.nombre, "—")) for campo in campos),
+        )
+
+    def save_model(self, request, obj, form, change):
+        datos_extra = dict(obj.datos_extra or {})
+        for campo in CampoPersonalizado.objects.all():
+            nombre_campo = campo_nombre_de_campo(campo)
+            if nombre_campo not in form.cleaned_data:
+                continue
+            valor = form.cleaned_data[nombre_campo]
+            if valor in (None, ""):
+                datos_extra.pop(campo.nombre, None)
+            else:
+                datos_extra[campo.nombre] = valor
+        obj.datos_extra = datos_extra
+        super().save_model(request, obj, form, change)
 
     def get_urls(self):
         custom = [

@@ -12,6 +12,7 @@ from django.urls import reverse
 
 from .models import (
     Armamento,
+    CampoPersonalizado,
     Compania,
     Deposito,
     Existencia,
@@ -442,6 +443,139 @@ class ArmamentoMovimientoAdminViewTests(TestCase):
         self.assertEqual(response.status_code, 403)
         self.arma.refresh_from_db()
         self.assertEqual(self.arma.estado, Armamento.Estado.ACTIVO)
+
+
+@override_settings(STORAGES=_PLAIN_STATIC_STORAGE)
+class CamposPersonalizadosAdminTests(TestCase):
+    """Captura de campos personalizados en el formulario de Armamento (RF-08, H-12)."""
+
+    def setUp(self):
+        self.unidad = Unidad.objects.create(nombre="Batallón de Prueba")
+        self.compania = Compania.objects.create(unidad=self.unidad, nombre="Alcatraz")
+        self.deposito = Deposito.objects.create(nombre="Apiay")
+        self.tipo = TipoArmamento.objects.create(
+            nombre="FUSIL AR CAL. 5.56 MM", control=TipoArmamento.Control.SERIE
+        )
+        self.campo_texto = CampoPersonalizado.objects.create(
+            nombre="Óptica instalada", tipo=CampoPersonalizado.Tipo.TEXTO
+        )
+        self.campo_numero = CampoPersonalizado.objects.create(
+            nombre="Horas de uso", tipo=CampoPersonalizado.Tipo.NUMERO
+        )
+        self.campo_fecha = CampoPersonalizado.objects.create(
+            nombre="Último mantenimiento", tipo=CampoPersonalizado.Tipo.FECHA
+        )
+        self.arma = Armamento.objects.create(
+            numero_serie="S-500", tipo=self.tipo, compania=self.compania,
+            ubicacion=Armamento.Ubicacion.DEPOSITO, deposito=self.deposito,
+        )
+        self.admin_user = get_user_model().objects.create_superuser(
+            email="admin@example.com", password="x"
+        )
+        self.client.force_login(self.admin_user)
+        session = self.client.session
+        session[SESSION_KEY] = self.compania.pk
+        session.save()
+
+    def _form_data(self, **overrides):
+        data = {
+            "numero_serie": self.arma.numero_serie,
+            "tipo": self.tipo.pk,
+            "compania": self.compania.pk,
+            "ubicacion": Armamento.Ubicacion.DEPOSITO,
+            "deposito": self.deposito.pk,
+            "estado": Armamento.Estado.ACTIVO,
+            f"campo_{self.campo_texto.pk}": "",
+            f"campo_{self.campo_numero.pk}": "",
+            f"campo_{self.campo_fecha.pk}": "",
+            # Management form del inline de movimientos (Armamento.movimientos
+            # related_name) — sin esto Django considera el POST inválido.
+            "movimientos-TOTAL_FORMS": "0",
+            "movimientos-INITIAL_FORMS": "0",
+            "movimientos-MIN_NUM_FORMS": "0",
+            "movimientos-MAX_NUM_FORMS": "0",
+        }
+        data.update(overrides)
+        return data
+
+    def test_campos_personalizados_aparecen_en_el_formulario(self):
+        response = self.client.get(
+            reverse("admin:inventory_armamento_change", args=[self.arma.pk])
+        )
+        content = response.content.decode()
+        self.assertIn("Óptica instalada", content)
+        self.assertIn("Horas de uso", content)
+        self.assertIn("Último mantenimiento", content)
+        self.assertNotIn("datos_extra", content)
+
+    def test_guardar_captura_valores_por_tipo_en_datos_extra(self):
+        url = reverse("admin:inventory_armamento_change", args=[self.arma.pk])
+        response = self.client.post(url, self._form_data(**{
+            f"campo_{self.campo_texto.pk}": "Holográfica",
+            f"campo_{self.campo_numero.pk}": "123.5",
+            f"campo_{self.campo_fecha.pk}": "2026-01-10",
+        }))
+        self.assertEqual(response.status_code, 302)
+        self.arma.refresh_from_db()
+        self.assertEqual(self.arma.datos_extra["Óptica instalada"], "Holográfica")
+        self.assertEqual(str(self.arma.datos_extra["Horas de uso"]), "123.5")
+        self.assertEqual(str(self.arma.datos_extra["Último mantenimiento"]), "2026-01-10")
+
+    def test_valores_existentes_se_precargan_en_el_formulario(self):
+        self.arma.datos_extra = {"Óptica instalada": "Réflex"}
+        self.arma.save()
+        response = self.client.get(
+            reverse("admin:inventory_armamento_change", args=[self.arma.pk])
+        )
+        self.assertContains(response, "Réflex")
+
+    def test_dejar_un_campo_vacio_lo_quita_de_datos_extra(self):
+        self.arma.datos_extra = {"Óptica instalada": "Réflex"}
+        self.arma.save()
+        url = reverse("admin:inventory_armamento_change", args=[self.arma.pk])
+        response = self.client.post(url, self._form_data())
+        self.assertEqual(response.status_code, 302)
+        self.arma.refresh_from_db()
+        self.assertNotIn("Óptica instalada", self.arma.datos_extra)
+
+    def test_numero_invalido_muestra_error_de_formulario(self):
+        url = reverse("admin:inventory_armamento_change", args=[self.arma.pk])
+        response = self.client.post(
+            url, self._form_data(**{f"campo_{self.campo_numero.pk}": "no-es-un-numero"})
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Ingrese un número.")
+
+    def test_formulario_de_armamento_funciona_sin_campos_personalizados(self):
+        CampoPersonalizado.objects.all().delete()
+        response = self.client.get(
+            reverse("admin:inventory_armamento_change", args=[self.arma.pk])
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_enlace_ve_pero_no_puede_editar_un_campo_personalizado(self):
+        """H-03: Enlace no tiene permiso de "change" sobre Armamento, y eso
+        debe cubrir también los campo_<pk> agregados dinámicamente — no solo
+        los campos reales del modelo."""
+        self.arma.datos_extra = {"Óptica instalada": "Réflex"}
+        self.arma.save()
+        enlace = get_user_model().objects.create_user(email="enlace3@example.com", password="x")
+        self.client.force_login(enlace)
+        session = self.client.session
+        session[SESSION_KEY] = self.compania.pk
+        session.save()
+
+        url = reverse("admin:inventory_armamento_change", args=[self.arma.pk])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Réflex")
+
+        response = self.client.post(url, self._form_data(**{
+            f"campo_{self.campo_texto.pk}": "Valor colado",
+        }))
+        self.assertEqual(response.status_code, 403)
+        self.arma.refresh_from_db()
+        self.assertEqual(self.arma.datos_extra["Óptica instalada"], "Réflex")
 
 
 @override_settings(STORAGES=_PLAIN_STATIC_STORAGE)

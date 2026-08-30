@@ -165,13 +165,29 @@ El corazón del sistema.
   español con tildes — se agregó `UnicodeJSONEncoder` (`models.py`) para guardarlos tal
   cual.
 
-#### H-12 — Campos personalizados del armamento
+#### H-12 — Campos personalizados del armamento ✅
 
 - **Requerimiento**: RF-08
-- **Estado**: Pendiente (parcial: modelo `CampoPersonalizado` + `datos_extra` ya existen)
+- **Estado**: Hecho
 - **Criterios de aceptación**:
-  - [ ] El administrador define un campo (nombre + tipo texto/número/fecha).
-  - [ ] El campo aparece para capturar/ver en cada arma; aplica solo al armamento.
+  - [x] El administrador define un campo (nombre + tipo texto/número/fecha).
+  - [x] El campo aparece para capturar/ver en cada arma; aplica solo al armamento.
+- **Notas técnicas**: `ArmamentoAdmin.get_form()`/`get_fieldsets()` (`apps/inventory/admin.py`)
+  generan un campo de formulario propio (texto/número/fecha según `CampoPersonalizado.tipo`)
+  por cada `CampoPersonalizado` sembrado, agrupados en una sección "Campos personalizados";
+  `save_model()` los guarda/quita de `Armamento.datos_extra`. El primer diseño (un campo de
+  formulario por cada uno, sea o no editable) chocó con una limitación real de Django: cuando
+  Enlace solo tiene permiso de "view", el admin excluye TODOS los campos reales del modelo y
+  cambia a un modo de solo lectura que solo sabe leer atributos reales o métodos del
+  ModelAdmin — nunca entradas sueltas de `form.fields` — así que esos campos dinámicos se
+  veían como "Campo 1: None" en vez del valor real. La solución: cuando el usuario no tiene
+  permiso de "change", en vez de los campos por uno se muestra un único método de solo lectura
+  (`campos_personalizados_resumen`) con el resumen real. De paso, otro intento de arreglar el
+  formulario ("fields=None" para que `ModelAdmin.get_form()` no derive `fields` desde
+  `get_fieldsets()`, que incluye los campo\_&lt;pk&gt; y no son campos reales) causó
+  recursión infinita: `get_fieldsets()`/`get_fields()` internamente llaman a `self.get_form()`,
+  que siempre resuelve al método sobreescrito — la solución fue filtrar la lista de `fields`
+  ya recibida en vez de recalcularla llamando a esos métodos.
 
 ### Épica E-04 — Carga inicial
 
