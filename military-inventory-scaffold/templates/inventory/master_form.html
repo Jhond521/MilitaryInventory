@@ -1,0 +1,18 @@
+{% extends "inventory/base_mobile.html" %}
+{% block title %}{{ titulo }}{% endblock %}
+{% block content %}
+<h1 class="siga-page-title">{{ titulo }}</h1>
+<form method="post">
+  {% csrf_token %}
+  {% for field in form %}
+  <div class="siga-field">
+    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+    {{ field }}
+    {% if field.help_text %}<div class="siga-help-text">{{ field.help_text }}</div>{% endif %}
+    {% if field.errors %}<div class="siga-field-error">{{ field.errors|join:" " }}</div>{% endif %}
+  </div>
+  {% endfor %}
+  {% if form.non_field_errors %}<div class="siga-field-error">{{ form.non_field_errors|join:" " }}</div>{% endif %}
+  <button type="submit" class="siga-btn-primary">Guardar</button>
+</form>
+{% endblock %}

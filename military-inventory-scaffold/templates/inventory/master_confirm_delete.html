@@ -1,0 +1,10 @@
+{% extends "inventory/base_mobile.html" %}
+{% block title %}Borrar{% endblock %}
+{% block content %}
+<h1 class="siga-page-title">¿Borrar "{{ object }}"?</h1>
+<p class="siga-page-subtitle">Esta acción no se puede deshacer.</p>
+<form method="post">
+  {% csrf_token %}
+  <button type="submit" class="siga-btn-primary" style="background:var(--siga-red-dark);">Sí, borrar</button>
+</form>
+{% endblock %}

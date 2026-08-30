@@ -1,0 +1,19 @@
+{% extends "inventory/base_mobile.html" %}
+{% block title %}{{ titulo }}{% endblock %}
+{% block content %}
+<h1 class="siga-page-title">{{ titulo }}</h1>
+<form method="post">
+  {% csrf_token %}
+  {% for field in form %}
+  <div class="siga-field">
+    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+    {{ field }}
+    {% if field.errors %}<div class="siga-field-error">{{ field.errors|join:" " }}</div>{% endif %}
+  </div>
+  {% endfor %}
+  <button type="submit" class="siga-btn-primary">Guardar</button>
+</form>
+{% if usuario %}
+<a class="siga-btn-secondary" style="display:block; text-decoration:none; margin-top:14px;" href="{% url 'accounts:usuario_restablecer_password' usuario.pk %}">Restablecer contraseña</a>
+{% endif %}
+{% endblock %}

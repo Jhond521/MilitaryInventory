@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>SIGA — Iniciar sesión</title>
+  {% include "inventory/_pwa_head.html" %}
+  <link rel="stylesheet" href="{% static 'css/mobile.css' %}">
+  <style>
+    body.siga-login {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--siga-header-bg);
+      font-family: var(--font-body);
+      padding: 24px;
+      box-sizing: border-box;
+    }
+    .siga-login__wordmark {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+    .siga-login__wordmark img {
+      width: 56px;
+      height: 56px;
+      margin-bottom: 12px;
+    }
+    .siga-login__wordmark h1 {
+      color: #f4f0e6;
+      font-family: var(--font-heading);
+      font-size: 34px;
+      font-weight: 700;
+      letter-spacing: 8px;
+      margin: 0;
+    }
+    .siga-login__wordmark p {
+      color: #9aa0a8;
+      font-size: 12px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin: 6px 0 0;
+    }
+    .siga-login__card {
+      width: 100%;
+      max-width: 360px;
+      background: var(--siga-paper);
+      border-radius: 14px;
+      padding: 24px;
+      box-sizing: border-box;
+    }
+    .siga-login__card .siga-field:last-of-type {
+      margin-bottom: 20px;
+    }
+    .siga-login__card input {
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid var(--siga-input-border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-family: inherit;
+      font-size: 14px;
+    }
+    .siga-login__error {
+      background: var(--siga-badge-en-mano-bg);
+      color: var(--siga-red-dark);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 13px;
+      margin-bottom: 16px;
+    }
+  </style>
+</head>
+<body class="siga-login">
+  <div>
+    <div class="siga-login__wordmark">
+      <img src="{% static 'icons/icon.svg' %}" alt="">
+      <h1>SIGA</h1>
+      <p>Sistema de Inventario de Armamento</p>
+    </div>
+    <div class="siga-login__card">
+      {% if form.errors %}
+      <div class="siga-login__error">Correo o contraseña incorrectos.</div>
+      {% endif %}
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ next }}">
+        <div class="siga-field">
+          <label for="id_username">Correo</label>
+          <input type="email" name="username" id="id_username" autofocus required>
+        </div>
+        <div class="siga-field">
+          <label for="id_password">Contraseña</label>
+          <input type="password" name="password" id="id_password" required>
+        </div>
+        <button type="submit" class="siga-btn-primary">Iniciar sesión</button>
+      </form>
+    </div>
+  </div>
+</body>
+</html>

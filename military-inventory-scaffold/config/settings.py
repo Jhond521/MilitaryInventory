@@ -26,7 +26,6 @@ CSRF_TRUSTED_ORIGINS = [
 ]
 
 INSTALLED_APPS = [
-    "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
@@ -103,7 +102,8 @@ STORAGES = {
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-LOGIN_URL = "admin:login"
+LOGIN_URL = "accounts:login"
+LOGIN_REDIRECT_URL = "inventory:armamento_list"
 
 # --- SIGA domain config -------------------------------------------------
 # Allowlist of emails permitted to access the system (RF-01). Comma-separated.

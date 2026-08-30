@@ -1,0 +1,32 @@
+{% extends "inventory/base_mobile.html" %}
+{% block title %}{{ titulo }}{% endblock %}
+{% block content %}
+<h1 class="siga-page-title">{{ titulo }}</h1>
+{% if arma %}
+<div class="siga-summary">
+  <div class="siga-summary__row">
+    <span class="label">Ubicación</span>
+    <span class="value">{{ arma.get_ubicacion_display }}</span>
+  </div>
+  <div class="siga-summary__row">
+    <span class="label">Responsable</span>
+    <span class="value">{% if arma.soldado %}{{ arma.soldado.apellidos_nombres }}{% else %}{{ arma.deposito.nombre }}{% endif %}</span>
+  </div>
+</div>
+<p class="siga-help-text" style="margin-bottom:16px;">La ubicación solo cambia con Entregar/Devolver — no se edita aquí.</p>
+{% endif %}
+<form method="post">
+  {% csrf_token %}
+  {% for field in form %}
+  <div class="siga-field">
+    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+    {{ field }}
+    {% if field.errors %}<div class="siga-field-error">{{ field.errors|join:" " }}</div>{% endif %}
+  </div>
+  {% endfor %}
+  <button type="submit" class="siga-btn-primary">Guardar</button>
+</form>
+{% if arma %}
+<a class="siga-btn-secondary" style="display:block; text-decoration:none; margin-top:14px; color:var(--siga-red-dark); border-color:var(--siga-red-dark);" href="{% url 'inventory:armamento_baja' arma.pk %}">Dar de baja</a>
+{% endif %}
+{% endblock %}

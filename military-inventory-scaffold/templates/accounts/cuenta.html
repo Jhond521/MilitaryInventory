@@ -1,0 +1,23 @@
+{% extends "inventory/base_mobile.html" %}
+{% block title %}Mi cuenta{% endblock %}
+{% block content %}
+<h1 class="siga-page-title">Mi cuenta</h1>
+
+<div class="siga-summary">
+  <div class="siga-summary__row">
+    <span class="label">Correo</span>
+    <span class="value">{{ user.email }}</span>
+  </div>
+  <div class="siga-summary__row">
+    <span class="label">Rol</span>
+    <span class="value">{{ user.get_role_display }}</span>
+  </div>
+</div>
+
+<a class="siga-btn-secondary" href="{% url 'accounts:password_change' %}" style="display:block; text-decoration:none; margin-bottom:10px;">Cambiar contraseña</a>
+
+<form method="post" action="{% url 'accounts:logout' %}">
+  {% csrf_token %}
+  <button type="submit" class="siga-btn-primary">Terminar sesión</button>
+</form>
+{% endblock %}

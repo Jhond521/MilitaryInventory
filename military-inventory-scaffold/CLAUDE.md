@@ -12,7 +12,8 @@ the data; soldiers are records, not users. Full detail lives in `docs/PRD.md`
 ## Tech stack
 
 - Language / runtime: Python 3.12+
-- Framework: Django 5.2 LTS (uses Django admin for master-data management)
+- Framework: Django 5.2 LTS (no `django.contrib.admin` — see ADR-0004; every screen,
+  including login and master-data CRUD, is a purpose-built view)
 - Database: PostgreSQL in prod/Docker; SQLite fallback for local dev (no server needed)
 - Package manager: pip / venv (deps declared in `pyproject.toml`)
 - Testing: pytest + pytest-django (also runnable via `manage.py test`)
@@ -36,10 +37,10 @@ pip install -e . --group dev      # or: pip install django psycopg[binary] dj-da
 cp .env.example .env              # then edit values
 python manage.py migrate
 python manage.py seed_initial     # seeds 1 unidad, 7 compañías, 2 depósitos, 28 pelotones, 29 tipos
-python manage.py createsuperuser  # first admin (email is the login)
+python manage.py createsuperuser  # first user, role=ADMIN (email is the login)
 
 # run in development
-python manage.py runserver        # http://localhost:8000  (admin at /)
+python manage.py runserver        # http://localhost:8000  (login at /cuenta/login/)
 
 # run tests
 python -m pytest                  # or: python manage.py test
@@ -67,22 +68,29 @@ docker compose up
 ## Project layout
 
 ```
-config/            # Django project: settings, urls (admin at /admin/, incl. /manifest.json, /sw.js), wsgi/asgi
-apps/accounts/     # custom User (email login), roles (ADMIN/ENLACE), email allowlist backend,
-                   #         admin_mixins.py (role-based ModelAdmin permission gates, H-03)
+config/            # Django project: settings, urls (incl. /manifest.json, /sw.js), wsgi/asgi — no admin.site
+apps/accounts/     # custom User (email login), roles (ADMIN/ENLACE), email allowlist backend
+  permissions.py   #   es_administrador/usuario_autorizado + requiere_admin/requiere_autorizado decorators (H-03)
+  views.py, urls.py, forms.py # login/logout/password-change (over django.contrib.auth.views) +
+                   #   usuario_list/_crear/_editar/_restablecer_password (ADMIN-only) — mounted at /cuenta/
 apps/inventory/    # domain: Unidad, Compania, Deposito, Peloton, Soldado, TipoArmamento,
                    #         Armamento, Movimiento, CampoPersonalizado, Existencia, Prestamo
-  admin.py         # Django admin (master data — companies, deposits, types, users), at /admin/
-  forms.py         # EntregaForm/DevolucionForm/BajaForm + campo_* helpers — shared by admin.py and views.py
-  views.py         # the primary mobile-first UI (armamento_list/_entregar/_devolver,
-                   #   movimiento_list, soldado_list, existencia_list, elegir_compania) — mounted at "/"
+  forms.py         # EntregaForm/DevolucionForm/BajaForm, Armamento*/Soldado/Existencia/Prestamo
+                   #   forms, campo_* helpers for custom fields (H-12)
+  crud.py          # generic ListView/CreateView/UpdateView/DeleteView for the 6 simple
+                   #   master-data models (Unidad, Compania, Deposito, Peloton, TipoArmamento,
+                   #   CampoPersonalizado) — ADMIN-only to add/edit/delete, everyone views
+  templatetags/inventory_extras.py # valor_campo filter (renders a field or its get_*_display())
+  views.py         # everything else: armamento_list/_crear/_editar/_entregar/_devolver/_baja,
+                   #   movimiento_list, soldado_list/_crear/_editar, existencia_list/_crear/_editar,
+                   #   prestamo_list/_transferir, elegir_compania, ajustes — mounted at "/"
   middleware.py, urls.py, context_processors.py   # compañía de trabajo (RF-02)
   management/commands/seed_initial.py       # idempotent master-data seed
   management/commands/importar_armamento.py # initial Excel load (RF-13, H-13)
-static/css/mobile.css # design tokens (Oswald + IBM Plex Sans/Mono, dark/red/cream palette) for the mobile UI
+static/css/mobile.css # design tokens (Oswald + IBM Plex Sans/Mono, dark/red/cream palette) — the whole UI
 static/            # manifest.json, sw.js, icons/ (PWA — RF-17)
-templates/admin/   # base_site.html override wiring the manifest + service worker into the admin UI
-templates/inventory/ # base_mobile.html + the 6 screens above (T-06/H-17) — the app's primary UI
+templates/accounts/  # login (standalone), password change, cuenta, usuario_* — accounts app screens
+templates/inventory/ # base_mobile.html + every other screen (T-06/H-17, ADR-0004) — the entire UI
 docs/              # PRD (Spanish), backlog (Spanish), ADRs
 .github/workflows/ # CI: ruff + pytest on every push/PR (T-03)
 ```
@@ -111,17 +119,14 @@ docs/              # PRD (Spanish), backlog (Spanish), ADRs
   accented characters as `\uXXXX`) so `icontains` search over it — RF-12 — actually
   matches Spanish text with tildes as typed. Reuse that encoder on any other
   JSONField that stores user-facing Spanish text.
-- `ArmamentoAdmin.get_form()`/`get_fieldsets()` (RF-08, H-12) dynamically add one
-  form field per `CampoPersonalizado` (named `campo_<pk>`, not real model fields) —
-  read `save_model()` before touching this. Two gotchas already hit here: (1) never
-  call `get_fieldsets()`/`get_fields()` from inside `get_form()` — both internally
-  call `self.get_form()`, which always resolves back to this override, so it's
-  infinite recursion; filter the `fields` list `_changeform_view` already passed in
-  instead of recomputing it. (2) When the user lacks `change` permission, Django's
-  read-only rendering (`AdminReadonlyField`) only knows how to read real model
-  attributes or ModelAdmin callables — never a bare `form.fields` entry — so the
-  per-`campo_<pk>` fields are swapped for one `campos_personalizados_resumen`
-  callable in that case; don't try to make the per-field inputs "read-only" instead.
+- `ArmamentoEditarForm.__init__()` (`apps/inventory/forms.py`, RF-08, H-12) dynamically
+  adds one form field per `CampoPersonalizado` (named `campo_<pk>`, not real model
+  fields); `aplicar_campos_personalizados()` (same file, called from
+  `inventory:armamento_editar`) merges those into `Armamento.datos_extra` keyed by the
+  field's own `nombre` — read both together before touching custom fields.
+  `armamento_editar` is `@requiere_admin`, so there's no read-only variant to keep in
+  sync (unlike the old `ArmamentoAdmin`, which had to fake a read-only rendering for
+  Enlace — that whole problem went away with the admin, ADR-0004).
 - Every entrega/devolución must create a `Movimiento` row (who, when, type) for
   traceability (RNF-03). Never mutate a weapon's location without logging it —
   use `Armamento.entregar()`/`.devolver()` (transactional, validate company match
@@ -136,28 +141,28 @@ docs/              # PRD (Spanish), backlog (Spanish), ADRs
 - The "compañía de trabajo" (RF-02, session key `apps.inventory.views.SESSION_KEY`) is a
   **default filter, not a permission boundary** (PRD S-2) — every user can still see every
   company. `CompaniaContextMiddleware` sends anyone without it to `/compania/`;
-  `CompaniaContextoMixin` (Armamento/Soldado admins) applies it to `get_queryset()` unless
-  the request explicitly filters by `compania__id__exact` or passes
-  `?ver_todas_companias=1` (the header's "ver todas" link — needed because Django's own
-  "Todo" filter link, when it's the only active filter, produces an empty query string
-  indistinguishable from a fresh page load). Don't add a company-scoped admin without
-  wiring it into this mixin, and don't reuse `ver_todas_companias` as a real field lookup.
-  The mobile views (`armamento_list`, `movimiento_list`, `soldado_list`,
-  `existencia_list`) use the same idea via a simpler helper, `_companias_scope()` in
-  `apps/inventory/views.py` — a plain `?todas=1` query param, since these are function
-  views, not `ModelAdmin`s, and don't need the empty-query-string workaround above.
+  `_companias_scope(request)` in `apps/inventory/views.py` (used by `armamento_list`,
+  `movimiento_list`, `soldado_list`, `existencia_list`, `prestamo_list`) returns
+  `(compania_id, ver_todas)` — `ver_todas` is a plain `?todas=1` query param (the
+  "ver todas" link in each list template). Don't add a company-scoped list view without
+  applying this same filter.
 - Access is restricted to `settings.AUTHORIZED_EMAILS`; the `AllowlistModelBackend`
   rejects logins outside the list even if a user row exists.
-- Role gates (`apps/accounts/admin_mixins.py`, RF-01/RF-10) check `user.role` directly —
-  no Django groups/permissions are ever assigned, so don't add a `ModelAdmin` without
-  one of `ViewOnlyForEnlaceMixin` (view for everyone, add/change/delete admin-only),
-  `MovimientoRegistrableMixin` (like the former, but add is for everyone — it's
-  registering a movement, not editing master data) or `AdminOnlyMixin` (admin-only,
-  including view). These mixins override `has_module_permission` too — Django's default
-  there checks real `auth.Permission` rows, which don't exist here, and would hide the
-  whole app from a non-superuser ADMIN-role user otherwise. `createsuperuser` always
-  sets `role=ADMIN`, so a superuser and an ADMIN-role user are equivalent for these
-  checks; a plain `create_user(..., role=User.Role.ADMIN)` also gets full access.
+- Role gates (`apps/accounts/permissions.py`, RF-01/RF-10, H-03) check `user.role`
+  directly via `es_administrador(user)`/`usuario_autorizado(user)` — no Django
+  groups/permissions are ever assigned. Every view that touches master data or a
+  sensitive action must be decorated `@requiere_admin`; every other authenticated view
+  must be `@requiere_autorizado` (there is no undecorated view — an undecorated one is a
+  bug). The generic CRUD in `apps/inventory/crud.py` uses the class-based equivalents
+  (`AdminMixin`/`AutorizadoMixin`, built on `UserPassesTestMixin`). **Don't use
+  `django.contrib.auth.decorators.user_passes_test` directly** — it always redirects to
+  login on failure, even for an already-authenticated user, which loops forever against
+  `LoginView(redirect_authenticated_user=True)`; the decorators here 403 an authenticated
+  user who fails the check instead (same behavior as `UserPassesTestMixin`).
+  `createsuperuser` always sets `role=ADMIN`, so a superuser and an ADMIN-role user are
+  equivalent for these checks; a plain `create_user(..., role=User.Role.ADMIN)` also gets
+  full access. `is_staff`/`is_superuser` have no functional meaning left in this app now
+  that there's no admin site — don't gate anything on them.
 - The UI must stay responsive (mobile-first) and installable as a PWA: keep the web app
   manifest and service worker valid, touch targets ≥ 44px, and a mobile bottom nav. Don't
   ship desktop-only layouts.
@@ -188,21 +193,19 @@ docs/              # PRD (Spanish), backlog (Spanish), ADRs
 
 ## Known gotchas
 
-- **The Django admin is no longer the primary UI** (ADR-0003, T-06/H-17): it moved to
-  `/admin/` and stays there for master-data CRUD (companies, deposits, types, custom
-  fields, users) — the day-to-day surface for both roles is the mobile-first UI mounted
-  at `/` (`apps/inventory/views.py` + `templates/inventory/`), styled with
-  `static/css/mobile.css`. H-09's entregar/devolver, H-08's compañía de trabajo, and
-  H-11's search all now have dedicated screens there (`armamento_entregar.html`,
-  `armamento_devolver.html`, `armamento_list.html`) — the admin's own actions/search
-  (`apps/inventory/admin.py`) still exist too, for batch operations from `/admin/`. Both
-  layers call the same model methods (`Armamento.entregar()`/`.devolver()`) and share
-  `EntregaForm`/`DevolucionForm`/`BajaForm` from `apps/inventory/forms.py` — don't
-  reimplement that logic in one without checking the other. H-10 (baja) and H-12 (campos
-  personalizados) remain admin-only (RF-11 is admin-only anyway; campos personalizados
-  hasn't gotten a mobile screen yet). Movimientos/Soldados/Munición (`movimiento_list`,
-  `soldado_list`, `existencia_list`) are read-only mobile screens extrapolating the same
-  visual language — not from an explicit mockup.
+- **There is no Django admin** (ADR-0003 moved it to `/admin/`; ADR-0004 removed it
+  entirely — `/admin/` 404s, `django.contrib.admin` isn't in `INSTALLED_APPS`). Every
+  screen — login, compañía de trabajo, inventory, entregar/devolver/dar de baja,
+  movimientos, soldados, munición/existencias, préstamos, all master data, and user
+  management — is a purpose-built view under `apps/accounts/` or `apps/inventory/`,
+  styled with `static/css/mobile.css`. Don't add `django.contrib.admin` back or reference
+  `admin:` URL names — they don't exist. The 6 simple master-data models (Unidad,
+  Compania, Deposito, Peloton, TipoArmamento, CampoPersonalizado) reuse Django's generic
+  `ListView`/`CreateView`/`UpdateView`/`DeleteView` (`apps/inventory/crud.py`) — add a new
+  one there, don't hand-roll function views for another simple model. Movimientos/
+  Soldados/Munición screens extrapolate the same visual language from a design canvas
+  that only mocked Inventario/Entrega — not from an explicit mockup for those specific
+  screens.
 - `python manage.py importar_armamento` (H-13, RF-13) assumes a **normalized** Excel
   format documented in its own docstring (one worksheet per company, header row with
   Serie/Denominación/Depósito columns) — David's real `ACTIVOS FIJOS COMPAÑIA.xlsx`
@@ -215,10 +218,11 @@ docs/              # PRD (Spanish), backlog (Spanish), ADRs
 - `/manifest.json` and `/sw.js` are served straight from `static/` via dedicated
   views in `config/urls.py` (not through whitenoise's hashed static pipeline, and
   not under `/static/`) so the service worker's default scope covers the whole
-  origin. `templates/admin/base_site.html` links the manifest and registers the
-  worker on every admin page — that's the whole PWA story until T-06/H-17 build
-  the real mobile-first templates and bottom nav. The app icon is a placeholder
-  (`static/icons/icon.svg`); swap it for the battalion crest before shipping RF-17.
+  origin. `templates/inventory/_pwa_head.html` (the manifest `<link>`, theme-color
+  meta, and SW registration script) is included from both `base_mobile.html` and the
+  standalone `templates/accounts/login.html` — don't duplicate it a third time. The app
+  icon is a placeholder (`static/icons/icon.svg`); swap it for the battalion crest
+  before shipping RF-17.
 - Local dev uses SQLite by default (empty `DATABASE_URL`). To mirror prod, set
   `DATABASE_URL` to Postgres or run `docker compose up`.
 - `AUTH_USER_MODEL` is custom (`accounts.User`) — this was set before the first

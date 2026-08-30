@@ -5,8 +5,8 @@ from django.shortcuts import redirect
 from .views import SESSION_KEY
 
 EXEMPT_PATH_PREFIXES = (
-    "/admin/login/",
-    "/admin/logout/",
+    "/cuenta/login/",
+    "/cuenta/logout/",
     "/compania/",
     "/manifest.json",
     "/sw.js",

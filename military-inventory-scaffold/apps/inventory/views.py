@@ -1,16 +1,27 @@
-"""Superficie móvil de SIGA: selección de compañía de trabajo (RF-02) y las
-pantallas propias de inventario/entrega/devolución/movimientos/soldados/
-munición (T-06, H-17) que reemplazan, para el uso diario, a las acciones del
-admin de Django (que sigue disponible en /admin/ para datos maestros).
+"""Superficie principal de SIGA: selección de compañía de trabajo (RF-02) y
+todas las pantallas de inventario/entrega/devolución/movimientos/soldados/
+munición/préstamos/datos maestros (T-06, H-17) — el admin de Django ya no
+existe (ADR-0004); esto es la única UI de la aplicación.
 """
-from django.contrib import admin, messages
-from django.contrib.admin.views.decorators import staff_member_required
+from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 
+from apps.accounts.permissions import requiere_admin, requiere_autorizado
+
+from .forms import (
+    ArmamentoCrearForm,
+    ArmamentoEditarForm,
+    BajaForm,
+    ExistenciaForm,
+    PrestamoForm,
+    SoldadoForm,
+    aplicar_campos_personalizados,
+)
 from .models import (
     Armamento,
     Compania,
@@ -18,6 +29,7 @@ from .models import (
     Existencia,
     Movimiento,
     Peloton,
+    Prestamo,
     Soldado,
     TipoArmamento,
 )
@@ -25,7 +37,7 @@ from .models import (
 SESSION_KEY = "compania_actual_id"
 
 
-@staff_member_required
+@requiere_autorizado
 def elegir_compania(request):
     companias = Compania.objects.order_by("nombre")
 
@@ -44,7 +56,6 @@ def elegir_compania(request):
             return redirect(next_url)
 
     context = {
-        **admin.site.each_context(request),
         "title": "Elegir compañía de trabajo",
         "companias": companias,
         "actual_id": request.session.get(SESSION_KEY),
@@ -53,14 +64,21 @@ def elegir_compania(request):
     return render(request, "inventory/elegir_compania.html", context)
 
 
+@requiere_autorizado
+def ajustes(request):
+    """Reemplazo del índice del admin de Django: enlaces a los módulos de
+    datos maestros y (solo ADMIN) usuarios."""
+    return render(request, "inventory/ajustes.html")
+
+
 def _companias_scope(request):
-    """(compania_id, ver_todas) — igual criterio que `CompaniaContextoMixin`
-    del admin (RF-02, S-2): filtra por la compañía de trabajo salvo que se
-    pida explícitamente ver todas."""
+    """(compania_id, ver_todas) — igual criterio que el antiguo
+    `CompaniaContextoMixin` del admin (RF-02, S-2): filtra por la compañía de
+    trabajo salvo que se pida explícitamente ver todas."""
     return request.session.get(SESSION_KEY), request.GET.get("todas") == "1"
 
 
-@staff_member_required
+@requiere_autorizado
 def armamento_list(request):
     compania_id, ver_todas = _companias_scope(request)
     qs = (
@@ -77,6 +95,7 @@ def armamento_list(request):
             Q(numero_serie__icontains=q)
             | Q(soldado__apellidos_nombres__icontains=q)
             | Q(tipo__nombre__icontains=q)
+            | Q(compania__nombre__icontains=q)
             | Q(deposito__nombre__icontains=q)
             | Q(datos_extra__icontains=q)
         )
@@ -113,11 +132,65 @@ def armamento_list(request):
     return render(request, "inventory/armamento_list.html", context)
 
 
-@staff_member_required
+@requiere_admin
+def armamento_crear(request):
+    if request.method == "POST":
+        form = ArmamentoCrearForm(request.POST)
+        if form.is_valid():
+            armamento = form.save()
+            messages.success(request, f"{armamento.numero_serie} añadida al inventario.")
+            return redirect("inventory:armamento_list")
+    else:
+        form = ArmamentoCrearForm()
+    return render(
+        request, "inventory/armamento_form.html", {"form": form, "titulo": "Añadir armamento"}
+    )
+
+
+@requiere_admin
+def armamento_editar(request, pk):
+    armamento = get_object_or_404(Armamento, pk=pk)
+    if request.method == "POST":
+        form = ArmamentoEditarForm(request.POST, instance=armamento)
+        if form.is_valid():
+            aplicar_campos_personalizados(armamento, form.cleaned_data)
+            form.save()
+            messages.success(request, f"{armamento.numero_serie} actualizada.")
+            return redirect("inventory:armamento_list")
+    else:
+        form = ArmamentoEditarForm(instance=armamento)
+    context = {"form": form, "titulo": f"Editar {armamento.numero_serie}", "arma": armamento}
+    return render(request, "inventory/armamento_form.html", context)
+
+
+@requiere_admin
+def armamento_baja(request, pk):
+    """RF-11 — solo administrador, a diferencia de entregar/devolver."""
+    armamento = get_object_or_404(Armamento, pk=pk, estado=Armamento.Estado.ACTIVO)
+    if request.method == "POST":
+        form = BajaForm(request.POST)
+        if form.is_valid():
+            try:
+                armamento.dar_de_baja(
+                    motivo=form.cleaned_data["motivo"],
+                    fecha=form.cleaned_data["fecha"],
+                    usuario=request.user,
+                    observacion=form.cleaned_data["observacion"],
+                )
+            except ValidationError as exc:
+                messages.error(request, " ".join(exc.messages))
+                return redirect("inventory:armamento_baja", pk=armamento.pk)
+            messages.success(request, f"{armamento.numero_serie} dada de baja.")
+            return redirect("inventory:armamento_list")
+    else:
+        form = BajaForm(initial={"fecha": timezone.localdate()})
+    return render(request, "inventory/armamento_baja.html", {"form": form, "arma": armamento})
+
+
+@requiere_autorizado
 def armamento_entregar(request, pk):
     """Flujo guiado de 3 pasos (Arma → Soldado → Confirmar) sobre
-    `Armamento.entregar()` (RF-10) — misma lógica que
-    `ArmamentoAdmin.entregar_view`, para una sola arma a la vez."""
+    `Armamento.entregar()` (RF-10)."""
     arma = get_object_or_404(
         Armamento.objects.select_related("tipo", "compania", "deposito"),
         pk=pk,
@@ -153,7 +226,7 @@ def armamento_entregar(request, pk):
     return render(request, "inventory/armamento_entregar.html", context)
 
 
-@staff_member_required
+@requiere_autorizado
 def armamento_devolver(request, pk):
     """Un solo paso (visualmente simétrico a `armamento_entregar`) sobre
     `Armamento.devolver()` (RF-10) — el depósito no depende de la compañía."""
@@ -178,7 +251,7 @@ def armamento_devolver(request, pk):
     return render(request, "inventory/armamento_devolver.html", context)
 
 
-@staff_member_required
+@requiere_autorizado
 def movimiento_list(request):
     compania_id, ver_todas = _companias_scope(request)
     qs = Movimiento.objects.select_related("armamento", "soldado", "deposito", "usuario")
@@ -205,7 +278,7 @@ def movimiento_list(request):
     return render(request, "inventory/movimiento_list.html", context)
 
 
-@staff_member_required
+@requiere_autorizado
 def soldado_list(request):
     compania_id, ver_todas = _companias_scope(request)
     qs = Soldado.objects.select_related("compania", "peloton")
@@ -235,7 +308,40 @@ def soldado_list(request):
     return render(request, "inventory/soldado_list.html", context)
 
 
-@staff_member_required
+@requiere_admin
+def soldado_crear(request):
+    if request.method == "POST":
+        form = SoldadoForm(request.POST)
+        if form.is_valid():
+            soldado = form.save()
+            messages.success(request, f"{soldado} añadido.")
+            return redirect("inventory:soldado_list")
+    else:
+        form = SoldadoForm()
+    return render(
+        request, "inventory/master_form.html", {"form": form, "titulo": "Añadir soldado"}
+    )
+
+
+@requiere_admin
+def soldado_editar(request, pk):
+    soldado = get_object_or_404(Soldado, pk=pk)
+    if request.method == "POST":
+        form = SoldadoForm(request.POST, instance=soldado)
+        if form.is_valid():
+            form.save()
+            messages.success(request, f"{soldado} actualizado.")
+            return redirect("inventory:soldado_list")
+    else:
+        form = SoldadoForm(instance=soldado)
+    return render(
+        request,
+        "inventory/master_form.html",
+        {"form": form, "titulo": f"Editar {soldado}"},
+    )
+
+
+@requiere_autorizado
 def existencia_list(request):
     compania_id, ver_todas = _companias_scope(request)
     qs = Existencia.objects.select_related("tipo", "compania", "deposito")
@@ -258,3 +364,80 @@ def existencia_list(request):
         "ver_todas": ver_todas,
     }
     return render(request, "inventory/existencia_list.html", context)
+
+
+@requiere_admin
+def existencia_crear(request):
+    if request.method == "POST":
+        form = ExistenciaForm(request.POST)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Existencia añadida.")
+            return redirect("inventory:existencia_list")
+    else:
+        form = ExistenciaForm()
+    return render(
+        request, "inventory/master_form.html", {"form": form, "titulo": "Añadir existencia"}
+    )
+
+
+@requiere_admin
+def existencia_editar(request, pk):
+    existencia = get_object_or_404(Existencia, pk=pk)
+    if request.method == "POST":
+        form = ExistenciaForm(request.POST, instance=existencia)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Existencia actualizada.")
+            return redirect("inventory:existencia_list")
+    else:
+        form = ExistenciaForm(instance=existencia)
+    return render(
+        request,
+        "inventory/master_form.html",
+        {"form": form, "titulo": f"Editar {existencia}"},
+    )
+
+
+@requiere_autorizado
+def prestamo_list(request):
+    compania_id, ver_todas = _companias_scope(request)
+    qs = Prestamo.objects.select_related(
+        "tipo", "deposito", "compania_origen", "compania_destino", "usuario"
+    )
+    if compania_id and not ver_todas:
+        qs = qs.filter(Q(compania_origen_id=compania_id) | Q(compania_destino_id=compania_id))
+    context = {"prestamos": qs[:200], "ver_todas": ver_todas}
+    return render(request, "inventory/prestamo_list.html", context)
+
+
+@requiere_autorizado
+def prestamo_transferir(request):
+    """RF-15/H-16 — ambos roles pueden registrar (es "registrar un
+    movimiento", no tocar datos maestros), igual que entregar/devolver."""
+    compania_id, _ = _companias_scope(request)
+    if request.method == "POST":
+        form = PrestamoForm(request.POST)
+        if form.is_valid():
+            prestamo = Prestamo(
+                tipo=form.cleaned_data["tipo"],
+                deposito=form.cleaned_data["deposito"],
+                compania_origen=form.cleaned_data["compania_origen"],
+                compania_destino=form.cleaned_data["compania_destino"],
+                lote=form.cleaned_data["lote"],
+                cantidad=form.cleaned_data["cantidad"],
+                observacion=form.cleaned_data["observacion"],
+                usuario=request.user,
+            )
+            try:
+                prestamo.full_clean()
+                prestamo.save()
+            except ValidationError as exc:
+                messages.error(request, " ".join(exc.messages))
+            else:
+                messages.success(request, "Préstamo registrado.")
+                return redirect("inventory:existencia_list")
+    else:
+        initial = {"compania_origen": compania_id} if compania_id else {}
+        form = PrestamoForm(initial=initial)
+    return render(request, "inventory/prestamo_form.html", {"form": form})

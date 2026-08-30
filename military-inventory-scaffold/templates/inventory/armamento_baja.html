@@ -1,0 +1,29 @@
+{% extends "inventory/base_mobile.html" %}
+{% block title %}Dar de baja{% endblock %}
+{% block content %}
+<h1 class="siga-page-title">Dar de baja</h1>
+<div class="siga-page-subtitle">Se conserva el historial; el arma sale del inventario activo.</div>
+
+<div class="siga-summary">
+  <div class="siga-summary__row">
+    <span class="label">Serie</span>
+    <span class="value">{{ arma.numero_serie }}</span>
+  </div>
+  <div class="siga-summary__row">
+    <span class="label">Tipo</span>
+    <span class="value">{{ arma.tipo.nombre }}</span>
+  </div>
+</div>
+
+<form method="post">
+  {% csrf_token %}
+  {% for field in form %}
+  <div class="siga-field">
+    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+    {{ field }}
+    {% if field.errors %}<div class="siga-field-error">{{ field.errors|join:" " }}</div>{% endif %}
+  </div>
+  {% endfor %}
+  <button type="submit" class="siga-btn-primary" style="background:var(--siga-red-dark);">Confirmar baja</button>
+</form>
+{% endblock %}

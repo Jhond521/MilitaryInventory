@@ -1,7 +1,12 @@
 {% extends "inventory/base_mobile.html" %}
 {% block title %}Inventario{% endblock %}
 {% block content %}
-<h1 class="siga-page-title">Inventario</h1>
+<div class="siga-card__top" style="margin-bottom:2px;">
+  <h1 class="siga-page-title" style="margin:0;">Inventario</h1>
+  {% if user.is_admin_role %}
+  <a class="siga-btn-secondary" style="width:auto; height:auto; padding:8px 14px; line-height:1; text-decoration:none;" href="{% url 'inventory:armamento_crear' %}">+ Añadir</a>
+  {% endif %}
+</div>
 <div class="siga-page-subtitle">
   {% if ver_todas %}Todas las compañías{% else %}Compañía {{ compania_actual|default:"—" }}{% endif %}
   · {{ armamentos|length }} elemento{{ armamentos|length|pluralize }}
@@ -45,29 +50,33 @@
 
 <div class="siga-card-list">
   {% for arma in armamentos %}
-  {% if arma.ubicacion == "DEPOSITO" %}
-  <a class="siga-card" href="{% url 'inventory:armamento_entregar' arma.pk %}">
-  {% else %}
-  <a class="siga-card" href="{% url 'inventory:armamento_devolver' arma.pk %}">
-  {% endif %}
-    <div class="siga-card__top">
-      <span class="siga-card__serie">{{ arma.numero_serie }}</span>
-      {% if arma.ubicacion == "EN_MANO" %}
-      <span class="siga-badge siga-badge--en-mano">En mano</span>
-      {% else %}
-      <span class="siga-badge siga-badge--en-deposito">En depósito</span>
-      {% endif %}
+  <div class="siga-card">
+    <a href="{% if arma.ubicacion == 'DEPOSITO' %}{% url 'inventory:armamento_entregar' arma.pk %}{% else %}{% url 'inventory:armamento_devolver' arma.pk %}{% endif %}" style="display:block; text-decoration:none; color:inherit;">
+      <div class="siga-card__top">
+        <span class="siga-card__serie">{{ arma.numero_serie }}</span>
+        {% if arma.ubicacion == "EN_MANO" %}
+        <span class="siga-badge siga-badge--en-mano">En mano</span>
+        {% else %}
+        <span class="siga-badge siga-badge--en-deposito">En depósito</span>
+        {% endif %}
+      </div>
+      <div class="siga-card__tipo">{{ arma.tipo.nombre }}</div>
+      <div class="siga-card__meta">
+        <span>Compañía: <strong>{{ arma.compania.nombre }}</strong></span>
+        <span>Pelotón: <strong>{{ arma.peloton_actual.nombre|default:"—" }}</strong></span>
+        <span>Responsable:
+          <strong>
+            {% if arma.ubicacion == "EN_MANO" %}{{ arma.soldado.apellidos_nombres }}{% else %}{{ arma.deposito.nombre }}{% endif %}
+          </strong>
+        </span>
+      </div>
+    </a>
+    {% if user.is_admin_role %}
+    <div class="siga-card__meta" style="margin-top:8px;">
+      <a href="{% url 'inventory:armamento_editar' arma.pk %}">Editar</a>
     </div>
-    <div class="siga-card__tipo">{{ arma.tipo.nombre }}</div>
-    <div class="siga-card__meta">
-      <span>Pelotón: <strong>{{ arma.peloton_actual.nombre|default:"—" }}</strong></span>
-      <span>Responsable:
-        <strong>
-          {% if arma.ubicacion == "EN_MANO" %}{{ arma.soldado.apellidos_nombres }}{% else %}{{ arma.deposito.nombre }}{% endif %}
-        </strong>
-      </span>
-    </div>
-  </a>
+    {% endif %}
+  </div>
   {% empty %}
   <p class="siga-empty">No hay armamento que coincida con la búsqueda.</p>
   {% endfor %}

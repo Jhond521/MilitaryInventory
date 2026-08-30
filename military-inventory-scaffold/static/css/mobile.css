@@ -84,6 +84,22 @@ body.siga-app {
   font-family: var(--font-body);
 }
 
+.siga-header__icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  color: #f4f0e6;
+  flex-shrink: 0;
+}
+
+.siga-header__icon-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
 .siga-header__compania-label {
   color: var(--siga-header-rule);
   font-size: 10px;
@@ -353,7 +369,12 @@ body.siga-app {
 }
 
 .siga-field select,
-.siga-field textarea {
+.siga-field textarea,
+.siga-field input[type="text"],
+.siga-field input[type="email"],
+.siga-field input[type="password"],
+.siga-field input[type="number"],
+.siga-field input[type="date"] {
   width: 100%;
   box-sizing: border-box;
   border: 1px solid var(--siga-input-border);
@@ -361,6 +382,27 @@ body.siga-app {
   padding: 10px 12px;
   font-family: inherit;
   font-size: 14px;
+}
+
+.siga-field input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  vertical-align: middle;
+}
+
+.siga-field-error {
+  background: var(--siga-badge-en-mano-bg);
+  color: var(--siga-red-dark);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  margin-top: 6px;
+}
+
+.siga-help-text {
+  font-size: 11px;
+  color: var(--siga-text-muted);
+  margin-top: 4px;
 }
 
 /* Stepper */

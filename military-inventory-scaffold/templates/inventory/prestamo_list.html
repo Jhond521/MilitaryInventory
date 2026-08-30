@@ -1,0 +1,28 @@
+{% extends "inventory/base_mobile.html" %}
+{% block title %}Préstamos{% endblock %}
+{% block content %}
+<div class="siga-card__top" style="margin-bottom:10px;">
+  <h1 class="siga-page-title" style="margin:0;">Préstamos</h1>
+  <a class="siga-btn-secondary" style="width:auto; height:auto; padding:8px 14px; line-height:1; text-decoration:none;" href="{% url 'inventory:prestamo_transferir' %}">+ Prestar</a>
+</div>
+<div class="siga-card-list">
+  {% for prestamo in prestamos %}
+  <div class="siga-card">
+    <div class="siga-card__top">
+      <span class="siga-card__tipo" style="font-weight:600;">{{ prestamo.tipo.nombre }}</span>
+      <span class="siga-card__serie">{{ prestamo.cantidad }}</span>
+    </div>
+    <div class="siga-card__meta">
+      <span>{{ prestamo.compania_origen.nombre }} → {{ prestamo.compania_destino.nombre }}</span>
+      <span>{{ prestamo.fecha|date:"d/m/Y H:i" }}</span>
+    </div>
+    <div class="siga-card__meta">
+      <span>Depósito: <strong>{{ prestamo.deposito.nombre }}</strong></span>
+      <span>Por: <strong>{{ prestamo.usuario }}</strong></span>
+    </div>
+  </div>
+  {% empty %}
+  <p class="siga-empty">No hay préstamos registrados.</p>
+  {% endfor %}
+</div>
+{% endblock %}

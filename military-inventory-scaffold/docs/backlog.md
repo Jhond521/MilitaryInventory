@@ -22,7 +22,12 @@ Controlar quién entra y qué puede hacer.
 - **Historia**: Como comandante, quiero que cada usuario tenga correo y un rol (administrador/enlace).
 - **Criterios de aceptación**:
   - [x] Modelo `User` con login por correo y campo `role` (ADMIN/ENLACE).
-  - [x] Panel de admin para crear/editar usuarios y asignar rol.
+  - [x] Pantalla para crear/editar usuarios y asignar rol.
+- **Actualización (ADR-0004)**: la gestión de usuarios se reconstruyó en
+  `apps/accounts/views.py` (`usuario_list`/`_crear`/`_editar`/`_restablecer_password`,
+  `UsuarioForm` en `apps/accounts/forms.py`) — solo ADMIN, enlazada desde "Ajustes". El
+  login/logout/cambio de contraseña propios (antes del `AdminSite`) también viven ahí,
+  sobre las vistas genéricas de `django.contrib.auth.views`.
 
 #### H-02 — Lista blanca de correos ✅
 
@@ -63,11 +68,13 @@ Controlar quién entra y qué puede hacer.
     Pelotón, agrupados como tal en la Épica E-02 del backlog, aunque el PRD no los nombra
     en la lista literal de RF-01/sección 3) — a confirmar con David si Enlace necesita poder
     reasignar el pelotón de un soldado directamente (cambia con frecuencia, S-8).
-  - **Actualización (T-06/H-17)**: el admin de Django ahora vive en `/admin/` — la
-    interfaz diaria de ambos roles es la nueva superficie móvil en `/` (ver H-08/H-09/H-11
-    abajo). Los mixins de esta historia siguen gobernando el admin tal cual; las vistas
-    nuevas (`apps/inventory/views.py`) no tienen su propio sistema de permisos porque
-    RF-10/RF-12 ya autorizan a ambos roles por igual para lo que cubren.
+  - **Actualización (T-06/H-17, luego ADR-0004)**: el admin de Django se retiró por
+    completo — toda la app, incluidos login y datos maestros, vive en la superficie móvil.
+    `apps/accounts/admin_mixins.py` (mixins de `ModelAdmin`) se reemplazó por
+    `apps/accounts/permissions.py` (`es_administrador`/`usuario_autorizado` + decoradores
+    `requiere_admin`/`requiere_autorizado` para vistas función, `UserPassesTestMixin` para
+    las CBV de `apps/inventory/crud.py`) — mismas reglas de rol, expresadas para vistas
+    normales en vez de `ModelAdmin`.
 
 ### Épica E-02 — Datos maestros
 
@@ -76,9 +83,14 @@ Compañías, depósitos, tipos y soldados.
 #### H-04 — CRUD de compañías, depósitos y tipos ✅
 
 - **Requerimiento**: RF-03, RF-04, RF-05
-- **Estado**: Hecho (scaffold, vía admin)
+- **Estado**: Hecho
 - **Criterios de aceptación**:
-  - [x] Modelos y admin para Compañía, Depósito y TipoArmamento; se pueden crear nuevos.
+  - [x] Modelos y CRUD para Compañía, Depósito y TipoArmamento; se pueden crear nuevos.
+- **Actualización (ADR-0004)**: el admin de Django se retiró por completo; el CRUD ahora
+  vive en `apps/inventory/crud.py` (`ListView`/`CreateView`/`UpdateView`/`DeleteView`
+  genéricas de Django + `templates/inventory/master_*.html`, reusadas también por Pelotón
+  y CampoPersonalizado) — accesible desde "Ajustes" en el header. Solo ADMIN
+  añade/edita/borra (RF-01), cualquiera ve.
 
 #### H-05 — Siembra de datos iniciales ✅
 
@@ -90,9 +102,12 @@ Compañías, depósitos, tipos y soldados.
 #### H-06 — Registro de soldados ✅
 
 - **Requerimiento**: RF-06
-- **Estado**: Hecho (scaffold, vía admin)
+- **Estado**: Hecho
 - **Criterios de aceptación**:
   - [x] Soldado con apellidos/nombres y una sola compañía; no es usuario.
+- **Actualización (ADR-0004)**: alta/edición propias (`inventory:soldado_crear`/
+  `_editar`, `SoldadoForm` en `forms.py`) enlazadas desde la pantalla de Soldados —
+  solo ADMIN, mismo criterio que el resto de datos maestros.
 
 ### Épica E-03 — Armamento y movimientos
 
@@ -101,10 +116,13 @@ El corazón del sistema.
 #### H-07 — Alta de armamento con serie ✅
 
 - **Requerimiento**: RF-07
-- **Estado**: Hecho (scaffold, vía admin)
+- **Estado**: Hecho
 - **Criterios de aceptación**:
   - [x] Arma con serie única, tipo y compañía; ubicación por defecto "en depósito".
   - [x] Validación de coherencia ubicación/soldado/depósito en `clean()`.
+- **Actualización (ADR-0004)**: pantalla propia `inventory:armamento_crear`
+  (`ArmamentoCrearForm` en `forms.py`, restringe `tipo` a `control=SERIE` y fija
+  `ubicacion=DEPOSITO`) — botón "+ Añadir" en Inventario, solo ADMIN.
 
 #### H-08 — Selección de compañía de trabajo ✅
 
@@ -164,6 +182,10 @@ El corazón del sistema.
   (`templates/admin/inventory/armamento/dar_de_baja.html`); a diferencia de H-09, esta acción
   declara `permissions=["change"]` para que ni siquiera aparezca en el desplegable de Enlace
   (RF-11 es "solo administrador", no ambos roles como RF-10).
+- **Actualización (ADR-0004)**: pantalla propia `inventory:armamento_baja`
+  (`templates/inventory/armamento_baja.html`, mismo estilo que Devolver), enlazada como
+  botón de "zona de peligro" desde `armamento_editar` — sigue siendo `@requiere_admin`
+  (Enlace ni la ve ni puede llamarla directamente, RF-11).
 
 #### H-11 — Búsqueda global por cualquier dato ✅
 
@@ -181,10 +203,11 @@ El corazón del sistema.
   acentos como `\uXXXX` (`ensure_ascii=True`), lo que rompía la búsqueda de texto en
   español con tildes — se agregó `UnicodeJSONEncoder` (`models.py`) para guardarlos tal
   cual.
-- **Actualización (T-06/H-17)**: la pantalla de Inventario (`inventory:armamento_list`,
-  `/`) tiene su propio buscador reusando el mismo criterio (serie, soldado, tipo,
-  depósito, `datos_extra`), más chips de filtro por pelotón/ubicación/tipo — el buscador
-  del admin sigue disponible en `/admin/` para quien lo prefiera.
+- **Actualización (T-06/H-17, luego ADR-0004)**: la pantalla de Inventario
+  (`inventory:armamento_list`, `/`) tiene su propio buscador reusando el mismo criterio
+  (serie, soldado, tipo, compañía, depósito, `datos_extra`), más chips de filtro por
+  pelotón/ubicación/tipo. El admin de Django (y su buscador) ya no existe (ADR-0004) —
+  esta es la única búsqueda global del sistema.
 
 #### H-12 — Campos personalizados del armamento ✅
 
@@ -209,6 +232,13 @@ El corazón del sistema.
   recursión infinita: `get_fieldsets()`/`get_fields()` internamente llaman a `self.get_form()`,
   que siempre resuelve al método sobreescrito — la solución fue filtrar la lista de `fields`
   ya recibida en vez de recalcularla llamando a esos métodos.
+- **Actualización (ADR-0004)**: con el admin retirado, `ArmamentoEditarForm`
+  (`apps/inventory/forms.py`) reemplaza a `ArmamentoAdmin.get_form()` — agrega los mismos
+  campos `campo_<pk>` en `__init__()`, y `aplicar_campos_personalizados()` (también en
+  `forms.py`, llamada desde `inventory:armamento_editar`) reemplaza `save_model()`. Mucho
+  más simple sin la dualidad admin/no-admin: `armamento_editar` es `@requiere_admin`
+  directamente, así que no hace falta el modo de solo lectura ni el resumen — Enlace ni
+  ve el formulario.
 
 ### Épica E-04 — Carga inicial
 
@@ -271,8 +301,10 @@ El corazón del sistema.
     de ella (`armamento_list`, `armamento_entregar`, `armamento_devolver`,
     `movimiento_list`, `soldado_list`, `existencia_list`), estilizadas con
     `static/css/mobile.css` (Oswald + IBM Plex Sans/Mono, paleta extraída de un canvas de
-    diseño). Ver ADR-0003: esto implicó mover el admin de Django de `/` a `/admin/`. El
-    ícono sigue siendo el placeholder (`static/icons/icon.svg`) — falta el escudo real.
+    diseño). Ver ADR-0003: esto implicó mover el admin de Django de `/` a `/admin/` —
+    luego, ADR-0004 lo retiró por completo (login/datos maestros/usuarios también se
+    reconstruyeron en el diseño móvil; `/admin/` ya no existe). El ícono sigue siendo el
+    placeholder (`static/icons/icon.svg`) — falta el escudo real.
 
 ## Actualizaciones v1.1–v1.3 (nuevas historias)
 
@@ -283,8 +315,13 @@ historias H-14…H-17 siguen pendientes en su parte de interfaz/UI.
   - **Estado**: modelo listo (T-07) — `Peloton`, `Soldado.peloton` (validado contra su compañía) y `Armamento.peloton_actual` (derivado, `None` en depósito). Falta mostrarlo en pantallas propias (H-08…H-11).
 - H-15 — Existencias por cantidad: munición y cascos por cantidad; carga desde "CARGOS SAP" (RF-14)
   - **Estado**: modelo listo (T-07) — `Existencia` (tipo + compañía + depósito + lote opcional + cantidad), gestionable desde el admin. Falta el importador desde "CARGOS SAP" (fase siguiente) y una pantalla de ajuste guiado.
-- H-16 — Préstamo de munición entre compañías con saldos y trazabilidad (RF-15)
-  - **Estado**: modelo listo (T-07) — `Prestamo` ajusta atómicamente las existencias de origen/destino y valida tipo, cantidad y saldo disponible; gestionable desde el admin. Falta la pantalla guiada de préstamo.
+- H-16 — Préstamo de munición entre compañías con saldos y trazabilidad (RF-15) ✅
+  - **Estado**: Hecho (ADR-0004) — `inventory:prestamo_transferir` (un solo formulario,
+    mismo estilo que Devolver; ambos roles pueden registrar, RF-15) construye el
+    `Prestamo` y llama a `full_clean()`/`.save()`, que ya hacía el ajuste atómico de
+    existencias (T-07) y toda la validación (tipo, cantidad, saldo). `inventory:
+    prestamo_list` de solo lectura. No hay pantalla de edición/borrado de préstamos
+    existentes — nadie la pidió y el admin tampoco la exponía de forma guiada.
 - H-17 — App móvil responsive e instalable (PWA): manifest, service worker, íconos, navegación móvil (RF-17) ✅
   - **Estado**: Hecho (T-06) — plantillas mobile-first y navegación inferior reales, ver
     notas técnicas de T-06 arriba. Sigue pendiente el ícono real del escudo del batallón

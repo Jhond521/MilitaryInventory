@@ -1,0 +1,26 @@
+{% extends "inventory/base_mobile.html" %}
+{% block title %}Usuarios{% endblock %}
+{% block content %}
+<div class="siga-card__top" style="margin-bottom:10px;">
+  <h1 class="siga-page-title" style="margin:0;">Usuarios</h1>
+  <a class="siga-btn-secondary" style="width:auto; height:auto; padding:8px 14px; line-height:1; text-decoration:none;" href="{% url 'accounts:usuario_crear' %}">+ Añadir</a>
+</div>
+<div class="siga-card-list">
+  {% for usuario in usuarios %}
+  <div class="siga-card">
+    <div class="siga-card__top">
+      <span style="font-weight:600;">{{ usuario.email }}</span>
+      {% if not usuario.is_active %}<span class="siga-badge siga-badge--baja">Inactivo</span>{% endif %}
+    </div>
+    <div class="siga-card__meta">
+      <span>{{ usuario.first_name }} {{ usuario.last_name }}</span>
+      <span>{{ usuario.get_role_display }}</span>
+    </div>
+    <div class="siga-card__meta" style="margin-top:8px;">
+      <a href="{% url 'accounts:usuario_editar' usuario.pk %}">Editar</a>
+      <a href="{% url 'accounts:usuario_restablecer_password' usuario.pk %}">Restablecer contraseña</a>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

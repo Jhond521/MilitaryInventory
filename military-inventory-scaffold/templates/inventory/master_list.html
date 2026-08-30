@@ -1,0 +1,29 @@
+{% extends "inventory/base_mobile.html" %}
+{% load inventory_extras %}
+{% block title %}{{ titulo }}{% endblock %}
+{% block content %}
+<div class="siga-card__top" style="margin-bottom:10px;">
+  <h1 class="siga-page-title" style="margin:0;">{{ titulo }}</h1>
+  {% if user.is_admin_role %}
+  <a class="siga-btn-secondary" style="width:auto; height:auto; padding:8px 14px; line-height:1; text-decoration:none;" href="{% url crear_url %}">+ Añadir</a>
+  {% endif %}
+</div>
+
+<div class="siga-card-list">
+  {% for obj in object_list %}
+  <div class="siga-card">
+    {% for etiqueta, campo in campos %}
+    <div class="siga-card__meta"><span>{{ etiqueta }}: <strong>{{ obj|valor_campo:campo }}</strong></span></div>
+    {% endfor %}
+    {% if user.is_admin_role %}
+    <div class="siga-card__meta" style="margin-top:10px;">
+      <a href="{% url editar_url obj.pk %}">Editar</a>
+      <a href="{% url borrar_url obj.pk %}" style="color:var(--siga-red-dark);">Borrar</a>
+    </div>
+    {% endif %}
+  </div>
+  {% empty %}
+  <p class="siga-empty">No hay registros todavía.</p>
+  {% endfor %}
+</div>
+{% endblock %}

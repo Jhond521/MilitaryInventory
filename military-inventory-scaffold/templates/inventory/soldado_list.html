@@ -1,7 +1,12 @@
 {% extends "inventory/base_mobile.html" %}
 {% block title %}Soldados{% endblock %}
 {% block content %}
-<h1 class="siga-page-title">Soldados</h1>
+<div class="siga-card__top" style="margin-bottom:2px;">
+  <h1 class="siga-page-title" style="margin:0;">Soldados</h1>
+  {% if user.is_admin_role %}
+  <a class="siga-btn-secondary" style="width:auto; height:auto; padding:8px 14px; line-height:1; text-decoration:none;" href="{% url 'inventory:soldado_crear' %}">+ Añadir</a>
+  {% endif %}
+</div>
 <div class="siga-page-subtitle">
   {% if ver_todas %}Todas las compañías{% else %}Compañía {{ compania_actual|default:"—" }}{% endif %}
   · {{ soldados|length }} soldado{{ soldados|length|pluralize }}
@@ -31,10 +36,13 @@
   {% for soldado in soldados %}
   <div class="siga-pick-item">
     <span class="siga-pick-item__avatar">{{ soldado.apellidos_nombres|slice:":2"|upper }}</span>
-    <span>
+    <span style="flex-grow:1;">
       <div class="siga-pick-item__name">{{ soldado.apellidos_nombres }}</div>
       <div class="siga-pick-item__meta">{{ soldado.compania.nombre }} · Pelotón {{ soldado.peloton.nombre }}</div>
     </span>
+    {% if user.is_admin_role %}
+    <a href="{% url 'inventory:soldado_editar' soldado.pk %}">Editar</a>
+    {% endif %}
   </div>
   {% empty %}
   <p class="siga-empty">No hay soldados que coincidan con la búsqueda.</p>

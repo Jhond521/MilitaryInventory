@@ -1,27 +1,24 @@
-{% extends "admin/base_site.html" %}
-
-{% block content_title %}<h1>{{ title }}</h1>{% endblock %}
-
+{% extends "inventory/base_mobile.html" %}
+{% block title %}Elegir compañía{% endblock %}
 {% block content %}
-<p>
-  Esta es tu compañía de trabajo: los listados de inventario y soldados se
-  filtran a ella por defecto, pero puedes seguir viendo las demás y cambiarla
-  cuando quieras sin cerrar sesión.
+<h1 class="siga-page-title">Elegir compañía de trabajo</h1>
+<p class="siga-page-subtitle">
+  Esta es tu compañía de trabajo: los listados de inventario y soldados se filtran a ella
+  por defecto, pero puedes seguir viendo las demás y cambiarla cuando quieras sin cerrar
+  sesión.
 </p>
 <form method="post">
   {% csrf_token %}
   <input type="hidden" name="next" value="{{ next }}">
-  <ul style="list-style: none; padding: 0;">
+  <div class="siga-pick-list">
     {% for compania in companias %}
-    <li style="padding: 4px 0;">
-      <label>
-        <input type="radio" name="compania" value="{{ compania.pk }}"
-          {% if compania.pk == actual_id %}checked{% endif %}>
-        {{ compania.nombre }}
-      </label>
-    </li>
+    <label class="siga-pick-item" style="cursor:pointer;">
+      <input type="radio" name="compania" value="{{ compania.pk }}"
+        {% if compania.pk == actual_id %}checked{% endif %}>
+      <span class="siga-pick-item__name">{{ compania.nombre }}</span>
+    </label>
     {% endfor %}
-  </ul>
-  <input type="submit" value="Continuar">
+  </div>
+  <button type="submit" class="siga-btn-primary">Continuar</button>
 </form>
 {% endblock %}

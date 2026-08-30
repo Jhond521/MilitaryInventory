@@ -1,0 +1,18 @@
+{% extends "inventory/base_mobile.html" %}
+{% block title %}Ajustes{% endblock %}
+{% block content %}
+<h1 class="siga-page-title">Ajustes</h1>
+<div class="siga-page-subtitle">Datos maestros — solo Administrador puede añadir/editar/borrar.</div>
+<div class="siga-card-list">
+  <a class="siga-card" href="{% url 'inventory:compania_list' %}"><strong>Compañías</strong></a>
+  <a class="siga-card" href="{% url 'inventory:deposito_list' %}"><strong>Depósitos</strong></a>
+  <a class="siga-card" href="{% url 'inventory:peloton_list' %}"><strong>Pelotones</strong></a>
+  <a class="siga-card" href="{% url 'inventory:tipoarmamento_list' %}"><strong>Tipos de armamento</strong></a>
+  <a class="siga-card" href="{% url 'inventory:campopersonalizado_list' %}"><strong>Campos personalizados</strong></a>
+  <a class="siga-card" href="{% url 'inventory:unidad_list' %}"><strong>Unidades</strong></a>
+  <a class="siga-card" href="{% url 'inventory:prestamo_list' %}"><strong>Préstamos de munición</strong></a>
+  {% if user.is_admin_role %}
+  <a class="siga-card" href="{% url 'accounts:usuario_list' %}"><strong>Usuarios</strong></a>
+  {% endif %}
+</div>
+{% endblock %}

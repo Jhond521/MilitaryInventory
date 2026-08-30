@@ -341,8 +341,9 @@ class EntregaDevolucionTests(TestCase):
 
 
 @override_settings(STORAGES=_PLAIN_STATIC_STORAGE)
-class ArmamentoMovimientoAdminViewTests(TestCase):
-    """Flujo de entrega/devolución expuesto como acciones del admin (H-09)."""
+class ArmamentoMovimientoViewTests(TestCase):
+    """Flujo de entrega/devolución/baja expuesto por las pantallas propias
+    (H-09, H-10) — reemplaza las acciones del admin retirado (ADR-0004)."""
 
     def setUp(self):
         self.unidad = Unidad.objects.create(nombre="Batallón de Prueba")
@@ -359,8 +360,9 @@ class ArmamentoMovimientoAdminViewTests(TestCase):
             numero_serie="S-200", tipo=self.tipo, compania=self.comp_a,
             ubicacion=Armamento.Ubicacion.DEPOSITO, deposito=self.deposito,
         )
-        self.admin_user = get_user_model().objects.create_superuser(
-            email="admin@example.com", password="x"
+        user_model = get_user_model()
+        self.admin_user = user_model.objects.create_user(
+            email="admin@example.com", password="x", role=user_model.Role.ADMIN
         )
         self.client.force_login(self.admin_user)
         session = self.client.session
@@ -368,14 +370,12 @@ class ArmamentoMovimientoAdminViewTests(TestCase):
         session.save()
 
     def test_entregar_view_confirms_and_creates_movimiento(self):
-        url = reverse("admin:inventory_armamento_entregar")
-        response = self.client.get(url, {"ids": str(self.arma.pk)})
+        url = reverse("inventory:armamento_entregar", args=[self.arma.pk])
+        response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
 
-        response = self.client.post(
-            url, {"ids": str(self.arma.pk), "soldado": self.soldado_a.pk, "observacion": ""}
-        )
-        self.assertRedirects(response, reverse("admin:inventory_armamento_changelist"))
+        response = self.client.post(url, {"soldado": self.soldado_a.pk, "observacion": ""})
+        self.assertRedirects(response, reverse("inventory:armamento_list"))
         self.arma.refresh_from_db()
         self.assertEqual(self.arma.ubicacion, Armamento.Ubicacion.EN_MANO)
         self.assertEqual(self.arma.soldado, self.soldado_a)
@@ -385,14 +385,12 @@ class ArmamentoMovimientoAdminViewTests(TestCase):
 
     def test_devolver_view_confirms_and_creates_movimiento(self):
         self.arma.entregar(soldado=self.soldado_a, usuario=self.admin_user)
-        url = reverse("admin:inventory_armamento_devolver")
-        response = self.client.get(url, {"ids": str(self.arma.pk)})
+        url = reverse("inventory:armamento_devolver", args=[self.arma.pk])
+        response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
 
-        response = self.client.post(
-            url, {"ids": str(self.arma.pk), "deposito": self.deposito.pk, "observacion": ""}
-        )
-        self.assertRedirects(response, reverse("admin:inventory_armamento_changelist"))
+        response = self.client.post(url, {"deposito": self.deposito.pk, "observacion": ""})
+        self.assertRedirects(response, reverse("inventory:armamento_list"))
         self.arma.refresh_from_db()
         self.assertEqual(self.arma.ubicacion, Armamento.Ubicacion.DEPOSITO)
         self.assertIsNone(self.arma.soldado)
@@ -403,18 +401,15 @@ class ArmamentoMovimientoAdminViewTests(TestCase):
         )
 
     def test_dar_de_baja_view_confirms_and_creates_movimiento(self):
-        url = reverse("admin:inventory_armamento_dar_de_baja")
-        response = self.client.get(url, {"ids": str(self.arma.pk)})
+        url = reverse("inventory:armamento_baja", args=[self.arma.pk])
+        response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
 
         response = self.client.post(
             url,
-            {
-                "ids": str(self.arma.pk), "motivo": Armamento.MotivoBaja.DANO,
-                "fecha": "2026-01-15", "observacion": "",
-            },
+            {"motivo": Armamento.MotivoBaja.DANO, "fecha": "2026-01-15", "observacion": ""},
         )
-        self.assertRedirects(response, reverse("admin:inventory_armamento_changelist"))
+        self.assertRedirects(response, reverse("inventory:armamento_list"))
         self.arma.refresh_from_db()
         self.assertEqual(self.arma.estado, Armamento.Estado.BAJA)
         self.assertEqual(self.arma.motivo_baja, Armamento.MotivoBaja.DANO)
@@ -429,16 +424,13 @@ class ArmamentoMovimientoAdminViewTests(TestCase):
         session[SESSION_KEY] = self.comp_a.pk
         session.save()
 
-        changelist = self.client.get(reverse("admin:inventory_armamento_changelist"))
-        self.assertNotContains(changelist, "Dar de baja")
+        url = reverse("inventory:armamento_baja", args=[self.arma.pk])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 403)
 
-        url = reverse("admin:inventory_armamento_dar_de_baja")
         response = self.client.post(
             url,
-            {
-                "ids": str(self.arma.pk), "motivo": Armamento.MotivoBaja.DANO,
-                "fecha": "2026-01-15", "observacion": "",
-            },
+            {"motivo": Armamento.MotivoBaja.DANO, "fecha": "2026-01-15", "observacion": ""},
         )
         self.assertEqual(response.status_code, 403)
         self.arma.refresh_from_db()
@@ -446,8 +438,8 @@ class ArmamentoMovimientoAdminViewTests(TestCase):
 
 
 @override_settings(STORAGES=_PLAIN_STATIC_STORAGE)
-class CamposPersonalizadosAdminTests(TestCase):
-    """Captura de campos personalizados en el formulario de Armamento (RF-08, H-12)."""
+class CamposPersonalizadosViewTests(TestCase):
+    """Captura de campos personalizados en `armamento_editar` (RF-08, H-12)."""
 
     def setUp(self):
         self.unidad = Unidad.objects.create(nombre="Batallón de Prueba")
@@ -469,8 +461,9 @@ class CamposPersonalizadosAdminTests(TestCase):
             numero_serie="S-500", tipo=self.tipo, compania=self.compania,
             ubicacion=Armamento.Ubicacion.DEPOSITO, deposito=self.deposito,
         )
-        self.admin_user = get_user_model().objects.create_superuser(
-            email="admin@example.com", password="x"
+        user_model = get_user_model()
+        self.admin_user = user_model.objects.create_user(
+            email="admin@example.com", password="x", role=user_model.Role.ADMIN
         )
         self.client.force_login(self.admin_user)
         session = self.client.session
@@ -481,27 +474,15 @@ class CamposPersonalizadosAdminTests(TestCase):
         data = {
             "numero_serie": self.arma.numero_serie,
             "tipo": self.tipo.pk,
-            "compania": self.compania.pk,
-            "ubicacion": Armamento.Ubicacion.DEPOSITO,
-            "deposito": self.deposito.pk,
-            "estado": Armamento.Estado.ACTIVO,
             f"campo_{self.campo_texto.pk}": "",
             f"campo_{self.campo_numero.pk}": "",
             f"campo_{self.campo_fecha.pk}": "",
-            # Management form del inline de movimientos (Armamento.movimientos
-            # related_name) — sin esto Django considera el POST inválido.
-            "movimientos-TOTAL_FORMS": "0",
-            "movimientos-INITIAL_FORMS": "0",
-            "movimientos-MIN_NUM_FORMS": "0",
-            "movimientos-MAX_NUM_FORMS": "0",
         }
         data.update(overrides)
         return data
 
     def test_campos_personalizados_aparecen_en_el_formulario(self):
-        response = self.client.get(
-            reverse("admin:inventory_armamento_change", args=[self.arma.pk])
-        )
+        response = self.client.get(reverse("inventory:armamento_editar", args=[self.arma.pk]))
         content = response.content.decode()
         self.assertIn("Óptica instalada", content)
         self.assertIn("Horas de uso", content)
@@ -509,13 +490,13 @@ class CamposPersonalizadosAdminTests(TestCase):
         self.assertNotIn("datos_extra", content)
 
     def test_guardar_captura_valores_por_tipo_en_datos_extra(self):
-        url = reverse("admin:inventory_armamento_change", args=[self.arma.pk])
+        url = reverse("inventory:armamento_editar", args=[self.arma.pk])
         response = self.client.post(url, self._form_data(**{
             f"campo_{self.campo_texto.pk}": "Holográfica",
             f"campo_{self.campo_numero.pk}": "123.5",
             f"campo_{self.campo_fecha.pk}": "2026-01-10",
         }))
-        self.assertEqual(response.status_code, 302)
+        self.assertRedirects(response, reverse("inventory:armamento_list"))
         self.arma.refresh_from_db()
         self.assertEqual(self.arma.datos_extra["Óptica instalada"], "Holográfica")
         self.assertEqual(str(self.arma.datos_extra["Horas de uso"]), "123.5")
@@ -524,22 +505,20 @@ class CamposPersonalizadosAdminTests(TestCase):
     def test_valores_existentes_se_precargan_en_el_formulario(self):
         self.arma.datos_extra = {"Óptica instalada": "Réflex"}
         self.arma.save()
-        response = self.client.get(
-            reverse("admin:inventory_armamento_change", args=[self.arma.pk])
-        )
+        response = self.client.get(reverse("inventory:armamento_editar", args=[self.arma.pk]))
         self.assertContains(response, "Réflex")
 
     def test_dejar_un_campo_vacio_lo_quita_de_datos_extra(self):
         self.arma.datos_extra = {"Óptica instalada": "Réflex"}
         self.arma.save()
-        url = reverse("admin:inventory_armamento_change", args=[self.arma.pk])
+        url = reverse("inventory:armamento_editar", args=[self.arma.pk])
         response = self.client.post(url, self._form_data())
-        self.assertEqual(response.status_code, 302)
+        self.assertRedirects(response, reverse("inventory:armamento_list"))
         self.arma.refresh_from_db()
         self.assertNotIn("Óptica instalada", self.arma.datos_extra)
 
     def test_numero_invalido_muestra_error_de_formulario(self):
-        url = reverse("admin:inventory_armamento_change", args=[self.arma.pk])
+        url = reverse("inventory:armamento_editar", args=[self.arma.pk])
         response = self.client.post(
             url, self._form_data(**{f"campo_{self.campo_numero.pk}": "no-es-un-numero"})
         )
@@ -548,15 +527,13 @@ class CamposPersonalizadosAdminTests(TestCase):
 
     def test_formulario_de_armamento_funciona_sin_campos_personalizados(self):
         CampoPersonalizado.objects.all().delete()
-        response = self.client.get(
-            reverse("admin:inventory_armamento_change", args=[self.arma.pk])
-        )
+        response = self.client.get(reverse("inventory:armamento_editar", args=[self.arma.pk]))
         self.assertEqual(response.status_code, 200)
 
-    def test_enlace_ve_pero_no_puede_editar_un_campo_personalizado(self):
-        """H-03: Enlace no tiene permiso de "change" sobre Armamento, y eso
-        debe cubrir también los campo_<pk> agregados dinámicamente — no solo
-        los campos reales del modelo."""
+    def test_enlace_no_puede_editar_armamento(self):
+        """H-03: editar armamento (incluidos los campo_<pk>) es solo ADMIN —
+        a diferencia del admin retirado, Enlace ni siquiera ve el formulario
+        (ya ve el detalle completo desde la tarjeta de Inventario)."""
         self.arma.datos_extra = {"Óptica instalada": "Réflex"}
         self.arma.save()
         enlace = get_user_model().objects.create_user(email="enlace3@example.com", password="x")
@@ -565,10 +542,9 @@ class CamposPersonalizadosAdminTests(TestCase):
         session[SESSION_KEY] = self.compania.pk
         session.save()
 
-        url = reverse("admin:inventory_armamento_change", args=[self.arma.pk])
+        url = reverse("inventory:armamento_editar", args=[self.arma.pk])
         response = self.client.get(url)
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Réflex")
+        self.assertEqual(response.status_code, 403)
 
         response = self.client.post(url, self._form_data(**{
             f"campo_{self.campo_texto.pk}": "Valor colado",
@@ -598,8 +574,9 @@ class CompaniaContextoTests(TestCase):
             numero_serie="S-B1", tipo=self.tipo, compania=self.comp_b,
             ubicacion=Armamento.Ubicacion.DEPOSITO, deposito=self.deposito,
         )
-        self.admin_user = get_user_model().objects.create_superuser(
-            email="admin@example.com", password="x"
+        user_model = get_user_model()
+        self.admin_user = user_model.objects.create_user(
+            email="admin@example.com", password="x", role=user_model.Role.ADMIN
         )
         self.client.force_login(self.admin_user)
 
@@ -614,54 +591,41 @@ class CompaniaContextoTests(TestCase):
     def test_elegir_compania_guarda_en_sesion_y_redirige(self):
         response = self.client.post(
             reverse("inventory:elegir_compania"),
-            {"compania": self.comp_a.pk, "next": reverse("admin:index")},
+            {"compania": self.comp_a.pk, "next": reverse("inventory:ajustes")},
         )
-        self.assertRedirects(response, reverse("admin:index"))
+        self.assertRedirects(response, reverse("inventory:ajustes"))
         self.assertEqual(self.client.session[SESSION_KEY], self.comp_a.pk)
 
         # ya no redirige a partir de aquí en la misma sesión.
-        response = self.client.get(reverse("admin:index"))
+        response = self.client.get(reverse("inventory:ajustes"))
         self.assertEqual(response.status_code, 200)
 
-    def test_changelist_filtra_por_defecto_a_la_compania_en_sesion(self):
+    def test_armamento_list_filtra_por_defecto_a_la_compania_en_sesion(self):
         session = self.client.session
         session[SESSION_KEY] = self.comp_a.pk
         session.save()
 
-        response = self.client.get(reverse("admin:inventory_armamento_changelist"))
+        response = self.client.get(reverse("inventory:armamento_list"))
         self.assertContains(response, "S-A1")
         self.assertNotContains(response, "S-B1")
 
-    def test_filtro_explicito_de_compania_anula_el_contexto_por_defecto(self):
+    def test_ver_todas_anula_el_contexto_por_defecto(self):
         session = self.client.session
         session[SESSION_KEY] = self.comp_a.pk
         session.save()
 
-        response = self.client.get(
-            reverse("admin:inventory_armamento_changelist"), {"compania__id__exact": self.comp_b.pk}
-        )
-        self.assertContains(response, "S-B1")
-        self.assertNotContains(response, "S-A1")
-
-    def test_ver_todas_companias_anula_el_contexto_por_defecto(self):
-        session = self.client.session
-        session[SESSION_KEY] = self.comp_a.pk
-        session.save()
-
-        response = self.client.get(
-            reverse("admin:inventory_armamento_changelist"), {"ver_todas_companias": "1"}
-        )
+        response = self.client.get(reverse("inventory:armamento_list"), {"todas": "1"})
         self.assertContains(response, "S-A1")
         self.assertContains(response, "S-B1")
 
-    def test_boton_cambiar_compania_aparece_en_el_admin(self):
+    def test_boton_cambiar_compania_aparece_en_el_header(self):
         session = self.client.session
         session[SESSION_KEY] = self.comp_a.pk
         session.save()
 
-        response = self.client.get(reverse("admin:index"))
-        self.assertContains(response, "cambiar compañía")
-        self.assertContains(response, "Compañía:")
+        response = self.client.get(reverse("inventory:armamento_list"))
+        self.assertContains(response, reverse("inventory:elegir_compania"))
+        self.assertContains(response, self.comp_a.nombre)
 
 
 @override_settings(STORAGES=_PLAIN_STATIC_STORAGE)
@@ -686,8 +650,9 @@ class BusquedaGlobalArmamentoTests(TestCase):
             numero_serie="BIS-0001", tipo=self.tipo, compania=self.comp_b,
             ubicacion=Armamento.Ubicacion.DEPOSITO, deposito=self.deposito_caruru,
         )
-        self.admin_user = get_user_model().objects.create_superuser(
-            email="admin@example.com", password="x"
+        user_model = get_user_model()
+        self.admin_user = user_model.objects.create_user(
+            email="admin@example.com", password="x", role=user_model.Role.ADMIN
         )
         self.client.force_login(self.admin_user)
         session = self.client.session
@@ -696,8 +661,7 @@ class BusquedaGlobalArmamentoTests(TestCase):
 
     def _buscar(self, termino):
         return self.client.get(
-            reverse("admin:inventory_armamento_changelist"),
-            {"q": termino, "ver_todas_companias": "1"},
+            reverse("inventory:armamento_list"), {"q": termino, "todas": "1"}
         )
 
     def test_busca_por_numero_de_serie(self):
@@ -781,31 +745,26 @@ class RolePermissionsTests(TestCase):
     def test_enlace_no_puede_agregar_datos_maestros(self):
         self._login_con_compania(self.enlace)
         for url_name in (
-            "admin:inventory_compania_add",
-            "admin:inventory_deposito_add",
-            "admin:inventory_tipoarmamento_add",
-            "admin:inventory_soldado_add",
-            "admin:inventory_peloton_add",
-            "admin:inventory_campopersonalizado_add",
-            "admin:inventory_armamento_add",
+            "inventory:compania_crear",
+            "inventory:deposito_crear",
+            "inventory:tipoarmamento_crear",
+            "inventory:soldado_crear",
+            "inventory:peloton_crear",
+            "inventory:campopersonalizado_crear",
+            "inventory:armamento_crear",
         ):
             response = self.client.get(reverse(url_name))
             self.assertEqual(response.status_code, 403, url_name)
 
-    def test_enlace_puede_ver_pero_no_modificar_armamento(self):
+    def test_enlace_no_puede_editar_armamento(self):
         self._login_con_compania(self.enlace)
-        url = reverse("admin:inventory_armamento_change", args=[self.arma.pk])
+        url = reverse("inventory:armamento_editar", args=[self.arma.pk])
 
         response = self.client.get(url)
-        self.assertEqual(response.status_code, 200)  # detalle de solo lectura
+        self.assertEqual(response.status_code, 403)
 
         response = self.client.post(
-            url,
-            {
-                "numero_serie": "HACKEADO", "tipo": self.tipo.pk, "compania": self.compania.pk,
-                "ubicacion": Armamento.Ubicacion.DEPOSITO, "deposito": self.deposito.pk,
-                "estado": Armamento.Estado.ACTIVO,
-            },
+            url, {"numero_serie": "HACKEADO", "tipo": self.tipo.pk}
         )
         self.assertEqual(response.status_code, 403)
         self.arma.refresh_from_db()
@@ -813,46 +772,42 @@ class RolePermissionsTests(TestCase):
 
     def test_enlace_no_puede_borrar_compania(self):
         self._login_con_compania(self.enlace)
-        url = reverse("admin:inventory_compania_delete", args=[self.compania.pk])
+        url = reverse("inventory:compania_borrar", args=[self.compania.pk])
         response = self.client.get(url)
         self.assertEqual(response.status_code, 403)
 
     def test_enlace_si_puede_ver_listados_de_datos_maestros(self):
         self._login_con_compania(self.enlace)
         for url_name in (
-            "admin:inventory_compania_changelist",
-            "admin:inventory_deposito_changelist",
-            "admin:inventory_tipoarmamento_changelist",
-            "admin:inventory_soldado_changelist",
-            "admin:inventory_armamento_changelist",
+            "inventory:compania_list",
+            "inventory:deposito_list",
+            "inventory:tipoarmamento_list",
+            "inventory:soldado_list",
+            "inventory:armamento_list",
         ):
             response = self.client.get(reverse(url_name))
             self.assertEqual(response.status_code, 200, url_name)
 
     def test_enlace_no_puede_ver_ni_gestionar_usuarios(self):
         self._login_con_compania(self.enlace)
-        response = self.client.get(reverse("admin:accounts_user_changelist"))
+        response = self.client.get(reverse("accounts:usuario_list"))
         self.assertEqual(response.status_code, 403)
-        response = self.client.get(reverse("admin:accounts_user_add"))
+        response = self.client.get(reverse("accounts:usuario_crear"))
         self.assertEqual(response.status_code, 403)
 
     # --- Enlace: sí puede registrar movimientos ---
 
     def test_enlace_si_puede_entregar_y_devolver(self):
         self._login_con_compania(self.enlace)
-        url = reverse("admin:inventory_armamento_entregar")
-        response = self.client.post(
-            url, {"ids": str(self.arma.pk), "soldado": self.soldado.pk, "observacion": ""}
-        )
-        self.assertRedirects(response, reverse("admin:inventory_armamento_changelist"))
+        url = reverse("inventory:armamento_entregar", args=[self.arma.pk])
+        response = self.client.post(url, {"soldado": self.soldado.pk, "observacion": ""})
+        self.assertRedirects(response, reverse("inventory:armamento_list"))
         self.arma.refresh_from_db()
         self.assertEqual(self.arma.ubicacion, Armamento.Ubicacion.EN_MANO)
 
-        url = reverse("admin:inventory_armamento_devolver")
-        response = self.client.post(
-            url, {"ids": str(self.arma.pk), "deposito": self.deposito.pk, "observacion": ""}
-        )
-        self.assertRedirects(response, reverse("admin:inventory_armamento_changelist"))
+        url = reverse("inventory:armamento_devolver", args=[self.arma.pk])
+        response = self.client.post(url, {"deposito": self.deposito.pk, "observacion": ""})
+        self.assertRedirects(response, reverse("inventory:armamento_list"))
         self.arma.refresh_from_db()
         self.assertEqual(self.arma.ubicacion, Armamento.Ubicacion.DEPOSITO)
 
@@ -860,56 +815,33 @@ class RolePermissionsTests(TestCase):
         self._login_con_compania(self.enlace)
         otra_compania = Compania.objects.create(unidad=self.unidad, nombre="Bisonte")
         response = self.client.post(
-            reverse("admin:inventory_prestamo_add"),
+            reverse("inventory:prestamo_transferir"),
             {
                 "tipo": self.municion.pk, "deposito": self.deposito.pk, "lote": "",
                 "cantidad": 10, "compania_origen": self.compania.pk,
                 "compania_destino": otra_compania.pk, "observacion": "",
             },
         )
-        self.assertEqual(response.status_code, 302)
+        self.assertRedirects(response, reverse("inventory:existencia_list"))
         self.assertTrue(Prestamo.objects.filter(compania_destino=otra_compania).exists())
-
-    def test_enlace_no_puede_modificar_un_prestamo_existente(self):
-        self._login_con_compania(self.enlace)
-        otra_compania = Compania.objects.create(unidad=self.unidad, nombre="Córsega")
-        prestamo = Prestamo.objects.create(
-            tipo=self.municion, deposito=self.deposito, cantidad=5,
-            compania_origen=self.compania, compania_destino=otra_compania,
-            usuario=self.admin_no_super,
-        )
-        url = reverse("admin:inventory_prestamo_change", args=[prestamo.pk])
-
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, 200)  # detalle de solo lectura
-
-        response = self.client.post(
-            url,
-            {
-                "tipo": self.municion.pk, "deposito": self.deposito.pk, "lote": "",
-                "cantidad": 999, "compania_origen": self.compania.pk,
-                "compania_destino": otra_compania.pk, "observacion": "",
-            },
-        )
-        self.assertEqual(response.status_code, 403)
 
     # --- Administrador (sin ser superusuario) conserva control total ---
 
     def test_administrador_no_superusuario_puede_gestionar_datos_maestros(self):
         self._login_con_compania(self.admin_no_super)
-        response = self.client.get(reverse("admin:inventory_compania_add"))
+        response = self.client.get(reverse("inventory:compania_crear"))
         self.assertEqual(response.status_code, 200)
 
         response = self.client.post(
-            reverse("admin:inventory_compania_add"),
+            reverse("inventory:compania_crear"),
             {"unidad": self.unidad.pk, "nombre": "Delta"},
         )
-        self.assertEqual(response.status_code, 302)
+        self.assertRedirects(response, reverse("inventory:compania_list"))
         self.assertTrue(Compania.objects.filter(nombre="Delta").exists())
 
     def test_administrador_no_superusuario_puede_ver_y_gestionar_usuarios(self):
         self._login_con_compania(self.admin_no_super)
-        response = self.client.get(reverse("admin:accounts_user_changelist"))
+        response = self.client.get(reverse("accounts:usuario_list"))
         self.assertEqual(response.status_code, 200)
 
 

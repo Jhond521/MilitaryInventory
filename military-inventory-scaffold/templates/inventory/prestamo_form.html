@@ -1,0 +1,17 @@
+{% extends "inventory/base_mobile.html" %}
+{% block title %}Prestar munición{% endblock %}
+{% block content %}
+<h1 class="siga-page-title">Prestar munición</h1>
+<div class="siga-page-subtitle">Traslada cantidad de un tipo entre compañías (RF-15).</div>
+<form method="post">
+  {% csrf_token %}
+  {% for field in form %}
+  <div class="siga-field">
+    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+    {{ field }}
+    {% if field.errors %}<div class="siga-field-error">{{ field.errors|join:" " }}</div>{% endif %}
+  </div>
+  {% endfor %}
+  <button type="submit" class="siga-btn-primary">Registrar préstamo</button>
+</form>
+{% endblock %}
