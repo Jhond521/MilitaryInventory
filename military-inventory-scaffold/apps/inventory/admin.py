@@ -3,6 +3,7 @@ from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
 from django.shortcuts import redirect, render
 from django.urls import path, reverse
+from django.utils import timezone
 
 from apps.accounts.admin_mixins import MovimientoRegistrableMixin, ViewOnlyForEnlaceMixin
 
@@ -118,6 +119,21 @@ class DevolucionForm(forms.Form):
     )
 
 
+class BajaForm(forms.Form):
+    motivo = forms.ChoiceField(choices=Armamento.MotivoBaja.choices, label="Motivo")
+    fecha = forms.DateField(
+        label="Fecha de baja",
+        initial=timezone.localdate,
+        # El input HTML type="date" exige el valor en formato yyyy-mm-dd; el
+        # formato de fecha por defecto del locale (es-co) es dd/mm/yyyy, así
+        # que sin esto el navegador descarta silenciosamente el valor inicial.
+        widget=forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
+    )
+    observacion = forms.CharField(
+        label="Observación", required=False, widget=forms.Textarea(attrs={"rows": 2})
+    )
+
+
 class MovimientoInline(admin.TabularInline):
     model = Movimiento
     extra = 0
@@ -153,7 +169,7 @@ class ArmamentoAdmin(ViewOnlyForEnlaceMixin, CompaniaContextoMixin, admin.ModelA
     )
     autocomplete_fields = ("tipo", "compania", "deposito", "soldado")
     inlines = [MovimientoInline]
-    actions = ["accion_entregar", "accion_devolver"]
+    actions = ["accion_entregar", "accion_devolver", "accion_dar_de_baja"]
 
     @admin.display(description="Pelotón")
     def peloton_actual(self, obj):
@@ -171,6 +187,11 @@ class ArmamentoAdmin(ViewOnlyForEnlaceMixin, CompaniaContextoMixin, admin.ModelA
                 self.admin_site.admin_view(self.devolver_view),
                 name="inventory_armamento_devolver",
             ),
+            path(
+                "dar-de-baja/",
+                self.admin_site.admin_view(self.dar_de_baja_view),
+                name="inventory_armamento_dar_de_baja",
+            ),
         ]
         return custom + super().get_urls()
 
@@ -183,6 +204,11 @@ class ArmamentoAdmin(ViewOnlyForEnlaceMixin, CompaniaContextoMixin, admin.ModelA
     def accion_devolver(self, request, queryset):
         ids = ",".join(str(pk) for pk in queryset.values_list("pk", flat=True))
         return redirect(f"{reverse('admin:inventory_armamento_devolver')}?ids={ids}")
+
+    @admin.action(description="Dar de baja", permissions=["change"])
+    def accion_dar_de_baja(self, request, queryset):
+        ids = ",".join(str(pk) for pk in queryset.values_list("pk", flat=True))
+        return redirect(f"{reverse('admin:inventory_armamento_dar_de_baja')}?ids={ids}")
 
     @staticmethod
     def _seleccion(request, ubicacion_esperada):
@@ -270,6 +296,46 @@ class ArmamentoAdmin(ViewOnlyForEnlaceMixin, CompaniaContextoMixin, admin.ModelA
             "ids": ids,
         }
         return render(request, "admin/inventory/armamento/devolver.html", context)
+
+    def dar_de_baja_view(self, request):
+        # Solo administrador (RF-11) — a diferencia de entregar/devolver,
+        # que RF-10 autoriza también para enlace.
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+        ids = request.POST.get("ids") or request.GET.get("ids") or ""
+        pks = [int(pk) for pk in ids.split(",") if pk.strip()]
+        armamentos = Armamento.objects.filter(pk__in=pks, estado=Armamento.Estado.ACTIVO)
+        if not armamentos.exists():
+            self.message_user(
+                request, "Selecciona al menos un arma activa.", level=messages.ERROR
+            )
+            return redirect("admin:inventory_armamento_changelist")
+
+        if request.method == "POST":
+            form = BajaForm(request.POST)
+            if form.is_valid():
+                motivo = form.cleaned_data["motivo"]
+                fecha = form.cleaned_data["fecha"]
+                observacion = form.cleaned_data["observacion"]
+                cantidad = armamentos.count()
+                for arma in armamentos:
+                    arma.dar_de_baja(
+                        motivo=motivo, fecha=fecha, usuario=request.user, observacion=observacion
+                    )
+                self.message_user(request, f"{cantidad} arma(s) dada(s) de baja.")
+                return redirect("admin:inventory_armamento_changelist")
+        else:
+            form = BajaForm()
+
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "title": "Dar de baja",
+            "form": form,
+            "armamentos": armamentos,
+            "ids": ids,
+        }
+        return render(request, "admin/inventory/armamento/dar_de_baja.html", context)
 
 
 @admin.register(Movimiento)

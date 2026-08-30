@@ -108,7 +108,13 @@ docs/              # PRD (Spanish), backlog (Spanish), ADRs
   traceability (RNF-03). Never mutate a weapon's location without logging it —
   use `Armamento.entregar()`/`.devolver()` (transactional, validate company match
   and current ubicación) instead of setting `ubicacion`/`soldado`/`deposito` by hand.
-- Baja (decommission) keeps the row; it never deletes the weapon (RF-11).
+- Baja (decommission) keeps the row; it never deletes the weapon (RF-11). Use
+  `Armamento.dar_de_baja(motivo, fecha, usuario, observacion="")` — sets `estado=BAJA`,
+  logs a `Movimiento` (type `BAJA`), and works from either ubicación (unlike
+  entregar/devolver). `clean()` requires `motivo_baja`/`fecha_baja` whenever
+  `estado=BAJA`, and `entregar()` refuses a weapon that isn't `ACTIVO`. Only ADMIN can
+  do this (RF-11) — unlike H-09's entrega/devolución, which RF-10 authorizes for both
+  roles.
 - The "compañía de trabajo" (RF-02, session key `apps.inventory.views.SESSION_KEY`) is a
   **default filter, not a permission boundary** (PRD S-2) — every user can still see every
   company. `CompaniaContextMiddleware` sends anyone without it to `/compania/`;
@@ -160,13 +166,14 @@ docs/              # PRD (Spanish), backlog (Spanish), ADRs
 
 ## Known gotchas
 
-- The current build uses the Django admin as the UI. H-09 (entregar/devolver) ships
-  as admin actions ("Entregar a un soldado" / "Devolver a depósito" on the Armamento
-  changelist, `apps/inventory/admin.py`) with an intermediate confirmation page, H-08
-  (compañía de trabajo) ships as a redirect-to-selector plus a default admin queryset
-  filter, and H-11 (búsqueda global) reuses the admin's own search box (expanded
-  `search_fields`) — none of these are dedicated screens. A guided operator UI
-  purpose-built for entrega/devolución/búsqueda is still backlog stories H-10, H-12.
+- The current build uses the Django admin as the UI. H-09 (entregar/devolver) and H-10
+  (baja) ship as admin actions on the Armamento changelist ("Entregar a un soldado" /
+  "Devolver a depósito" / "Dar de baja", `apps/inventory/admin.py`) with an intermediate
+  confirmation page each, H-08 (compañía de trabajo) ships as a redirect-to-selector
+  plus a default admin queryset filter, and H-11 (búsqueda global) reuses the admin's
+  own search box (expanded `search_fields`) — none of these are dedicated screens. A
+  guided, purpose-built operator UI is still backlog story H-12 (campos personalizados
+  is the only remaining gap in Fase 1's E-03 épica).
 - `python manage.py importar_armamento` (H-13, RF-13) assumes a **normalized** Excel
   format documented in its own docstring (one worksheet per company, header row with
   Serie/Denominación/Depósito columns) — David's real `ACTIVOS FIJOS COMPAÑIA.xlsx`

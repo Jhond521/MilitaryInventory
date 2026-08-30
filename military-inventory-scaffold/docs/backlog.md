@@ -131,13 +131,22 @@ El corazón del sistema.
   (`templates/admin/inventory/armamento/`) para elegir soldado/depósito y observación.
   Falta una pantalla guiada propia (H-08…H-11) y el filtrado de permisos por rol (H-03).
 
-#### H-10 — Baja de armamento
+#### H-10 — Baja de armamento ✅
 
 - **Requerimiento**: RF-11
-- **Estado**: Pendiente
+- **Estado**: Hecho (vía acción del admin)
 - **Criterios de aceptación**:
-  - [ ] Solo administrador; registra motivo (dañada/perdida/robada) y fecha.
-  - [ ] El arma sale del inventario activo pero conserva su historial.
+  - [x] Solo administrador; registra motivo (dañada/perdida/robada) y fecha.
+  - [x] El arma sale del inventario activo pero conserva su historial.
+- **Notas técnicas**: `Armamento.dar_de_baja(motivo, fecha, usuario, observacion="")` (transaccional,
+  en `models.py`) marca `estado=BAJA` y crea un `Movimiento` tipo BAJA (RNF-03) — funciona sin
+  importar si el arma está en mano o en depósito, a diferencia de entregar/devolver. `clean()`
+  exige motivo y fecha siempre que `estado=BAJA` (aunque se edite por el form crudo del admin,
+  no solo por esta acción), y `entregar()` ahora rechaza un arma que no esté `ACTIVO`. Expuesta
+  como acción masiva del admin ("Dar de baja") con página intermedia
+  (`templates/admin/inventory/armamento/dar_de_baja.html`); a diferencia de H-09, esta acción
+  declara `permissions=["change"]` para que ni siquiera aparezca en el desplegable de Enlace
+  (RF-11 es "solo administrador", no ambos roles como RF-10).
 
 #### H-11 — Búsqueda global por cualquier dato ✅
 

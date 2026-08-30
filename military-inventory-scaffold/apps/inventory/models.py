@@ -199,6 +199,12 @@ class Armamento(models.Model):
                 raise ValidationError("El soldado debe pertenecer a la misma compañía del arma.")
         if self.ubicacion == self.Ubicacion.DEPOSITO and self.deposito is None:
             raise ValidationError("Un arma en depósito debe indicar en cuál depósito está.")
+        # Una baja siempre queda con motivo y fecha (RF-11).
+        if self.estado == self.Estado.BAJA:
+            if not self.motivo_baja:
+                raise ValidationError("Un arma dada de baja debe indicar el motivo.")
+            if not self.fecha_baja:
+                raise ValidationError("Un arma dada de baja debe indicar la fecha de baja.")
 
     @property
     def ubicacion_actual(self) -> str:
@@ -217,6 +223,8 @@ class Armamento(models.Model):
 
     def entregar(self, *, soldado, usuario, observacion=""):
         """Mueve el arma de depósito a mano de un soldado, dejando rastro (RF-10)."""
+        if self.estado != self.Estado.ACTIVO:
+            raise ValidationError("Un arma dada de baja no se puede entregar.")
         if self.ubicacion != self.Ubicacion.DEPOSITO:
             raise ValidationError("El arma debe estar en depósito para poder entregarse.")
         if soldado.compania_id != self.compania_id:
@@ -253,6 +261,31 @@ class Armamento(models.Model):
                 observacion=observacion,
             )
 
+    def dar_de_baja(self, *, motivo, fecha, usuario, observacion=""):
+        """Da de baja el arma (dañada/perdida/robada); conserva su historial,
+        nunca se borra (RF-11). Puede ocurrir en mano o en depósito — a
+        diferencia de entregar/devolver, dar de baja no depende de la
+        ubicación actual."""
+        if self.estado == self.Estado.BAJA:
+            raise ValidationError("El arma ya está dada de baja.")
+        with transaction.atomic():
+            ubicacion_previa, soldado_previo, deposito_previo = (
+                self.ubicacion, self.soldado, self.deposito
+            )
+            self.estado = self.Estado.BAJA
+            self.motivo_baja = motivo
+            self.fecha_baja = fecha
+            self.full_clean()
+            self.save()
+            return Movimiento.objects.create(
+                armamento=self,
+                tipo=Movimiento.Tipo.BAJA,
+                soldado=soldado_previo if ubicacion_previa == self.Ubicacion.EN_MANO else None,
+                deposito=deposito_previo if ubicacion_previa == self.Ubicacion.DEPOSITO else None,
+                usuario=usuario,
+                observacion=observacion or self.get_motivo_baja_display(),
+            )
+
 
 class CampoPersonalizado(models.Model):
     """Definición de un campo personalizado del armamento (RF-08)."""
@@ -274,11 +307,12 @@ class CampoPersonalizado(models.Model):
 
 
 class Movimiento(models.Model):
-    """Historial de entregas y devoluciones (RF-10, RNF-03)."""
+    """Historial de entregas, devoluciones y bajas (RF-10, RF-11, RNF-03)."""
 
     class Tipo(models.TextChoices):
         ENTREGA = "ENTREGA", "Entrega (a soldado)"
         DEVOLUCION = "DEVOLUCION", "Devolución (a depósito)"
+        BAJA = "BAJA", "Baja"
 
     armamento = models.ForeignKey(Armamento, on_delete=models.PROTECT, related_name="movimientos")
     tipo = models.CharField("tipo de movimiento", max_length=12, choices=Tipo.choices)

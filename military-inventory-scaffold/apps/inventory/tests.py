@@ -1,6 +1,7 @@
 import json
 import os
 import tempfile
+from datetime import date
 
 import openpyxl
 from django.contrib.auth import get_user_model
@@ -132,6 +133,15 @@ class ArmamentoRulesTests(TestCase):
             ubicacion=Armamento.Ubicacion.DEPOSITO, deposito=self.deposito,
         )
         self.assertIsNone(arma.peloton_actual)
+
+    def test_baja_exige_motivo_y_fecha(self):
+        arma = Armamento(
+            numero_serie="S-007", tipo=self.tipo, compania=self.comp_a,
+            ubicacion=Armamento.Ubicacion.DEPOSITO, deposito=self.deposito,
+            estado=Armamento.Estado.BAJA,
+        )
+        with self.assertRaises(ValidationError):
+            arma.full_clean()
 
 
 class PelotonRulesTests(TestCase):
@@ -291,6 +301,43 @@ class EntregaDevolucionTests(TestCase):
         with self.assertRaises(ValidationError):
             self.arma.devolver(deposito=self.deposito, usuario=self.usuario)
 
+    def test_dar_de_baja_desde_deposito_registra_deposito_en_movimiento(self):
+        hoy = date.today()
+        movimiento = self.arma.dar_de_baja(
+            motivo=Armamento.MotivoBaja.DANO, fecha=hoy, usuario=self.usuario
+        )
+        self.arma.refresh_from_db()
+        self.assertEqual(self.arma.estado, Armamento.Estado.BAJA)
+        self.assertEqual(self.arma.motivo_baja, Armamento.MotivoBaja.DANO)
+        self.assertEqual(self.arma.fecha_baja, hoy)
+        self.assertEqual(movimiento.tipo, Movimiento.Tipo.BAJA)
+        self.assertEqual(movimiento.deposito, self.deposito)
+        self.assertIsNone(movimiento.soldado)
+
+    def test_dar_de_baja_desde_mano_registra_soldado_en_movimiento(self):
+        self.arma.entregar(soldado=self.soldado_a, usuario=self.usuario)
+        movimiento = self.arma.dar_de_baja(
+            motivo=Armamento.MotivoBaja.ROBO, fecha=date.today(), usuario=self.usuario
+        )
+        self.assertEqual(movimiento.soldado, self.soldado_a)
+        self.assertIsNone(movimiento.deposito)
+
+    def test_dar_de_baja_dos_veces_rechazada(self):
+        self.arma.dar_de_baja(
+            motivo=Armamento.MotivoBaja.PERDIDA, fecha=date.today(), usuario=self.usuario
+        )
+        with self.assertRaises(ValidationError):
+            self.arma.dar_de_baja(
+                motivo=Armamento.MotivoBaja.PERDIDA, fecha=date.today(), usuario=self.usuario
+            )
+
+    def test_no_se_puede_entregar_un_arma_dada_de_baja(self):
+        self.arma.dar_de_baja(
+            motivo=Armamento.MotivoBaja.DANO, fecha=date.today(), usuario=self.usuario
+        )
+        with self.assertRaises(ValidationError):
+            self.arma.entregar(soldado=self.soldado_a, usuario=self.usuario)
+
 
 @override_settings(STORAGES=_PLAIN_STATIC_STORAGE)
 class ArmamentoMovimientoAdminViewTests(TestCase):
@@ -353,6 +400,48 @@ class ArmamentoMovimientoAdminViewTests(TestCase):
                 armamento=self.arma, tipo=Movimiento.Tipo.DEVOLUCION
             ).exists()
         )
+
+    def test_dar_de_baja_view_confirms_and_creates_movimiento(self):
+        url = reverse("admin:inventory_armamento_dar_de_baja")
+        response = self.client.get(url, {"ids": str(self.arma.pk)})
+        self.assertEqual(response.status_code, 200)
+
+        response = self.client.post(
+            url,
+            {
+                "ids": str(self.arma.pk), "motivo": Armamento.MotivoBaja.DANO,
+                "fecha": "2026-01-15", "observacion": "",
+            },
+        )
+        self.assertRedirects(response, reverse("admin:inventory_armamento_changelist"))
+        self.arma.refresh_from_db()
+        self.assertEqual(self.arma.estado, Armamento.Estado.BAJA)
+        self.assertEqual(self.arma.motivo_baja, Armamento.MotivoBaja.DANO)
+        self.assertTrue(
+            Movimiento.objects.filter(armamento=self.arma, tipo=Movimiento.Tipo.BAJA).exists()
+        )
+
+    def test_enlace_no_puede_dar_de_baja(self):
+        enlace = get_user_model().objects.create_user(email="enlace2@example.com", password="x")
+        self.client.force_login(enlace)
+        session = self.client.session
+        session[SESSION_KEY] = self.comp_a.pk
+        session.save()
+
+        changelist = self.client.get(reverse("admin:inventory_armamento_changelist"))
+        self.assertNotContains(changelist, "Dar de baja")
+
+        url = reverse("admin:inventory_armamento_dar_de_baja")
+        response = self.client.post(
+            url,
+            {
+                "ids": str(self.arma.pk), "motivo": Armamento.MotivoBaja.DANO,
+                "fecha": "2026-01-15", "observacion": "",
+            },
+        )
+        self.assertEqual(response.status_code, 403)
+        self.arma.refresh_from_db()
+        self.assertEqual(self.arma.estado, Armamento.Estado.ACTIVO)
 
 
 @override_settings(STORAGES=_PLAIN_STATIC_STORAGE)

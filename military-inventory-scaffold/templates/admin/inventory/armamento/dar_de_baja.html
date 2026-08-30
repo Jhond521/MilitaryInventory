@@ -1,0 +1,18 @@
+{% extends "admin/base_site.html" %}
+
+{% block content_title %}<h1>{{ title }}</h1>{% endblock %}
+
+{% block content %}
+<p>Se dará de baja (dañada/perdida/robada) el siguiente armamento — conserva su historial:</p>
+<ul>
+  {% for arma in armamentos %}
+  <li>{{ arma.numero_serie }} — {{ arma.tipo }} ({{ arma.compania }})</li>
+  {% endfor %}
+</ul>
+<form method="post">
+  {% csrf_token %}
+  <input type="hidden" name="ids" value="{{ ids }}">
+  {{ form.as_p }}
+  <input type="submit" value="Confirmar baja">
+</form>
+{% endblock %}
