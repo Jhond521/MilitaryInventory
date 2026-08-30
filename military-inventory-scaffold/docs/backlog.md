@@ -63,6 +63,11 @@ Controlar quién entra y qué puede hacer.
     Pelotón, agrupados como tal en la Épica E-02 del backlog, aunque el PRD no los nombra
     en la lista literal de RF-01/sección 3) — a confirmar con David si Enlace necesita poder
     reasignar el pelotón de un soldado directamente (cambia con frecuencia, S-8).
+  - **Actualización (T-06/H-17)**: el admin de Django ahora vive en `/admin/` — la
+    interfaz diaria de ambos roles es la nueva superficie móvil en `/` (ver H-08/H-09/H-11
+    abajo). Los mixins de esta historia siguen gobernando el admin tal cual; las vistas
+    nuevas (`apps/inventory/views.py`) no tienen su propio sistema de permisos porque
+    RF-10/RF-12 ya autorizan a ambos roles por igual para lo que cubren.
 
 ### Épica E-02 — Datos maestros
 
@@ -115,6 +120,11 @@ El corazón del sistema.
   Armamento y Soldado. Header ("Compañía: X — ver todas — cambiar compañía") vía
   `templates/admin/base_site.html` + `context_processors.compania_actual`. Es solo un
   valor por defecto (S-2): "ver todas" y el filtro explícito de compañía lo desactivan.
+- **Actualización (T-06/H-17)**: el selector de compañía (`/compania/`) sigue igual, pero
+  ahora redirige por defecto a la nueva pantalla de Inventario (`inventory:armamento_list`,
+  en `/`) en vez de al admin — el admin se movió a `/admin/` (ADR-0003). El badge de
+  compañía y el enlace "cambiar compañía" también viven en el header de la nueva UI móvil
+  (`templates/inventory/base_mobile.html`), no solo en el admin.
 
 #### H-09 — Entregar y devolver con historial ✅
 
@@ -130,6 +140,13 @@ El corazón del sistema.
   ("Entregar a un soldado" / "Devolver a depósito") con una página intermedia
   (`templates/admin/inventory/armamento/`) para elegir soldado/depósito y observación.
   Falta una pantalla guiada propia (H-08…H-11) y el filtrado de permisos por rol (H-03).
+- **Actualización (T-06/H-17)**: pantallas guiadas propias añadidas —
+  `inventory:armamento_entregar` (`templates/inventory/armamento_entregar.html`, flujo de
+  3 pasos Arma → Soldado → Confirmar) e `inventory:armamento_devolver`
+  (`templates/inventory/armamento_devolver.html`, un solo paso). Ambas llaman a
+  `Armamento.entregar()`/`.devolver()` igual que las acciones del admin — no duplican la
+  lógica, solo dan una UI mobile-first propia. Las acciones del admin (`entregar_view`/
+  `devolver_view`) siguen existiendo tal cual, para operar por lote desde `/admin/`.
 
 #### H-10 — Baja de armamento ✅
 
@@ -164,6 +181,10 @@ El corazón del sistema.
   acentos como `\uXXXX` (`ensure_ascii=True`), lo que rompía la búsqueda de texto en
   español con tildes — se agregó `UnicodeJSONEncoder` (`models.py`) para guardarlos tal
   cual.
+- **Actualización (T-06/H-17)**: la pantalla de Inventario (`inventory:armamento_list`,
+  `/`) tiene su propio buscador reusando el mismo criterio (serie, soldado, tipo,
+  depósito, `datos_extra`), más chips de filtro por pelotón/ubicación/tipo — el buscador
+  del admin sigue disponible en `/admin/` para quien lo prefiera.
 
 #### H-12 — Campos personalizados del armamento ✅
 
@@ -227,7 +248,6 @@ El corazón del sistema.
 ## Fase 3 — Algún día
 
 - Multi-unidad con configurador de unidades
-- App móvil / vista optimizada para celular
 - Firma o acuse de entrega del soldado
 - Escaneo de código o serie con la cámara
 
@@ -244,7 +264,15 @@ El corazón del sistema.
     valores por defecto de `AUTHORIZED_EMAILS`/`SECRET_KEY` ya presentes en `settings.py`.
 - [ ] T-04 — Definir política de respaldo del Postgres (RNF-06)
 - [ ] T-05 — Cerrar la lista de 6 correos y el rol de cada persona (P-1, P-2)
-- [ ] T-06 — Habilitar PWA: web app manifest + service worker, íconos (escudo), responsive mobile-first, navegación inferior (RF-17, RNF-04)
+- [x] T-06 — Habilitar PWA: web app manifest + service worker, íconos (escudo), responsive mobile-first, navegación inferior (RF-17, RNF-04)
+  - **Notas técnicas**: manifest/service worker ya existían (T-07); esta historia agregó
+    las plantillas mobile-first reales — `templates/inventory/base_mobile.html` (header +
+    banner de instalación + navegación inferior de 4 ítems) y las 6 pantallas que cuelgan
+    de ella (`armamento_list`, `armamento_entregar`, `armamento_devolver`,
+    `movimiento_list`, `soldado_list`, `existencia_list`), estilizadas con
+    `static/css/mobile.css` (Oswald + IBM Plex Sans/Mono, paleta extraída de un canvas de
+    diseño). Ver ADR-0003: esto implicó mover el admin de Django de `/` a `/admin/`. El
+    ícono sigue siendo el placeholder (`static/icons/icon.svg`) — falta el escudo real.
 
 ## Actualizaciones v1.1–v1.3 (nuevas historias)
 
@@ -257,8 +285,10 @@ historias H-14…H-17 siguen pendientes en su parte de interfaz/UI.
   - **Estado**: modelo listo (T-07) — `Existencia` (tipo + compañía + depósito + lote opcional + cantidad), gestionable desde el admin. Falta el importador desde "CARGOS SAP" (fase siguiente) y una pantalla de ajuste guiado.
 - H-16 — Préstamo de munición entre compañías con saldos y trazabilidad (RF-15)
   - **Estado**: modelo listo (T-07) — `Prestamo` ajusta atómicamente las existencias de origen/destino y valida tipo, cantidad y saldo disponible; gestionable desde el admin. Falta la pantalla guiada de préstamo.
-- H-17 — App móvil responsive e instalable (PWA): manifest, service worker, íconos, navegación móvil (RF-17)
-  - **Estado**: parcialmente cubierto por T-07 (manifest + service worker servidos y enlazados desde el admin, ícono placeholder). Faltan las plantillas mobile-first y la navegación inferior.
+- H-17 — App móvil responsive e instalable (PWA): manifest, service worker, íconos, navegación móvil (RF-17) ✅
+  - **Estado**: Hecho (T-06) — plantillas mobile-first y navegación inferior reales, ver
+    notas técnicas de T-06 arriba. Sigue pendiente el ícono real del escudo del batallón
+    (placeholder en `static/icons/icon.svg`).
 - T-07 — Ajustar modelos del scaffold: separar control por SERIE vs CANTIDAD, agregar Pelotón, existencias y préstamos
   - **Estado**: Hecho — ver detalle de estado en cada historia (H-14…H-17) arriba.
 

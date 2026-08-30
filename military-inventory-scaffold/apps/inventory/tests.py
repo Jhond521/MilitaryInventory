@@ -604,7 +604,7 @@ class CompaniaContextoTests(TestCase):
         self.client.force_login(self.admin_user)
 
     def test_sin_compania_en_sesion_redirige_al_selector(self):
-        response = self.client.get(reverse("admin:index"))
+        response = self.client.get(reverse("inventory:armamento_list"))
         self.assertRedirects(response, "/compania/?next=/", fetch_redirect_response=False)
 
     def test_selector_esta_exento_de_su_propio_redirect(self):

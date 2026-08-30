@@ -1,0 +1,43 @@
+{% extends "inventory/base_mobile.html" %}
+{% block title %}Soldados{% endblock %}
+{% block content %}
+<h1 class="siga-page-title">Soldados</h1>
+<div class="siga-page-subtitle">
+  {% if ver_todas %}Todas las compañías{% else %}Compañía {{ compania_actual|default:"—" }}{% endif %}
+  · {{ soldados|length }} soldado{{ soldados|length|pluralize }}
+  {% if not ver_todas %}· <a href="?todas=1{% if q %}&q={{ q|urlencode }}{% endif %}">ver todas</a>{% endif %}
+</div>
+
+<form method="get" class="siga-search">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b6f76" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+  <input type="text" name="q" value="{{ q }}" placeholder="Buscar por nombre…">
+  {% if ver_todas %}<input type="hidden" name="todas" value="1">{% endif %}
+</form>
+
+<form method="get" class="siga-chips">
+  {% if ver_todas %}<input type="hidden" name="todas" value="1">{% endif %}
+  {% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
+  <label class="siga-chip">Pelotón
+    <select name="peloton" onchange="this.form.submit()">
+      <option value="">Todos</option>
+      {% for peloton in pelotones %}
+      <option value="{{ peloton.pk }}" {% if peloton_id == peloton.pk|stringformat:"s" %}selected{% endif %}>{{ peloton.nombre }}</option>
+      {% endfor %}
+    </select>
+  </label>
+</form>
+
+<div class="siga-pick-list">
+  {% for soldado in soldados %}
+  <div class="siga-pick-item">
+    <span class="siga-pick-item__avatar">{{ soldado.apellidos_nombres|slice:":2"|upper }}</span>
+    <span>
+      <div class="siga-pick-item__name">{{ soldado.apellidos_nombres }}</div>
+      <div class="siga-pick-item__meta">{{ soldado.compania.nombre }} · Pelotón {{ soldado.peloton.nombre }}</div>
+    </span>
+  </div>
+  {% empty %}
+  <p class="siga-empty">No hay soldados que coincidan con la búsqueda.</p>
+  {% endfor %}
+</div>
+{% endblock %}

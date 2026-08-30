@@ -1,0 +1,46 @@
+{% extends "inventory/base_mobile.html" %}
+{% block title %}Munición{% endblock %}
+{% block content %}
+<h1 class="siga-page-title">Munición</h1>
+<div class="siga-page-subtitle">
+  {% if ver_todas %}Todas las compañías{% else %}Compañía {{ compania_actual|default:"—" }}{% endif %}
+  · {{ existencias|length }} registro{{ existencias|length|pluralize }}
+  {% if not ver_todas %}· <a href="?todas=1{% if q %}&q={{ q|urlencode }}{% endif %}">ver todas</a>{% endif %}
+</div>
+
+<form method="get" class="siga-search">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b6f76" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+  <input type="text" name="q" value="{{ q }}" placeholder="Buscar por tipo o lote…">
+  {% if ver_todas %}<input type="hidden" name="todas" value="1">{% endif %}
+</form>
+
+<form method="get" class="siga-chips">
+  {% if ver_todas %}<input type="hidden" name="todas" value="1">{% endif %}
+  {% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
+  <label class="siga-chip">Depósito
+    <select name="deposito" onchange="this.form.submit()">
+      <option value="">Todos</option>
+      {% for deposito in depositos %}
+      <option value="{{ deposito.pk }}" {% if deposito_id == deposito.pk|stringformat:"s" %}selected{% endif %}>{{ deposito.nombre }}</option>
+      {% endfor %}
+    </select>
+  </label>
+</form>
+
+<div class="siga-card-list">
+  {% for existencia in existencias %}
+  <div class="siga-card">
+    <div class="siga-card__top">
+      <span class="siga-card__tipo" style="font-weight:600;">{{ existencia.tipo.nombre }}</span>
+      <span class="siga-card__serie">{{ existencia.cantidad }}</span>
+    </div>
+    <div class="siga-card__meta">
+      <span>Depósito: <strong>{{ existencia.deposito.nombre }}</strong></span>
+      {% if existencia.lote %}<span>Lote: <strong>{{ existencia.lote }}</strong></span>{% endif %}
+    </div>
+  </div>
+  {% empty %}
+  <p class="siga-empty">No hay existencias que coincidan con la búsqueda.</p>
+  {% endfor %}
+</div>
+{% endblock %}

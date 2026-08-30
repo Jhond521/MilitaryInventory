@@ -1,0 +1,56 @@
+{% extends "inventory/base_mobile.html" %}
+{% block title %}Movimientos{% endblock %}
+{% block content %}
+<h1 class="siga-page-title">Movimientos</h1>
+<div class="siga-page-subtitle">
+  {% if ver_todas %}Todas las compañías{% else %}Compañía {{ compania_actual|default:"—" }}{% endif %}
+  · {{ movimientos|length }} registro{{ movimientos|length|pluralize }}
+  {% if not ver_todas %}· <a href="?todas=1{% if q %}&q={{ q|urlencode }}{% endif %}">ver todas</a>{% endif %}
+</div>
+
+<form method="get" class="siga-search">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b6f76" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+  <input type="text" name="q" value="{{ q }}" placeholder="Buscar por serie o soldado…">
+  {% if ver_todas %}<input type="hidden" name="todas" value="1">{% endif %}
+</form>
+
+<form method="get" class="siga-chips">
+  {% if ver_todas %}<input type="hidden" name="todas" value="1">{% endif %}
+  {% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
+  <label class="siga-chip">Tipo
+    <select name="tipo" onchange="this.form.submit()">
+      <option value="">Todos</option>
+      {% for value, label in tipo_choices %}
+      <option value="{{ value }}" {% if tipo == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </label>
+</form>
+
+<div class="siga-card-list">
+  {% for movimiento in movimientos %}
+  <div class="siga-card">
+    <div class="siga-card__top">
+      <span class="siga-card__serie">{{ movimiento.armamento.numero_serie }}</span>
+      {% if movimiento.tipo == "ENTREGA" %}
+      <span class="siga-badge siga-badge--entrega">Entrega</span>
+      {% elif movimiento.tipo == "DEVOLUCION" %}
+      <span class="siga-badge siga-badge--devolucion">Devolución</span>
+      {% else %}
+      <span class="siga-badge siga-badge--baja">Baja</span>
+      {% endif %}
+    </div>
+    <div class="siga-card__tipo">{{ movimiento.armamento.tipo.nombre }}</div>
+    <div class="siga-card__meta">
+      <span>{% if movimiento.soldado %}Soldado: <strong>{{ movimiento.soldado.apellidos_nombres }}</strong>{% elif movimiento.deposito %}Depósito: <strong>{{ movimiento.deposito.nombre }}</strong>{% endif %}</span>
+      <span>{{ movimiento.fecha|date:"d/m/Y H:i" }}</span>
+    </div>
+    <div class="siga-card__meta">
+      <span>Por: <strong>{{ movimiento.usuario }}</strong></span>
+    </div>
+  </div>
+  {% empty %}
+  <p class="siga-empty">No hay movimientos que coincidan con la búsqueda.</p>
+  {% endfor %}
+</div>
+{% endblock %}

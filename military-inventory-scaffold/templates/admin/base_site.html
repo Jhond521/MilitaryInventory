@@ -4,15 +4,7 @@
    installable today (RF-17). #}
 {% block extrahead %}
 {{ block.super }}
-<link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#0b1f13">
-<script>
-  if ("serviceWorker" in navigator) {
-    window.addEventListener("load", () => {
-      navigator.serviceWorker.register("/sw.js").catch(() => {});
-    });
-  }
-</script>
+{% include "inventory/_pwa_head.html" %}
 {% endblock %}
 {# Compañía de trabajo (RF-02): shown wherever the admin chrome renders,
    with a link to change it without logging out. #}

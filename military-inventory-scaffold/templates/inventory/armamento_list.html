@@ -1,0 +1,75 @@
+{% extends "inventory/base_mobile.html" %}
+{% block title %}Inventario{% endblock %}
+{% block content %}
+<h1 class="siga-page-title">Inventario</h1>
+<div class="siga-page-subtitle">
+  {% if ver_todas %}Todas las compañías{% else %}Compañía {{ compania_actual|default:"—" }}{% endif %}
+  · {{ armamentos|length }} elemento{{ armamentos|length|pluralize }}
+  {% if not ver_todas %}· <a href="?todas=1{% if q %}&q={{ q|urlencode }}{% endif %}">ver todas</a>{% endif %}
+</div>
+
+<form method="get" class="siga-search">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b6f76" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+  <input type="text" name="q" value="{{ q }}" placeholder="Buscar por número de serie…">
+  {% if ver_todas %}<input type="hidden" name="todas" value="1">{% endif %}
+</form>
+
+<form method="get" class="siga-chips">
+  {% if ver_todas %}<input type="hidden" name="todas" value="1">{% endif %}
+  {% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
+  <label class="siga-chip">Pelotón
+    <select name="peloton" onchange="this.form.submit()">
+      <option value="">Todos</option>
+      {% for peloton in pelotones %}
+      <option value="{{ peloton.pk }}" {% if peloton_id == peloton.pk|stringformat:"s" %}selected{% endif %}>{{ peloton.nombre }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label class="siga-chip">Estado
+    <select name="ubicacion" onchange="this.form.submit()">
+      <option value="">Todos</option>
+      {% for value, label in ubicacion_choices %}
+      <option value="{{ value }}" {% if ubicacion == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label class="siga-chip">Categoría
+    <select name="tipo" onchange="this.form.submit()">
+      <option value="">Todas</option>
+      {% for tipo in tipos %}
+      <option value="{{ tipo.pk }}" {% if tipo_id == tipo.pk|stringformat:"s" %}selected{% endif %}>{{ tipo.nombre }}</option>
+      {% endfor %}
+    </select>
+  </label>
+</form>
+
+<div class="siga-card-list">
+  {% for arma in armamentos %}
+  {% if arma.ubicacion == "DEPOSITO" %}
+  <a class="siga-card" href="{% url 'inventory:armamento_entregar' arma.pk %}">
+  {% else %}
+  <a class="siga-card" href="{% url 'inventory:armamento_devolver' arma.pk %}">
+  {% endif %}
+    <div class="siga-card__top">
+      <span class="siga-card__serie">{{ arma.numero_serie }}</span>
+      {% if arma.ubicacion == "EN_MANO" %}
+      <span class="siga-badge siga-badge--en-mano">En mano</span>
+      {% else %}
+      <span class="siga-badge siga-badge--en-deposito">En depósito</span>
+      {% endif %}
+    </div>
+    <div class="siga-card__tipo">{{ arma.tipo.nombre }}</div>
+    <div class="siga-card__meta">
+      <span>Pelotón: <strong>{{ arma.peloton_actual.nombre|default:"—" }}</strong></span>
+      <span>Responsable:
+        <strong>
+          {% if arma.ubicacion == "EN_MANO" %}{{ arma.soldado.apellidos_nombres }}{% else %}{{ arma.deposito.nombre }}{% endif %}
+        </strong>
+      </span>
+    </div>
+  </a>
+  {% empty %}
+  <p class="siga-empty">No hay armamento que coincida con la búsqueda.</p>
+  {% endfor %}
+</div>
+{% endblock %}

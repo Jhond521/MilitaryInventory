@@ -67,16 +67,22 @@ docker compose up
 ## Project layout
 
 ```
-config/            # Django project: settings, urls (incl. /manifest.json, /sw.js), wsgi/asgi
+config/            # Django project: settings, urls (admin at /admin/, incl. /manifest.json, /sw.js), wsgi/asgi
 apps/accounts/     # custom User (email login), roles (ADMIN/ENLACE), email allowlist backend,
                    #         admin_mixins.py (role-based ModelAdmin permission gates, H-03)
 apps/inventory/    # domain: Unidad, Compania, Deposito, Peloton, Soldado, TipoArmamento,
                    #         Armamento, Movimiento, CampoPersonalizado, Existencia, Prestamo
-  middleware.py, views.py, urls.py, context_processors.py   # compañía de trabajo (RF-02)
+  admin.py         # Django admin (master data — companies, deposits, types, users), at /admin/
+  forms.py         # EntregaForm/DevolucionForm/BajaForm + campo_* helpers — shared by admin.py and views.py
+  views.py         # the primary mobile-first UI (armamento_list/_entregar/_devolver,
+                   #   movimiento_list, soldado_list, existencia_list, elegir_compania) — mounted at "/"
+  middleware.py, urls.py, context_processors.py   # compañía de trabajo (RF-02)
   management/commands/seed_initial.py       # idempotent master-data seed
   management/commands/importar_armamento.py # initial Excel load (RF-13, H-13)
+static/css/mobile.css # design tokens (Oswald + IBM Plex Sans/Mono, dark/red/cream palette) for the mobile UI
 static/            # manifest.json, sw.js, icons/ (PWA — RF-17)
 templates/admin/   # base_site.html override wiring the manifest + service worker into the admin UI
+templates/inventory/ # base_mobile.html + the 6 screens above (T-06/H-17) — the app's primary UI
 docs/              # PRD (Spanish), backlog (Spanish), ADRs
 .github/workflows/ # CI: ruff + pytest on every push/PR (T-03)
 ```
@@ -136,6 +142,10 @@ docs/              # PRD (Spanish), backlog (Spanish), ADRs
   "Todo" filter link, when it's the only active filter, produces an empty query string
   indistinguishable from a fresh page load). Don't add a company-scoped admin without
   wiring it into this mixin, and don't reuse `ver_todas_companias` as a real field lookup.
+  The mobile views (`armamento_list`, `movimiento_list`, `soldado_list`,
+  `existencia_list`) use the same idea via a simpler helper, `_companias_scope()` in
+  `apps/inventory/views.py` — a plain `?todas=1` query param, since these are function
+  views, not `ModelAdmin`s, and don't need the empty-query-string workaround above.
 - Access is restricted to `settings.AUTHORIZED_EMAILS`; the `AllowlistModelBackend`
   rejects logins outside the list even if a user row exists.
 - Role gates (`apps/accounts/admin_mixins.py`, RF-01/RF-10) check `user.role` directly —
@@ -178,15 +188,21 @@ docs/              # PRD (Spanish), backlog (Spanish), ADRs
 
 ## Known gotchas
 
-- The current build uses the Django admin as the UI. H-09 (entregar/devolver) and H-10
-  (baja) ship as admin actions on the Armamento changelist ("Entregar a un soldado" /
-  "Devolver a depósito" / "Dar de baja", `apps/inventory/admin.py`) with an intermediate
-  confirmation page each, H-08 (compañía de trabajo) ships as a redirect-to-selector
-  plus a default admin queryset filter, H-11 (búsqueda global) reuses the admin's own
-  search box (expanded `search_fields`), and H-12 (campos personalizados) dynamically
-  extends the Armamento change form — none of these are dedicated screens. Fase 1's
-  Épica E-03 (Armamento y movimientos) is now fully covered; a guided, purpose-built
-  operator UI (rather than admin actions/forms) is still Fase 2+ territory.
+- **The Django admin is no longer the primary UI** (ADR-0003, T-06/H-17): it moved to
+  `/admin/` and stays there for master-data CRUD (companies, deposits, types, custom
+  fields, users) — the day-to-day surface for both roles is the mobile-first UI mounted
+  at `/` (`apps/inventory/views.py` + `templates/inventory/`), styled with
+  `static/css/mobile.css`. H-09's entregar/devolver, H-08's compañía de trabajo, and
+  H-11's search all now have dedicated screens there (`armamento_entregar.html`,
+  `armamento_devolver.html`, `armamento_list.html`) — the admin's own actions/search
+  (`apps/inventory/admin.py`) still exist too, for batch operations from `/admin/`. Both
+  layers call the same model methods (`Armamento.entregar()`/`.devolver()`) and share
+  `EntregaForm`/`DevolucionForm`/`BajaForm` from `apps/inventory/forms.py` — don't
+  reimplement that logic in one without checking the other. H-10 (baja) and H-12 (campos
+  personalizados) remain admin-only (RF-11 is admin-only anyway; campos personalizados
+  hasn't gotten a mobile screen yet). Movimientos/Soldados/Munición (`movimiento_list`,
+  `soldado_list`, `existencia_list`) are read-only mobile screens extrapolating the same
+  visual language — not from an explicit mockup.
 - `python manage.py importar_armamento` (H-13, RF-13) assumes a **normalized** Excel
   format documented in its own docstring (one worksheet per company, header row with
   Serie/Denominación/Depósito columns) — David's real `ACTIVOS FIJOS COMPAÑIA.xlsx`

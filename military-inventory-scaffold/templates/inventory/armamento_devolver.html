@@ -1,0 +1,45 @@
+{% extends "inventory/base_mobile.html" %}
+{% block title %}Devolver armamento{% endblock %}
+{% block content %}
+<h1 class="siga-page-title">Devolver armamento</h1>
+<div class="siga-page-subtitle">De vuelta a depósito, dejando rastro del movimiento.</div>
+
+<div class="siga-field">
+  <label>Arma</label>
+  <div class="siga-summary">
+    <div class="siga-summary__row">
+      <span class="label">Serie</span>
+      <span class="value">{{ arma.numero_serie }}</span>
+    </div>
+    <div class="siga-summary__row">
+      <span class="label">Tipo</span>
+      <span class="value">{{ arma.tipo.nombre }}</span>
+    </div>
+    <div class="siga-summary__row">
+      <span class="label">Responsable actual</span>
+      <span class="value">{{ arma.soldado.apellidos_nombres }}</span>
+    </div>
+    <div class="siga-summary__row">
+      <span class="label">Pelotón</span>
+      <span class="value">{{ arma.soldado.peloton.nombre }}</span>
+    </div>
+  </div>
+</div>
+
+<form method="post">
+  {% csrf_token %}
+  <div class="siga-field">
+    <label for="deposito">Depósito receptor</label>
+    <select id="deposito" name="deposito">
+      {% for deposito in depositos %}
+      <option value="{{ deposito.pk }}">{{ deposito.nombre }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="siga-field">
+    <label for="observacion">Observación (opcional)</label>
+    <textarea id="observacion" name="observacion" rows="2"></textarea>
+  </div>
+  <button type="submit" class="siga-btn-primary">Confirmar devolución</button>
+</form>
+{% endblock %}

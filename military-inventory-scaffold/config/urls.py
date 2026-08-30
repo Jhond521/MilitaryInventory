@@ -34,5 +34,5 @@ urlpatterns = [
     path("manifest.json", pwa_manifest, name="pwa-manifest"),
     path("sw.js", pwa_service_worker, name="pwa-service-worker"),
     path("", include("apps.inventory.urls")),
-    path("", admin.site.urls),
+    path("admin/", admin.site.urls),
 ]

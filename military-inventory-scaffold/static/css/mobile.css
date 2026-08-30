@@ -1,0 +1,541 @@
+/* SIGA — sistema visual móvil (T-06 / H-17), extraído del canvas de diseño
+   "SIGA · Batallón 52" (dirección sobria/militar utilitaria). */
+@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap');
+
+:root {
+  --siga-header-bg: #0e1420;
+  --siga-header-rule: #c0973f;
+  --siga-red: #b01722;
+  --siga-red-dark: #8e0f1a;
+  --siga-paper: #f4f0e6;
+  --siga-card-bg: #fff;
+  --siga-card-border: #e4dcc8;
+  --siga-input-border: #d8cfb8;
+  --siga-chip-text: #4a4e55;
+  --siga-badge-en-mano-bg: #fbe7e3;
+  --siga-badge-en-deposito-bg: #edeff2;
+  --siga-badge-en-deposito-text: #2c3340;
+  --siga-text: #1b1e24;
+  --siga-text-muted: #6b6f76;
+  --font-heading: 'Oswald', sans-serif;
+  --font-body: 'IBM Plex Sans', sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+}
+
+body.siga-app {
+  margin: 0;
+  background: var(--siga-paper);
+  color: var(--siga-text);
+  font-family: var(--font-body);
+  padding-bottom: 72px; /* espacio para el bottom nav fijo */
+}
+
+.siga-app a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Header */
+.siga-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  background: var(--siga-header-bg);
+  border-bottom: 2px solid var(--siga-header-rule);
+  color: #f4f0e6;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.siga-header__crest {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: var(--siga-red);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 13px;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.siga-header__title {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: 2px;
+}
+
+.siga-header__compania {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #151d2b;
+  color: #fff;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-family: var(--font-body);
+}
+
+.siga-header__compania-label {
+  color: var(--siga-header-rule);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* Install banner */
+.siga-install-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 16px 0;
+  padding: 10px 12px;
+  background: var(--siga-header-bg);
+  border-radius: 10px;
+  color: #f4f0e6;
+}
+
+.siga-install-banner__icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 7px;
+  background: var(--siga-red);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.siga-install-banner__title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.siga-install-banner__text {
+  font-size: 11px;
+  color: #8a9099;
+}
+
+.siga-install-banner button {
+  background: var(--siga-red);
+  color: #fff;
+  border: none;
+  border-radius: 7px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-family: var(--font-body);
+  font-weight: 600;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.siga-install-banner__dismiss {
+  background: none !important;
+  color: #8a9099 !important;
+  padding: 4px !important;
+  font-size: 16px !important;
+  margin-left: 4px !important;
+}
+
+/* Content */
+.siga-content {
+  padding: 14px 16px 24px;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.siga-page-title {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 22px;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+  margin: 4px 0 2px;
+}
+
+.siga-page-subtitle {
+  font-size: 12px;
+  color: var(--siga-text-muted);
+  margin-bottom: 12px;
+}
+
+/* Search */
+.siga-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #fff;
+  border: 1px solid var(--siga-input-border);
+  border-radius: 10px;
+  height: 46px;
+  padding: 0 12px;
+  margin-bottom: 10px;
+}
+
+.siga-search input {
+  border: none;
+  outline: none;
+  flex-grow: 1;
+  padding: 0 10px;
+  font-size: 14px;
+  font-family: inherit;
+  background: transparent;
+}
+
+/* Filter chips */
+.siga-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.siga-chip {
+  font-size: 12px;
+  color: var(--siga-chip-text);
+  border: 1px solid var(--siga-input-border);
+  background: #fff;
+  border-radius: 18px;
+  padding: 6px 12px;
+  font-family: var(--font-body);
+}
+
+.siga-chip select {
+  border: none;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+}
+
+/* Cards */
+.siga-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.siga-card {
+  display: block;
+  background: var(--siga-card-bg);
+  border: 1px solid var(--siga-card-border);
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.siga-card__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.siga-card__serie {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--siga-red-dark);
+}
+
+.siga-card__tipo {
+  font-size: 13px;
+  color: var(--siga-text);
+  margin-top: 2px;
+}
+
+.siga-card__meta {
+  display: flex;
+  gap: 16px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--siga-text-muted);
+}
+
+.siga-card__meta strong {
+  color: var(--siga-text);
+  font-weight: 600;
+}
+
+.siga-empty {
+  text-align: center;
+  color: var(--siga-text-muted);
+  padding: 32px 0;
+  font-size: 13px;
+}
+
+/* Badges */
+.siga-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 9px;
+  border-radius: 16px;
+  white-space: nowrap;
+}
+
+.siga-badge--en-mano {
+  background: var(--siga-badge-en-mano-bg);
+  color: var(--siga-red-dark);
+}
+
+.siga-badge--en-deposito {
+  background: var(--siga-badge-en-deposito-bg);
+  color: var(--siga-badge-en-deposito-text);
+}
+
+.siga-badge--entrega {
+  background: var(--siga-badge-en-mano-bg);
+  color: var(--siga-red-dark);
+}
+
+.siga-badge--devolucion {
+  background: var(--siga-badge-en-deposito-bg);
+  color: var(--siga-badge-en-deposito-text);
+}
+
+.siga-badge--baja {
+  background: #eee;
+  color: #55595f;
+}
+
+/* Buttons */
+.siga-btn-primary {
+  display: block;
+  width: 100%;
+  height: 50px;
+  line-height: 50px;
+  text-align: center;
+  background: var(--siga-red);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.siga-btn-secondary {
+  display: block;
+  width: 100%;
+  height: 46px;
+  line-height: 46px;
+  text-align: center;
+  background: #fff;
+  color: var(--siga-text);
+  border: 1px solid var(--siga-input-border);
+  border-radius: 10px;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+/* Forms (entrega/devolver) */
+.siga-field {
+  margin-bottom: 14px;
+}
+
+.siga-field label {
+  display: block;
+  font-size: 12px;
+  color: var(--siga-text-muted);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  margin-bottom: 6px;
+}
+
+.siga-field select,
+.siga-field textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--siga-input-border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: 14px;
+}
+
+/* Stepper */
+.siga-stepper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0 18px;
+}
+
+.siga-stepper__step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--siga-text-muted);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+}
+
+.siga-stepper__circle {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #eee;
+  color: #55595f;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.siga-stepper__step--active .siga-stepper__circle {
+  background: var(--siga-red);
+  color: #fff;
+}
+
+.siga-stepper__step--active {
+  color: var(--siga-text);
+}
+
+.siga-stepper__line {
+  flex: 1;
+  height: 1px;
+  background: var(--siga-card-border);
+}
+
+/* Soldier / soldado pick list */
+.siga-pick-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.siga-pick-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #fff;
+  border: 1px solid var(--siga-card-border);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.siga-pick-item__avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--siga-badge-en-mano-bg);
+  color: var(--siga-red-dark);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.siga-pick-item__name {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.siga-pick-item__meta {
+  font-size: 11px;
+  color: var(--siga-text-muted);
+}
+
+/* Summary card (confirm steps) */
+.siga-summary {
+  background: #fff;
+  border: 1px solid var(--siga-card-border);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 16px;
+}
+
+.siga-summary__row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  font-size: 13px;
+  border-bottom: 1px solid #f0ebdd;
+}
+
+.siga-summary__row:last-child {
+  border-bottom: none;
+}
+
+.siga-summary__row .label {
+  color: var(--siga-text-muted);
+}
+
+.siga-summary__row .value {
+  font-weight: 600;
+  text-align: right;
+}
+
+/* Bottom nav */
+.siga-bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  background: var(--siga-header-bg);
+  border-top: 2px solid var(--siga-header-rule);
+  z-index: 10;
+}
+
+.siga-bottom-nav__item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 8px 0 10px;
+  color: #8a9099;
+  font-size: 10px;
+  font-family: var(--font-body);
+  text-transform: uppercase;
+  letter-spacing: .4px;
+}
+
+.siga-bottom-nav__item svg {
+  width: 20px;
+  height: 20px;
+}
+
+.siga-bottom-nav__item--active {
+  color: var(--siga-header-rule);
+}
+
+/* Messages */
+.siga-messages {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+}
+
+.siga-messages li {
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.siga-messages li.success {
+  background: #eaf3e8;
+  color: #2f5230;
+}
+
+.siga-messages li.error {
+  background: var(--siga-badge-en-mano-bg);
+  color: var(--siga-red-dark);
+}
