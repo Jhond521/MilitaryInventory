@@ -4,6 +4,11 @@ on:
   push:
   pull_request:
 
+defaults:
+  run:
+    # El proyecto Django vive en este subdirectorio del repo, no en la raíz.
+    working-directory: military-inventory-scaffold
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -14,6 +19,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+          cache-dependency-path: military-inventory-scaffold/pyproject.toml
 
       - name: Install dependencies
         run: |
