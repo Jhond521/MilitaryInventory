@@ -93,7 +93,9 @@ docs/              # PRD (Spanish), backlog (Spanish), ADRs
 - Custom fields (`CampoPersonalizado` + `Armamento.datos_extra` JSON) apply **only**
   to weapons. Soldiers and weapon types have a fixed schema (PRD NO-2).
 - Every entrega/devolución must create a `Movimiento` row (who, when, type) for
-  traceability (RNF-03). Never mutate a weapon's location without logging it.
+  traceability (RNF-03). Never mutate a weapon's location without logging it —
+  use `Armamento.entregar()`/`.devolver()` (transactional, validate company match
+  and current ubicación) instead of setting `ubicacion`/`soldado`/`deposito` by hand.
 - Baja (decommission) keeps the row; it never deletes the weapon (RF-11).
 - Access is restricted to `settings.AUTHORIZED_EMAILS`; the `AllowlistModelBackend`
   rejects logins outside the list even if a user row exists.
@@ -127,9 +129,11 @@ docs/              # PRD (Spanish), backlog (Spanish), ADRs
 
 ## Known gotchas
 
-- The current build uses the Django admin as the UI. The custom operator screens
-  (company selector, guided entrega/devolución, global search) are backlog stories
-  H-08…H-11 and are not built yet.
+- The current build uses the Django admin as the UI. H-09 (entregar/devolver) ships
+  as admin actions ("Entregar a un soldado" / "Devolver a depósito" on the Armamento
+  changelist, `apps/inventory/admin.py`) with an intermediate confirmation page, not a
+  dedicated screen. The remaining custom operator screens (company selector, a guided
+  entrega/devolución UI, global search) are backlog stories H-08, H-11 and are not built yet.
 - `/manifest.json` and `/sw.js` are served straight from `static/` via dedicated
   views in `config/urls.py` (not through whitenoise's hashed static pipeline, and
   not under `/static/`) so the service worker's default scope covers the whole

@@ -1,19 +1,29 @@
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
-from django.test import TestCase
+from django.test import TestCase, override_settings
+from django.urls import reverse
 
 from .models import (
     Armamento,
     Compania,
     Deposito,
     Existencia,
+    Movimiento,
     Peloton,
     Prestamo,
     Soldado,
     TipoArmamento,
     Unidad,
 )
+
+# Los tests que renderizan una página completa del admin usan almacenamiento
+# de estáticos simple: el manifest de whitenoise solo existe tras
+# `collectstatic`, que no corre como parte de la suite.
+_PLAIN_STATIC_STORAGE = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+}
 
 
 class SeedCommandTests(TestCase):
@@ -196,3 +206,125 @@ class PWATests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("javascript", response["Content-Type"])
         self.assertEqual(response["Service-Worker-Allowed"], "/")
+
+
+class EntregaDevolucionTests(TestCase):
+    """Armamento.entregar()/devolver() — flujo de movimientos (RF-10, H-09)."""
+
+    def setUp(self):
+        self.unidad = Unidad.objects.create(nombre="Batallón de Prueba")
+        self.comp_a = Compania.objects.create(unidad=self.unidad, nombre="A")
+        self.comp_b = Compania.objects.create(unidad=self.unidad, nombre="B")
+        self.deposito = Deposito.objects.create(nombre="Apiay")
+        self.tipo = TipoArmamento.objects.create(
+            nombre="FUSIL AR CAL. 5.56 MM", control=TipoArmamento.Control.SERIE
+        )
+        self.peloton_a1 = Peloton.objects.create(compania=self.comp_a, nombre="A 1")
+        self.peloton_b1 = Peloton.objects.create(compania=self.comp_b, nombre="B 1")
+        self.soldado_a = Soldado.objects.create(
+            apellidos_nombres="Pérez Juan", compania=self.comp_a, peloton=self.peloton_a1
+        )
+        self.soldado_b = Soldado.objects.create(
+            apellidos_nombres="Gómez Ana", compania=self.comp_b, peloton=self.peloton_b1
+        )
+        self.usuario = get_user_model().objects.create_user(
+            email="enlace@example.com", password="x"
+        )
+        self.arma = Armamento.objects.create(
+            numero_serie="S-100", tipo=self.tipo, compania=self.comp_a,
+            ubicacion=Armamento.Ubicacion.DEPOSITO, deposito=self.deposito,
+        )
+
+    def test_entregar_mueve_a_mano_y_crea_movimiento(self):
+        movimiento = self.arma.entregar(
+            soldado=self.soldado_a, usuario=self.usuario, observacion="ok"
+        )
+        self.arma.refresh_from_db()
+        self.assertEqual(self.arma.ubicacion, Armamento.Ubicacion.EN_MANO)
+        self.assertEqual(self.arma.soldado, self.soldado_a)
+        self.assertIsNone(self.arma.deposito)
+        self.assertEqual(movimiento.tipo, Movimiento.Tipo.ENTREGA)
+        self.assertEqual(movimiento.armamento, self.arma)
+        self.assertEqual(movimiento.usuario, self.usuario)
+
+    def test_entregar_rechaza_soldado_de_otra_compania(self):
+        with self.assertRaises(ValidationError):
+            self.arma.entregar(soldado=self.soldado_b, usuario=self.usuario)
+
+    def test_entregar_rechaza_arma_que_no_esta_en_deposito(self):
+        self.arma.entregar(soldado=self.soldado_a, usuario=self.usuario)
+        with self.assertRaises(ValidationError):
+            self.arma.entregar(soldado=self.soldado_a, usuario=self.usuario)
+
+    def test_devolver_mueve_a_deposito_y_crea_movimiento(self):
+        self.arma.entregar(soldado=self.soldado_a, usuario=self.usuario)
+        movimiento = self.arma.devolver(deposito=self.deposito, usuario=self.usuario)
+        self.arma.refresh_from_db()
+        self.assertEqual(self.arma.ubicacion, Armamento.Ubicacion.DEPOSITO)
+        self.assertIsNone(self.arma.soldado)
+        self.assertEqual(self.arma.deposito, self.deposito)
+        self.assertEqual(movimiento.tipo, Movimiento.Tipo.DEVOLUCION)
+
+    def test_devolver_rechaza_arma_que_no_esta_en_mano(self):
+        with self.assertRaises(ValidationError):
+            self.arma.devolver(deposito=self.deposito, usuario=self.usuario)
+
+
+@override_settings(STORAGES=_PLAIN_STATIC_STORAGE)
+class ArmamentoMovimientoAdminViewTests(TestCase):
+    """Flujo de entrega/devolución expuesto como acciones del admin (H-09)."""
+
+    def setUp(self):
+        self.unidad = Unidad.objects.create(nombre="Batallón de Prueba")
+        self.comp_a = Compania.objects.create(unidad=self.unidad, nombre="A")
+        self.deposito = Deposito.objects.create(nombre="Apiay")
+        self.tipo = TipoArmamento.objects.create(
+            nombre="FUSIL AR CAL. 5.56 MM", control=TipoArmamento.Control.SERIE
+        )
+        self.peloton_a1 = Peloton.objects.create(compania=self.comp_a, nombre="A 1")
+        self.soldado_a = Soldado.objects.create(
+            apellidos_nombres="Pérez Juan", compania=self.comp_a, peloton=self.peloton_a1
+        )
+        self.arma = Armamento.objects.create(
+            numero_serie="S-200", tipo=self.tipo, compania=self.comp_a,
+            ubicacion=Armamento.Ubicacion.DEPOSITO, deposito=self.deposito,
+        )
+        self.admin_user = get_user_model().objects.create_superuser(
+            email="admin@example.com", password="x"
+        )
+        self.client.force_login(self.admin_user)
+
+    def test_entregar_view_confirms_and_creates_movimiento(self):
+        url = reverse("admin:inventory_armamento_entregar")
+        response = self.client.get(url, {"ids": str(self.arma.pk)})
+        self.assertEqual(response.status_code, 200)
+
+        response = self.client.post(
+            url, {"ids": str(self.arma.pk), "soldado": self.soldado_a.pk, "observacion": ""}
+        )
+        self.assertRedirects(response, reverse("admin:inventory_armamento_changelist"))
+        self.arma.refresh_from_db()
+        self.assertEqual(self.arma.ubicacion, Armamento.Ubicacion.EN_MANO)
+        self.assertEqual(self.arma.soldado, self.soldado_a)
+        self.assertTrue(
+            Movimiento.objects.filter(armamento=self.arma, tipo=Movimiento.Tipo.ENTREGA).exists()
+        )
+
+    def test_devolver_view_confirms_and_creates_movimiento(self):
+        self.arma.entregar(soldado=self.soldado_a, usuario=self.admin_user)
+        url = reverse("admin:inventory_armamento_devolver")
+        response = self.client.get(url, {"ids": str(self.arma.pk)})
+        self.assertEqual(response.status_code, 200)
+
+        response = self.client.post(
+            url, {"ids": str(self.arma.pk), "deposito": self.deposito.pk, "observacion": ""}
+        )
+        self.assertRedirects(response, reverse("admin:inventory_armamento_changelist"))
+        self.arma.refresh_from_db()
+        self.assertEqual(self.arma.ubicacion, Armamento.Ubicacion.DEPOSITO)
+        self.assertIsNone(self.arma.soldado)
+        self.assertTrue(
+            Movimiento.objects.filter(
+                armamento=self.arma, tipo=Movimiento.Tipo.DEVOLUCION
+            ).exists()
+        )

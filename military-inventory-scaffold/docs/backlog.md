@@ -88,16 +88,20 @@ El corazón del sistema.
   - [ ] Selector de compañía tras el login; contexto guardado en sesión.
   - [ ] Listados de inventario y soldados filtrados por el contexto; se puede cambiar sin cerrar sesión.
 
-#### H-09 — Entregar y devolver con historial
+#### H-09 — Entregar y devolver con historial ✅
 
 - **Requerimiento**: RF-10
-- **Estado**: Pendiente
+- **Estado**: Hecho (vía acciones del admin)
 - **Historia**: Como administrador o enlace, entrego un arma a un soldado y la recibo de vuelta, dejando rastro.
 - **Criterios de aceptación**:
-  - [ ] Acción de entrega (depósito → mano) validando que el soldado sea de la compañía del arma.
-  - [ ] Acción de devolución (mano → depósito).
-  - [ ] Cada acción crea un `Movimiento` con usuario y fecha/hora.
-- **Notas técnicas**: el modelo `Movimiento` ya existe; falta el flujo de acción y la transacción.
+  - [x] Acción de entrega (depósito → mano) validando que el soldado sea de la compañía del arma.
+  - [x] Acción de devolución (mano → depósito).
+  - [x] Cada acción crea un `Movimiento` con usuario y fecha/hora.
+- **Notas técnicas**: `Armamento.entregar()`/`.devolver()` (transaccionales, en `models.py`) hacen el
+  cambio de ubicación y crean el `Movimiento`; expuestos como acciones masivas del admin
+  ("Entregar a un soldado" / "Devolver a depósito") con una página intermedia
+  (`templates/admin/inventory/armamento/`) para elegir soldado/depósito y observación.
+  Falta una pantalla guiada propia (H-08…H-11) y el filtrado de permisos por rol (H-03).
 
 #### H-10 — Baja de armamento
 

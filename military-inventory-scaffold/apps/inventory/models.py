@@ -203,6 +203,44 @@ class Armamento(models.Model):
             return self.soldado.peloton
         return None
 
+    def entregar(self, *, soldado, usuario, observacion=""):
+        """Mueve el arma de depósito a mano de un soldado, dejando rastro (RF-10)."""
+        if self.ubicacion != self.Ubicacion.DEPOSITO:
+            raise ValidationError("El arma debe estar en depósito para poder entregarse.")
+        if soldado.compania_id != self.compania_id:
+            raise ValidationError("El soldado debe pertenecer a la misma compañía del arma.")
+        with transaction.atomic():
+            self.ubicacion = self.Ubicacion.EN_MANO
+            self.soldado = soldado
+            self.deposito = None
+            self.full_clean()
+            self.save()
+            return Movimiento.objects.create(
+                armamento=self,
+                tipo=Movimiento.Tipo.ENTREGA,
+                soldado=soldado,
+                usuario=usuario,
+                observacion=observacion,
+            )
+
+    def devolver(self, *, deposito, usuario, observacion=""):
+        """Mueve el arma de mano de un soldado a depósito, dejando rastro (RF-10)."""
+        if self.ubicacion != self.Ubicacion.EN_MANO:
+            raise ValidationError("El arma debe estar en mano de un soldado para poder devolverse.")
+        with transaction.atomic():
+            self.ubicacion = self.Ubicacion.DEPOSITO
+            self.deposito = deposito
+            self.soldado = None
+            self.full_clean()
+            self.save()
+            return Movimiento.objects.create(
+                armamento=self,
+                tipo=Movimiento.Tipo.DEVOLUCION,
+                deposito=deposito,
+                usuario=usuario,
+                observacion=observacion,
+            )
+
 
 class CampoPersonalizado(models.Model):
     """Definición de un campo personalizado del armamento (RF-08)."""
