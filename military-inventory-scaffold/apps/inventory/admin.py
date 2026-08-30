@@ -4,6 +4,8 @@ from django.core.exceptions import PermissionDenied
 from django.shortcuts import redirect, render
 from django.urls import path, reverse
 
+from apps.accounts.admin_mixins import MovimientoRegistrableMixin, ViewOnlyForEnlaceMixin
+
 from .models import (
     Armamento,
     CampoPersonalizado,
@@ -52,25 +54,25 @@ class CompaniaContextoMixin:
 
 
 @admin.register(Unidad)
-class UnidadAdmin(admin.ModelAdmin):
+class UnidadAdmin(ViewOnlyForEnlaceMixin, admin.ModelAdmin):
     list_display = ("nombre",)
 
 
 @admin.register(Compania)
-class CompaniaAdmin(admin.ModelAdmin):
+class CompaniaAdmin(ViewOnlyForEnlaceMixin, admin.ModelAdmin):
     list_display = ("nombre", "unidad")
     list_filter = ("unidad",)
     search_fields = ("nombre",)
 
 
 @admin.register(Deposito)
-class DepositoAdmin(admin.ModelAdmin):
+class DepositoAdmin(ViewOnlyForEnlaceMixin, admin.ModelAdmin):
     list_display = ("nombre", "descripcion")
     search_fields = ("nombre",)
 
 
 @admin.register(Peloton)
-class PelotonAdmin(admin.ModelAdmin):
+class PelotonAdmin(ViewOnlyForEnlaceMixin, admin.ModelAdmin):
     list_display = ("nombre", "compania")
     list_filter = ("compania",)
     search_fields = ("nombre",)
@@ -78,7 +80,7 @@ class PelotonAdmin(admin.ModelAdmin):
 
 
 @admin.register(Soldado)
-class SoldadoAdmin(CompaniaContextoMixin, admin.ModelAdmin):
+class SoldadoAdmin(ViewOnlyForEnlaceMixin, CompaniaContextoMixin, admin.ModelAdmin):
     list_display = ("apellidos_nombres", "compania", "peloton")
     list_filter = ("compania", "peloton")
     search_fields = ("apellidos_nombres",)
@@ -86,14 +88,14 @@ class SoldadoAdmin(CompaniaContextoMixin, admin.ModelAdmin):
 
 
 @admin.register(TipoArmamento)
-class TipoArmamentoAdmin(admin.ModelAdmin):
+class TipoArmamentoAdmin(ViewOnlyForEnlaceMixin, admin.ModelAdmin):
     list_display = ("nombre", "control")
     list_filter = ("control",)
     search_fields = ("nombre",)
 
 
 @admin.register(CampoPersonalizado)
-class CampoPersonalizadoAdmin(admin.ModelAdmin):
+class CampoPersonalizadoAdmin(ViewOnlyForEnlaceMixin, admin.ModelAdmin):
     list_display = ("nombre", "tipo")
 
 
@@ -127,7 +129,7 @@ class MovimientoInline(admin.TabularInline):
 
 
 @admin.register(Armamento)
-class ArmamentoAdmin(CompaniaContextoMixin, admin.ModelAdmin):
+class ArmamentoAdmin(ViewOnlyForEnlaceMixin, CompaniaContextoMixin, admin.ModelAdmin):
     list_display = (
         "numero_serie",
         "tipo",
@@ -189,7 +191,10 @@ class ArmamentoAdmin(CompaniaContextoMixin, admin.ModelAdmin):
         return ids, Armamento.objects.filter(pk__in=pks, ubicacion=ubicacion_esperada)
 
     def entregar_view(self, request):
-        if not self.has_change_permission(request):
+        # Administrador y enlace pueden registrar movimientos (RF-10) aunque
+        # enlace no tenga permiso de "change" sobre Armamento (H-03) — por
+        # eso se valida contra "view", no contra "change".
+        if not self.has_view_permission(request):
             raise PermissionDenied
         ids, armamentos = self._seleccion(request, Armamento.Ubicacion.DEPOSITO)
         if not armamentos.exists():
@@ -232,7 +237,9 @@ class ArmamentoAdmin(CompaniaContextoMixin, admin.ModelAdmin):
         return render(request, "admin/inventory/armamento/entregar.html", context)
 
     def devolver_view(self, request):
-        if not self.has_change_permission(request):
+        # Ver la nota en entregar_view: RF-10 autoriza a enlace, que solo
+        # tiene permiso de "view" sobre Armamento.
+        if not self.has_view_permission(request):
             raise PermissionDenied
         ids, armamentos = self._seleccion(request, Armamento.Ubicacion.EN_MANO)
         if not armamentos.exists():
@@ -266,7 +273,7 @@ class ArmamentoAdmin(CompaniaContextoMixin, admin.ModelAdmin):
 
 
 @admin.register(Movimiento)
-class MovimientoAdmin(admin.ModelAdmin):
+class MovimientoAdmin(ViewOnlyForEnlaceMixin, admin.ModelAdmin):
     list_display = ("fecha", "tipo", "armamento", "soldado", "deposito", "usuario")
     list_filter = ("tipo", "fecha")
     search_fields = ("armamento__numero_serie", "soldado__apellidos_nombres")
@@ -274,7 +281,7 @@ class MovimientoAdmin(admin.ModelAdmin):
 
 
 @admin.register(Existencia)
-class ExistenciaAdmin(admin.ModelAdmin):
+class ExistenciaAdmin(ViewOnlyForEnlaceMixin, admin.ModelAdmin):
     list_display = ("tipo", "compania", "deposito", "lote", "cantidad")
     list_filter = ("compania", "deposito", "tipo")
     search_fields = ("tipo__nombre", "lote")
@@ -282,7 +289,7 @@ class ExistenciaAdmin(admin.ModelAdmin):
 
 
 @admin.register(Prestamo)
-class PrestamoAdmin(admin.ModelAdmin):
+class PrestamoAdmin(MovimientoRegistrableMixin, admin.ModelAdmin):
     list_display = (
         "fecha",
         "tipo",
@@ -296,3 +303,11 @@ class PrestamoAdmin(admin.ModelAdmin):
     search_fields = ("tipo__nombre", "lote")
     readonly_fields = ("fecha",)
     autocomplete_fields = ("tipo", "deposito", "compania_origen", "compania_destino")
+    # El usuario que registra el préstamo se asigna solo, al guardar (RNF-03) —
+    # no se le pide a quien registra que se busque a sí mismo en una lista.
+    exclude = ("usuario",)
+
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.usuario = request.user
+        super().save_model(request, obj, form, change)

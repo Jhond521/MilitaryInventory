@@ -32,15 +32,37 @@ Controlar quién entra y qué puede hacer.
   - [x] `AllowlistModelBackend` rechaza correos fuera de `AUTHORIZED_EMAILS`.
   - [x] Test que verifica correo autorizado (pasa) y no autorizado (rechazado).
 
-#### H-03 — Permisos por rol en la interfaz
+#### H-03 — Permisos por rol en la interfaz ✅
 
 - **Requerimiento**: RF-01, RF-10
-- **Estado**: Pendiente
+- **Estado**: Hecho
 - **Historia**: Como comandante, quiero que el rol enlace solo vea/busque y registre movimientos, sin tocar datos maestros.
 - **Criterios de aceptación**:
-  - [ ] El rol enlace no puede crear/editar compañías, depósitos, tipos, usuarios ni dar altas/bajas.
-  - [ ] El rol enlace sí puede registrar entregas y devoluciones.
-- **Notas técnicas**: mapear `role` a permisos/grupos de Django o gates en las vistas.
+  - [x] El rol enlace no puede crear/editar compañías, depósitos, tipos, usuarios ni dar altas/bajas.
+  - [x] El rol enlace sí puede registrar entregas y devoluciones.
+- **Notas técnicas**: `apps/accounts/admin_mixins.py` define los gates por rol (no grupos/permisos
+  de Django — con solo 2 roles fijos, comprobar `user.role` directamente es más simple y evita
+  depender de `auth.Permission`/grupos que este proyecto nunca asigna):
+  - `ViewOnlyForEnlaceMixin` (Unidad, Compañía, Depósito, Pelotón, Soldado, Tipo de armamento,
+    Campo personalizado, Armamento, Movimiento, Existencia): cualquier usuario autorizado ve;
+    solo Administrador agrega/edita/borra.
+  - `MovimientoRegistrableMixin` (Préstamo): agregar también es "registrar un movimiento"
+    (RF-15) — ambos roles pueden; editar/borrar sigue siendo solo Administrador.
+  - `AdminOnlyMixin` (Usuarios): Enlace ni siquiera ve la sección — gestión de cuentas es
+    sensible y el PRD no pide que Enlace la vea.
+  - Las acciones de entrega/devolución de `ArmamentoAdmin` (H-09) se validan contra
+    `has_view_permission`, no `has_change_permission` — RF-10 autoriza a Enlace a registrar
+    movimientos aunque no tenga permiso de edición sobre Armamento; Django ya sirve el
+    detalle de solo lectura cuando hay `view` pero no `change`.
+  - Al implementar esto se corrigieron dos brechas reales: `has_module_permission` (por
+    defecto usa permisos reales de Django, que este proyecto nunca asigna, así que ocultaría
+    toda la app hasta a un Administrador no-superusuario) se sobreescribió con la misma
+    lógica de rol; y `PrestamoAdmin` pedía elegir "usuario" en una lista al registrar un
+    préstamo — ahora se asigna solo con `request.user` (RNF-03).
+  - **Supuesto**: "datos maestros" se interpretó en sentido amplio (incluye Soldado y
+    Pelotón, agrupados como tal en la Épica E-02 del backlog, aunque el PRD no los nombra
+    en la lista literal de RF-01/sección 3) — a confirmar con David si Enlace necesita poder
+    reasignar el pelotón de un soldado directamente (cambia con frecuencia, S-8).
 
 ### Épica E-02 — Datos maestros
 

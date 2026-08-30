@@ -63,7 +63,8 @@ docker compose up
 
 ```
 config/            # Django project: settings, urls (incl. /manifest.json, /sw.js), wsgi/asgi
-apps/accounts/     # custom User (email login), roles (ADMIN/ENLACE), email allowlist backend
+apps/accounts/     # custom User (email login), roles (ADMIN/ENLACE), email allowlist backend,
+                   #         admin_mixins.py (role-based ModelAdmin permission gates, H-03)
 apps/inventory/    # domain: Unidad, Compania, Deposito, Peloton, Soldado, TipoArmamento,
                    #         Armamento, Movimiento, CampoPersonalizado, Existencia, Prestamo
   middleware.py, views.py, urls.py, context_processors.py   # compañía de trabajo (RF-02)
@@ -113,6 +114,16 @@ docs/              # PRD (Spanish), backlog (Spanish), ADRs
   wiring it into this mixin, and don't reuse `ver_todas_companias` as a real field lookup.
 - Access is restricted to `settings.AUTHORIZED_EMAILS`; the `AllowlistModelBackend`
   rejects logins outside the list even if a user row exists.
+- Role gates (`apps/accounts/admin_mixins.py`, RF-01/RF-10) check `user.role` directly —
+  no Django groups/permissions are ever assigned, so don't add a `ModelAdmin` without
+  one of `ViewOnlyForEnlaceMixin` (view for everyone, add/change/delete admin-only),
+  `MovimientoRegistrableMixin` (like the former, but add is for everyone — it's
+  registering a movement, not editing master data) or `AdminOnlyMixin` (admin-only,
+  including view). These mixins override `has_module_permission` too — Django's default
+  there checks real `auth.Permission` rows, which don't exist here, and would hide the
+  whole app from a non-superuser ADMIN-role user otherwise. `createsuperuser` always
+  sets `role=ADMIN`, so a superuser and an ADMIN-role user are equivalent for these
+  checks; a plain `create_user(..., role=User.Role.ADMIN)` also gets full access.
 - The UI must stay responsive (mobile-first) and installable as a PWA: keep the web app
   manifest and service worker valid, touch targets ≥ 44px, and a mobile bottom nav. Don't
   ship desktop-only layouts.

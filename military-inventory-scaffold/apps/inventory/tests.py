@@ -495,3 +495,178 @@ class BusquedaGlobalArmamentoTests(TestCase):
         encoded = json.dumps({"obs": "óptica"}, cls=UnicodeJSONEncoder)
         self.assertIn("óptica", encoded)
         self.assertNotIn("\\u00f3", encoded)
+
+
+@override_settings(STORAGES=_PLAIN_STATIC_STORAGE)
+class RolePermissionsTests(TestCase):
+    """Permisos por rol en la interfaz (RF-01, RF-10, H-03)."""
+
+    def setUp(self):
+        self.unidad = Unidad.objects.create(nombre="Batallón de Prueba")
+        self.compania = Compania.objects.create(unidad=self.unidad, nombre="Alcatraz")
+        self.deposito = Deposito.objects.create(nombre="Apiay")
+        self.tipo = TipoArmamento.objects.create(
+            nombre="FUSIL AR CAL. 5.56 MM", control=TipoArmamento.Control.SERIE
+        )
+        self.municion = TipoArmamento.objects.create(
+            nombre="MUNICION CAL 5.56MM", control=TipoArmamento.Control.CANTIDAD
+        )
+        self.peloton = Peloton.objects.create(compania=self.compania, nombre="Alcatraz 1")
+        self.soldado = Soldado.objects.create(
+            apellidos_nombres="Pérez Juan", compania=self.compania, peloton=self.peloton
+        )
+        self.arma = Armamento.objects.create(
+            numero_serie="S-900", tipo=self.tipo, compania=self.compania,
+            ubicacion=Armamento.Ubicacion.DEPOSITO, deposito=self.deposito,
+        )
+        Existencia.objects.create(
+            tipo=self.municion, compania=self.compania, deposito=self.deposito, cantidad=100
+        )
+
+        user_model = get_user_model()
+        self.enlace = user_model.objects.create_user(email="enlace@example.com", password="x")
+        self.admin_no_super = user_model.objects.create_user(
+            email="jefe@example.com", password="x", role=user_model.Role.ADMIN
+        )
+
+    def _login_con_compania(self, user):
+        self.client.force_login(user)
+        session = self.client.session
+        session[SESSION_KEY] = self.compania.pk
+        session.save()
+
+    # --- Enlace: nunca puede crear/editar/borrar datos maestros ---
+
+    def test_enlace_no_puede_agregar_datos_maestros(self):
+        self._login_con_compania(self.enlace)
+        for url_name in (
+            "admin:inventory_compania_add",
+            "admin:inventory_deposito_add",
+            "admin:inventory_tipoarmamento_add",
+            "admin:inventory_soldado_add",
+            "admin:inventory_peloton_add",
+            "admin:inventory_campopersonalizado_add",
+            "admin:inventory_armamento_add",
+        ):
+            response = self.client.get(reverse(url_name))
+            self.assertEqual(response.status_code, 403, url_name)
+
+    def test_enlace_puede_ver_pero_no_modificar_armamento(self):
+        self._login_con_compania(self.enlace)
+        url = reverse("admin:inventory_armamento_change", args=[self.arma.pk])
+
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)  # detalle de solo lectura
+
+        response = self.client.post(
+            url,
+            {
+                "numero_serie": "HACKEADO", "tipo": self.tipo.pk, "compania": self.compania.pk,
+                "ubicacion": Armamento.Ubicacion.DEPOSITO, "deposito": self.deposito.pk,
+                "estado": Armamento.Estado.ACTIVO,
+            },
+        )
+        self.assertEqual(response.status_code, 403)
+        self.arma.refresh_from_db()
+        self.assertEqual(self.arma.numero_serie, "S-900")
+
+    def test_enlace_no_puede_borrar_compania(self):
+        self._login_con_compania(self.enlace)
+        url = reverse("admin:inventory_compania_delete", args=[self.compania.pk])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 403)
+
+    def test_enlace_si_puede_ver_listados_de_datos_maestros(self):
+        self._login_con_compania(self.enlace)
+        for url_name in (
+            "admin:inventory_compania_changelist",
+            "admin:inventory_deposito_changelist",
+            "admin:inventory_tipoarmamento_changelist",
+            "admin:inventory_soldado_changelist",
+            "admin:inventory_armamento_changelist",
+        ):
+            response = self.client.get(reverse(url_name))
+            self.assertEqual(response.status_code, 200, url_name)
+
+    def test_enlace_no_puede_ver_ni_gestionar_usuarios(self):
+        self._login_con_compania(self.enlace)
+        response = self.client.get(reverse("admin:accounts_user_changelist"))
+        self.assertEqual(response.status_code, 403)
+        response = self.client.get(reverse("admin:accounts_user_add"))
+        self.assertEqual(response.status_code, 403)
+
+    # --- Enlace: sí puede registrar movimientos ---
+
+    def test_enlace_si_puede_entregar_y_devolver(self):
+        self._login_con_compania(self.enlace)
+        url = reverse("admin:inventory_armamento_entregar")
+        response = self.client.post(
+            url, {"ids": str(self.arma.pk), "soldado": self.soldado.pk, "observacion": ""}
+        )
+        self.assertRedirects(response, reverse("admin:inventory_armamento_changelist"))
+        self.arma.refresh_from_db()
+        self.assertEqual(self.arma.ubicacion, Armamento.Ubicacion.EN_MANO)
+
+        url = reverse("admin:inventory_armamento_devolver")
+        response = self.client.post(
+            url, {"ids": str(self.arma.pk), "deposito": self.deposito.pk, "observacion": ""}
+        )
+        self.assertRedirects(response, reverse("admin:inventory_armamento_changelist"))
+        self.arma.refresh_from_db()
+        self.assertEqual(self.arma.ubicacion, Armamento.Ubicacion.DEPOSITO)
+
+    def test_enlace_si_puede_registrar_un_prestamo(self):
+        self._login_con_compania(self.enlace)
+        otra_compania = Compania.objects.create(unidad=self.unidad, nombre="Bisonte")
+        response = self.client.post(
+            reverse("admin:inventory_prestamo_add"),
+            {
+                "tipo": self.municion.pk, "deposito": self.deposito.pk, "lote": "",
+                "cantidad": 10, "compania_origen": self.compania.pk,
+                "compania_destino": otra_compania.pk, "observacion": "",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(Prestamo.objects.filter(compania_destino=otra_compania).exists())
+
+    def test_enlace_no_puede_modificar_un_prestamo_existente(self):
+        self._login_con_compania(self.enlace)
+        otra_compania = Compania.objects.create(unidad=self.unidad, nombre="Córsega")
+        prestamo = Prestamo.objects.create(
+            tipo=self.municion, deposito=self.deposito, cantidad=5,
+            compania_origen=self.compania, compania_destino=otra_compania,
+            usuario=self.admin_no_super,
+        )
+        url = reverse("admin:inventory_prestamo_change", args=[prestamo.pk])
+
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)  # detalle de solo lectura
+
+        response = self.client.post(
+            url,
+            {
+                "tipo": self.municion.pk, "deposito": self.deposito.pk, "lote": "",
+                "cantidad": 999, "compania_origen": self.compania.pk,
+                "compania_destino": otra_compania.pk, "observacion": "",
+            },
+        )
+        self.assertEqual(response.status_code, 403)
+
+    # --- Administrador (sin ser superusuario) conserva control total ---
+
+    def test_administrador_no_superusuario_puede_gestionar_datos_maestros(self):
+        self._login_con_compania(self.admin_no_super)
+        response = self.client.get(reverse("admin:inventory_compania_add"))
+        self.assertEqual(response.status_code, 200)
+
+        response = self.client.post(
+            reverse("admin:inventory_compania_add"),
+            {"unidad": self.unidad.pk, "nombre": "Delta"},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(Compania.objects.filter(nombre="Delta").exists())
+
+    def test_administrador_no_superusuario_puede_ver_y_gestionar_usuarios(self):
+        self._login_con_compania(self.admin_no_super)
+        response = self.client.get(reverse("admin:accounts_user_changelist"))
+        self.assertEqual(response.status_code, 200)
