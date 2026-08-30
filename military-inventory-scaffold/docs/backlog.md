@@ -235,7 +235,13 @@ El corazón del sistema.
 
 - [x] T-01 — Scaffold Django, modelos, migraciones, tests, siembra, admin
 - [ ] T-02 — Configurar despliegue en Railway (variables, Postgres, primer deploy + seed)
-- [ ] T-03 — CI (tests + ruff en cada push) — opcional, no incluido en el scaffold
+- [x] T-03 — CI (tests + ruff en cada push)
+  - **Notas técnicas**: `.github/workflows/ci.yml` — un solo job en Ubuntu con Python 3.12
+    (fijo por `requires-python` en `pyproject.toml`), corre en cada push y pull request.
+    Usa `pip install -e . --group dev` (PEP 735, ya documentado en `CLAUDE.md`) tras
+    actualizar pip (el soporte de `--group` requiere pip ≥25.1). No necesita Postgres ni
+    variables de entorno — corre igual que en local, con el fallback a SQLite y los
+    valores por defecto de `AUTHORIZED_EMAILS`/`SECRET_KEY` ya presentes en `settings.py`.
 - [ ] T-04 — Definir política de respaldo del Postgres (RNF-06)
 - [ ] T-05 — Cerrar la lista de 6 correos y el rol de cada persona (P-1, P-2)
 - [ ] T-06 — Habilitar PWA: web app manifest + service worker, íconos (escudo), responsive mobile-first, navegación inferior (RF-17, RNF-04)

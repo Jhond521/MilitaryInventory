@@ -78,6 +78,7 @@ apps/inventory/    # domain: Unidad, Compania, Deposito, Peloton, Soldado, TipoA
 static/            # manifest.json, sw.js, icons/ (PWA — RF-17)
 templates/admin/   # base_site.html override wiring the manifest + service worker into the admin UI
 docs/              # PRD (Spanish), backlog (Spanish), ADRs
+.github/workflows/ # CI: ruff + pytest on every push/PR (T-03)
 ```
 
 ## Domain rules that matter
