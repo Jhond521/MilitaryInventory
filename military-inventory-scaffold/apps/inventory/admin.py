@@ -139,7 +139,16 @@ class ArmamentoAdmin(CompaniaContextoMixin, admin.ModelAdmin):
         "estado",
     )
     list_filter = ("compania", "ubicacion", "estado", "deposito", "tipo")
-    search_fields = ("numero_serie", "soldado__apellidos_nombres", "tipo__nombre")
+    # Búsqueda global por cualquier dato (RF-12): serie, soldado, tipo,
+    # compañía, depósito y campos personalizados (JSON de datos_extra).
+    search_fields = (
+        "numero_serie",
+        "soldado__apellidos_nombres",
+        "tipo__nombre",
+        "compania__nombre",
+        "deposito__nombre",
+        "datos_extra",
+    )
     autocomplete_fields = ("tipo", "compania", "deposito", "soldado")
     inlines = [MovimientoInline]
     actions = ["accion_entregar", "accion_devolver"]

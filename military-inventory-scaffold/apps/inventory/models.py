@@ -23,7 +23,17 @@ Conceptos (ver docs/PRD.md):
 """
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models, transaction
+
+
+class UnicodeJSONEncoder(DjangoJSONEncoder):
+    """Keeps accented/Spanish characters literal instead of `\\uXXXX`-escaping
+    them, so a plain `icontains` search (RF-12) can match them as typed."""
+
+    def __init__(self, *args, **kwargs):
+        kwargs["ensure_ascii"] = False
+        super().__init__(*args, **kwargs)
 
 
 class Unidad(models.Model):
@@ -159,7 +169,9 @@ class Armamento(models.Model):
 
     # Campos personalizados definidos por el administrador (RF-08). Solo aplica
     # al armamento. Estructura: {"nombre_campo": valor}.
-    datos_extra = models.JSONField("datos adicionales", default=dict, blank=True)
+    datos_extra = models.JSONField(
+        "datos adicionales", default=dict, blank=True, encoder=UnicodeJSONEncoder
+    )
 
     creado = models.DateTimeField(auto_now_add=True)
     actualizado = models.DateTimeField(auto_now=True)

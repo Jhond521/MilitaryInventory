@@ -93,6 +93,10 @@ docs/              # PRD (Spanish), backlog (Spanish), ADRs
   `full_clean()` before `save()`.
 - Custom fields (`CampoPersonalizado` + `Armamento.datos_extra` JSON) apply **only**
   to weapons. Soldiers and weapon types have a fixed schema (PRD NO-2).
+  `datos_extra` uses `UnicodeJSONEncoder` (not Django's default, which escapes
+  accented characters as `\uXXXX`) so `icontains` search over it — RF-12 — actually
+  matches Spanish text with tildes as typed. Reuse that encoder on any other
+  JSONField that stores user-facing Spanish text.
 - Every entrega/devolución must create a `Movimiento` row (who, when, type) for
   traceability (RNF-03). Never mutate a weapon's location without logging it —
   use `Armamento.entregar()`/`.devolver()` (transactional, validate company match

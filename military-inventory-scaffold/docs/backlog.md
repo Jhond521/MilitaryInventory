@@ -117,14 +117,22 @@ El corazón del sistema.
   - [ ] Solo administrador; registra motivo (dañada/perdida/robada) y fecha.
   - [ ] El arma sale del inventario activo pero conserva su historial.
 
-#### H-11 — Búsqueda global por cualquier dato
+#### H-11 — Búsqueda global por cualquier dato ✅
 
 - **Requerimiento**: RF-12
-- **Estado**: Pendiente (parcial: el admin ya busca por serie/soldado/tipo)
+- **Estado**: Hecho (vía el buscador del admin)
 - **Historia**: Como usuario, busco por serie (o cualquier dato) y veo de inmediato tipo, compañía, estado y ubicación.
 - **Criterios de aceptación**:
-  - [ ] Búsqueda por serie devuelve el estado completo del arma en < 2 s (RNF-01).
-  - [ ] Filtros por compañía, depósito y estado.
+  - [x] Búsqueda por serie devuelve el estado completo del arma en < 2 s (RNF-01).
+  - [x] Filtros por compañía, depósito y estado.
+- **Notas técnicas**: `ArmamentoAdmin.search_fields` (RF-12: "por cualquier dato") cubre
+  serie, soldado, tipo, compañía, depósito y campos personalizados (`datos_extra`, JSON).
+  `numero_serie` ya tenía índice de BD (RNF-01) y el changelist ya muestra tipo, compañía,
+  ubicación, depósito, soldado, pelotón y estado en cada fila. Al arreglar la búsqueda en
+  `datos_extra` se encontró y corrigió un bug real: `JSONField` escapa por defecto los
+  acentos como `\uXXXX` (`ensure_ascii=True`), lo que rompía la búsqueda de texto en
+  español con tildes — se agregó `UnicodeJSONEncoder` (`models.py`) para guardarlos tal
+  cual.
 
 #### H-12 — Campos personalizados del armamento
 

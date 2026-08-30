@@ -1,3 +1,5 @@
+import json
+
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
@@ -14,6 +16,7 @@ from .models import (
     Prestamo,
     Soldado,
     TipoArmamento,
+    UnicodeJSONEncoder,
     Unidad,
 )
 from .views import SESSION_KEY
@@ -418,3 +421,77 @@ class CompaniaContextoTests(TestCase):
         response = self.client.get(reverse("admin:index"))
         self.assertContains(response, "cambiar compañía")
         self.assertContains(response, "Compañía:")
+
+
+@override_settings(STORAGES=_PLAIN_STATIC_STORAGE)
+class BusquedaGlobalArmamentoTests(TestCase):
+    """Búsqueda global por cualquier dato del armamento (RF-12, H-11)."""
+
+    def setUp(self):
+        self.unidad = Unidad.objects.create(nombre="Batallón de Prueba")
+        self.comp_a = Compania.objects.create(unidad=self.unidad, nombre="Alcatraz")
+        self.comp_b = Compania.objects.create(unidad=self.unidad, nombre="Bisonte")
+        self.deposito_apiay = Deposito.objects.create(nombre="Apiay")
+        self.deposito_caruru = Deposito.objects.create(nombre="Caruru")
+        self.tipo = TipoArmamento.objects.create(
+            nombre="FUSIL AR CAL. 5.56 MM", control=TipoArmamento.Control.SERIE
+        )
+        self.arma_a = Armamento.objects.create(
+            numero_serie="ALC-0001", tipo=self.tipo, compania=self.comp_a,
+            ubicacion=Armamento.Ubicacion.DEPOSITO, deposito=self.deposito_apiay,
+            datos_extra={"observacion_mantenimiento": "óptica reemplazada"},
+        )
+        Armamento.objects.create(
+            numero_serie="BIS-0001", tipo=self.tipo, compania=self.comp_b,
+            ubicacion=Armamento.Ubicacion.DEPOSITO, deposito=self.deposito_caruru,
+        )
+        self.admin_user = get_user_model().objects.create_superuser(
+            email="admin@example.com", password="x"
+        )
+        self.client.force_login(self.admin_user)
+        session = self.client.session
+        session[SESSION_KEY] = self.comp_a.pk
+        session.save()
+
+    def _buscar(self, termino):
+        return self.client.get(
+            reverse("admin:inventory_armamento_changelist"),
+            {"q": termino, "ver_todas_companias": "1"},
+        )
+
+    def test_busca_por_numero_de_serie(self):
+        response = self._buscar("ALC-0001")
+        self.assertContains(response, "ALC-0001")
+        self.assertNotContains(response, "BIS-0001")
+
+    def test_busca_por_nombre_de_compania(self):
+        response = self._buscar("Bisonte")
+        self.assertContains(response, "BIS-0001")
+        self.assertNotContains(response, "ALC-0001")
+
+    def test_busca_por_nombre_de_deposito(self):
+        response = self._buscar("Caruru")
+        self.assertContains(response, "BIS-0001")
+        self.assertNotContains(response, "ALC-0001")
+
+    def test_busca_por_campo_personalizado(self):
+        response = self._buscar("óptica reemplazada")
+        self.assertContains(response, "ALC-0001")
+        self.assertNotContains(response, "BIS-0001")
+
+    def test_resultado_muestra_estado_completo_del_arma(self):
+        response = self._buscar("ALC-0001")
+        content = response.content.decode()
+        self.assertIn("ALC-0001", content)
+        self.assertIn("Alcatraz", content)
+        self.assertIn("FUSIL AR CAL. 5.56 MM", content)
+        self.assertIn("En depósito", content)
+        self.assertIn("Apiay", content)
+
+    def test_encoder_no_escapa_acentos(self):
+        """`icontains` sobre datos_extra solo encuentra texto con tildes si el
+        JSON serializado no los escapa como \\uXXXX (UnicodeJSONEncoder);
+        json.dumps con ensure_ascii=True, el valor por defecto, sí lo haría."""
+        encoded = json.dumps({"obs": "óptica"}, cls=UnicodeJSONEncoder)
+        self.assertIn("óptica", encoded)
+        self.assertNotIn("\\u00f3", encoded)
