@@ -27,7 +27,10 @@ body.siga-app {
   background: var(--siga-paper);
   color: var(--siga-text);
   font-family: var(--font-body);
-  padding-bottom: 72px; /* espacio para el bottom nav fijo */
+  /* espacio para el bottom nav fijo + el área segura de gestos/notch en
+     iOS (sin esto, el nav puede quedar tapado por la barra de gestos en un
+     iPhone, sobre todo instalado como PWA) */
+  padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
 }
 
 .siga-app a {
@@ -478,7 +481,8 @@ body.siga-app {
   display: flex;
   background: var(--siga-header-bg);
   border-top: 2px solid var(--siga-header-rule);
-  z-index: 10;
+  z-index: 100;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 .siga-bottom-nav__item {
@@ -487,8 +491,13 @@ body.siga-app {
   flex-direction: column;
   align-items: center;
   gap: 3px;
+  min-height: 40px;
   padding: 8px 0 10px;
-  color: #8a9099;
+  /* #8a9099 sobre el fondo #0e1420 pasa el mínimo de contraste de texto
+     (WCAG AA, ~5.3:1) pero un ícono de trazo fino (1.6px) es mucho más
+     difícil de percibir que texto a ese mismo contraste — sobre todo en
+     pantallas OLED/luz solar — así que se sube a un gris más claro. */
+  color: #b4bcc7;
   font-size: 10px;
   font-family: var(--font-body);
   text-transform: uppercase;
