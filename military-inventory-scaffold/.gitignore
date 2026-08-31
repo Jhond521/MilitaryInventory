@@ -34,3 +34,6 @@ build/
 db.sqlite3
 staticfiles/
 media/
+
+# Datos reales del batallón (series de armamento, existencias) — nunca a git.
+/test files/

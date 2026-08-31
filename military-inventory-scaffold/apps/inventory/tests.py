@@ -58,7 +58,7 @@ class SeedCommandTests(TestCase):
         self.assertEqual(Compania.objects.count(), 7)
         self.assertEqual(Deposito.objects.count(), 2)
         self.assertEqual(Peloton.objects.count(), 28)  # 4 por compañía x 7
-        self.assertEqual(TipoArmamento.objects.count(), 29)
+        self.assertEqual(TipoArmamento.objects.count(), 55)
 
     def test_seed_marks_control_por_serie_y_cantidad(self):
         call_command("seed_initial")
@@ -753,7 +753,7 @@ class InventarioEscritorioTests(TestCase):
         response = self.client.get(reverse("inventory:armamento_list"))
         content = response.content.decode()
         self.assertIn('class="siga-table-wrap"', content)
-        self.assertIn('class="siga-card-list"', content)
+        self.assertIn('class="siga-card-list siga-card-list--inventario"', content)
         for serie in ("EN-DEP-1", "EN-MANO-1"):
             msg = f"{serie} debería aparecer en tabla y tarjeta"
             self.assertEqual(content.count(serie), 2, msg)
@@ -1238,6 +1238,163 @@ class ImportarArmamentoTests(TestCase):
         )
         self.assertEqual(Armamento.objects.count(), 0)
 
+    def test_hoja_con_varios_bloques_de_encabezado_repetido(self):
+        """El Excel real trae varios bloques por categoría dentro de una misma
+        hoja (título + encabezado + datos, separados por filas en blanco) —
+        no un único encabezado al principio (issue "cargar la data real")."""
+        self._importar({
+            "Alcatraz": [
+                [None, None, None],
+                ["Categoría Uno", None, None],
+                ["Denominación", "Serie", "Depósito"],
+                ["FUSIL AR CAL. 5.56 MM", "ALC-100", "Apiay"],
+                [],
+                ["Categoría Dos", None, None],
+                ["Denominación", "Serie", "Depósito"],
+                ["FUSIL AR CAL. 5.56 MM", "ALC-101", "Caruru"],
+            ],
+        })
+        self.assertEqual(Armamento.objects.count(), 2)
+        self.assertEqual(
+            Armamento.objects.get(numero_serie="ALC-100").deposito, self.apiay
+        )
+        self.assertEqual(
+            Armamento.objects.get(numero_serie="ALC-101").deposito, self.caruru
+        )
+
+    def test_hoja_nombrada_cp_mas_codigo_se_resuelve_por_letra(self):
+        """"CP A" no coincide con ninguna Compania sembrada tal cual — se
+        resuelve quitando el prefijo y usando el mapeo A -> Alcatraz."""
+        self._importar({
+            "CP A": [
+                ["Serie", "Denominación", "Depósito"],
+                ["ALC-200", "FUSIL AR CAL. 5.56 MM", "Apiay"],
+            ],
+        })
+        self.assertEqual(Armamento.objects.get(numero_serie="ALC-200").compania, self.alcatraz)
+
+    def test_fila_sin_serie_crea_existencia_en_vez_de_armamento(self):
+        casco = TipoArmamento.objects.create(
+            nombre="BALISTICO HELMET KEVLAR N. III", control=TipoArmamento.Control.CANTIDAD
+        )
+        self._importar({
+            "Alcatraz": [
+                ["Serie", "Denominación", "Depósito"],
+                ["SIN SERIE", "BALISTICO HELMET KEVLAR N. III", "Apiay"],
+                ["SIN SERIE", "BALISTICO HELMET KEVLAR N. III", "Apiay"],
+            ],
+        })
+        self.assertEqual(Armamento.objects.count(), 0)
+        existencia = Existencia.objects.get(
+            tipo=casco, compania=self.alcatraz, deposito=self.apiay
+        )
+        self.assertEqual(existencia.cantidad, 2)
+
+    def test_deposito_multiple_se_reparte_por_turnos(self):
+        self._importar(
+            {
+                "Alcatraz": [
+                    ["Serie", "Denominación"],
+                    ["ALC-300", "FUSIL AR CAL. 5.56 MM"],
+                    ["ALC-301", "FUSIL AR CAL. 5.56 MM"],
+                    ["ALC-302", "FUSIL AR CAL. 5.56 MM"],
+                ],
+            },
+            deposito="Apiay,Caruru",
+        )
+        self.assertEqual(Armamento.objects.get(numero_serie="ALC-300").deposito, self.apiay)
+        self.assertEqual(Armamento.objects.get(numero_serie="ALC-301").deposito, self.caruru)
+        self.assertEqual(Armamento.objects.get(numero_serie="ALC-302").deposito, self.apiay)
+
+
+@override_settings(STORAGES=_PLAIN_STATIC_STORAGE)
+class ImportarExistenciasTests(TestCase):
+    """Carga de existencias por cantidad desde el archivo de consumo (RF-14, H-15)."""
+
+    def setUp(self):
+        self.unidad = Unidad.objects.create(nombre="Batallón de Prueba")
+        self.alcatraz = Compania.objects.create(unidad=self.unidad, nombre="Alcatraz")
+        self.apiay = Deposito.objects.create(nombre="Apiay")
+        self.caruru = Deposito.objects.create(nombre="Caruru")
+        self.municion = TipoArmamento.objects.create(
+            nombre="MUNICION CAL 5.56MM", control=TipoArmamento.Control.CANTIDAD
+        )
+        self._archivos = []
+        self.addCleanup(self._borrar_archivos)
+
+    def _borrar_archivos(self):
+        for ruta in self._archivos:
+            os.unlink(ruta)
+
+    def _importar(self, hojas, **opciones):
+        ruta = _crear_excel(hojas)
+        self._archivos.append(ruta)
+        call_command("importar_existencias", ruta, **opciones)
+
+    def test_importa_existencias_por_hoja_de_compania(self):
+        self._importar(
+            {"Alcatraz": [["No", "MATERIAL", "CARGOS SAP"], [1, "MUNICION CAL 5.56MM", 100]]},
+            deposito="Apiay",
+        )
+        existencia = Existencia.objects.get(tipo=self.municion, compania=self.alcatraz)
+        self.assertEqual(existencia.cantidad, 100)
+        self.assertEqual(existencia.deposito, self.apiay)
+
+    def test_suma_a_existencia_previa_en_vez_de_reemplazar(self):
+        Existencia.objects.create(
+            tipo=self.municion, compania=self.alcatraz, deposito=self.apiay, cantidad=50
+        )
+        self._importar(
+            {"Alcatraz": [["No", "MATERIAL", "CARGOS SAP"], [1, "MUNICION CAL 5.56MM", 100]]},
+            deposito="Apiay",
+        )
+        existencia = Existencia.objects.get(
+            tipo=self.municion, compania=self.alcatraz, deposito=self.apiay
+        )
+        self.assertEqual(existencia.cantidad, 150)
+
+    def test_deposito_multiple_se_reparte_por_turnos(self):
+        self._importar(
+            {
+                "Alcatraz": [
+                    ["No", "MATERIAL", "CARGOS SAP"],
+                    [1, "MUNICION CAL 5.56MM", 10],
+                ],
+                "CP A": [
+                    ["No", "MATERIAL", "CARGOS SAP"],
+                    [1, "MUNICION CAL 5.56MM", 20],
+                ],
+            },
+            deposito="Apiay,Caruru",
+        )
+        # dos hojas resuelven a la misma compañía (Alcatraz y CP A) — cada una
+        # es una fila válida distinta, así que se reparten por turnos.
+        total = Existencia.objects.filter(tipo=self.municion, compania=self.alcatraz)
+        self.assertEqual(total.filter(deposito=self.apiay).first().cantidad, 10)
+        self.assertEqual(total.filter(deposito=self.caruru).first().cantidad, 20)
+
+    def test_material_no_reconocido_bloquea_toda_la_carga(self):
+        with self.assertRaises(CommandError):
+            self._importar(
+                {"Alcatraz": [["No", "MATERIAL", "CARGOS SAP"], [1, "MATERIAL INEXISTENTE", 5]]},
+                deposito="Apiay",
+            )
+        self.assertEqual(Existencia.objects.count(), 0)
+
+    def test_sin_deposito_bloquea_la_carga(self):
+        with self.assertRaises(CommandError):
+            self._importar(
+                {"Alcatraz": [["No", "MATERIAL", "CARGOS SAP"], [1, "MUNICION CAL 5.56MM", 5]]}
+            )
+
+    def test_dry_run_no_modifica_nada(self):
+        self._importar(
+            {"Alcatraz": [["No", "MATERIAL", "CARGOS SAP"], [1, "MUNICION CAL 5.56MM", 5]]},
+            deposito="Apiay",
+            dry_run=True,
+        )
+        self.assertEqual(Existencia.objects.count(), 0)
+
 
 @override_settings(STORAGES=_PLAIN_STATIC_STORAGE)
 class MasterCrudTests(TestCase):
@@ -1300,6 +1457,52 @@ class MasterCrudTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(Deposito.objects.filter(nombre="Apiay").count(), 1)
+
+
+@override_settings(STORAGES=_PLAIN_STATIC_STORAGE)
+class CardListaVisibleEnEscritorioTests(TestCase):
+    """issue #8: #3 (ba1e771) escondió `.siga-card-list` en escritorio pensando
+    que era exclusiva de Inventario, pero la clase la reusan `ajustes.html`,
+    `master_list.html` y varias listas más — quedaron en blanco en escritorio.
+    Estos tests no evalúan CSS (pytest no renderiza estilos), pero fijan la
+    estructura HTML que el fix depende de: Inventario debe llevar el modificador
+    `--inventario` que sí se esconde, y las demás pantallas deben conservar la
+    clase base sin ese modificador para no quedar atrapadas por la misma regla
+    si alguien la vuelve a escribir sin escopar."""
+
+    def setUp(self):
+        self.unidad = Unidad.objects.create(nombre="Batallón de Prueba")
+        self.compania = Compania.objects.create(unidad=self.unidad, nombre="Alcatraz")
+        self.deposito = Deposito.objects.create(nombre="Apiay")
+        self.tipo = TipoArmamento.objects.create(
+            nombre="ACE-23", control=TipoArmamento.Control.SERIE
+        )
+        Armamento.objects.create(
+            numero_serie="CARD-1", tipo=self.tipo, compania=self.compania,
+            ubicacion=Armamento.Ubicacion.DEPOSITO, deposito=self.deposito,
+        )
+        user_model = get_user_model()
+        self.admin = user_model.objects.create_user(
+            email="admin@example.com", password="x", role=user_model.Role.ADMIN
+        )
+        self.client.force_login(self.admin)
+        session = self.client.session
+        session[SESSION_KEY] = self.compania.pk
+        session.save()
+
+    def test_ajustes_conserva_la_clase_de_tarjetas_sin_el_modificador_de_inventario(self):
+        response = self.client.get(reverse("inventory:ajustes"))
+        self.assertContains(response, 'class="siga-card-list"')
+        self.assertNotContains(response, "siga-card-list--inventario")
+
+    def test_lista_generica_de_datos_maestros_conserva_la_clase_de_tarjetas(self):
+        response = self.client.get(reverse("inventory:compania_list"))
+        self.assertContains(response, 'class="siga-card-list"')
+        self.assertNotContains(response, "siga-card-list--inventario")
+
+    def test_inventario_lleva_el_modificador_que_si_se_esconde_en_escritorio(self):
+        response = self.client.get(reverse("inventory:armamento_list"))
+        self.assertContains(response, "siga-card-list--inventario")
 
 
 @override_settings(STORAGES=_PLAIN_STATIC_STORAGE)
