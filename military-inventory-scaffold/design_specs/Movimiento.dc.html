@@ -1,0 +1,84 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap');
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "IBM Plex Sans", system-ui, sans-serif; }
+    a { color: #B01722; } a:hover { color: #8E0F1A; }
+    .osw { font-family: "Oswald", sans-serif; }
+    .mono { font-family: "IBM Plex Mono", monospace; }
+    .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: #6B6F76; }
+  </style>
+</helmet>
+
+<div style="min-height: 900px; background: #0E1420; display: flex; align-items: center; justify-content: center; padding: 40px;">
+  <div style="position: absolute; inset: 0; opacity: .06; background-image: repeating-linear-gradient(45deg, #C0973F 0 2px, transparent 2px 24px);"></div>
+
+  <!-- dialog -->
+  <div style="position: relative; width: 720px; background: #F7F4EC; border-radius: 14px; border: 1px solid #C0973F; overflow: hidden; box-shadow: 0 24px 60px rgba(0,0,0,.5);">
+
+    <div style="background: #0E1420; padding: 20px 26px; display: flex; align-items: center; justify-content: space-between;">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#C0973F" stroke-width="2"><path d="M3 12h6l2 5 3-10 2 5h5"/></svg>
+        <span class="osw" style="color: #F4F0E6; font-size: 18px; letter-spacing: 1px; text-transform: uppercase;">Entregar armamento</span>
+      </div>
+      <span style="color: #6B7280; font-size: 22px;">×</span>
+    </div>
+
+    <!-- steps -->
+    <div style="display: flex; gap: 10px; padding: 18px 26px 6px;">
+      <div style="display: flex; align-items: center; gap: 8px; color: #10151E;"><span class="osw" style="width: 24px; height: 24px; border-radius: 50%; background: #B01722; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 13px;">1</span><span style="font-size: 13px; font-weight: 600;">Arma</span></div>
+      <div style="flex-grow: 1; height: 1px; background: #D8CFB8; align-self: center;"></div>
+      <div style="display: flex; align-items: center; gap: 8px; color: #10151E;"><span class="osw" style="width: 24px; height: 24px; border-radius: 50%; background: #B01722; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 13px;">2</span><span style="font-size: 13px; font-weight: 600;">Soldado</span></div>
+      <div style="flex-grow: 1; height: 1px; background: #D8CFB8; align-self: center;"></div>
+      <div style="display: flex; align-items: center; gap: 8px; color: #9A9FA6;"><span class="osw" style="width: 24px; height: 24px; border-radius: 50%; background: #E4DCC8; color: #6B6F76; display: flex; align-items: center; justify-content: center; font-size: 13px;">3</span><span style="font-size: 13px;">Confirmar</span></div>
+    </div>
+
+    <div style="padding: 16px 26px 26px;">
+
+      <!-- selected arma -->
+      <div class="lbl" style="margin-bottom: 8px;">Arma seleccionada</div>
+      <div style="display: flex; align-items: center; gap: 14px; background: #fff; border: 1px solid #D8CFB8; border-radius: 10px; padding: 14px 16px;">
+        <div style="width: 40px; height: 40px; border-radius: 8px; background: #0E1420; display: flex; align-items: center; justify-content: center;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#C0973F" stroke-width="1.7"><path d="M3 11h13l3-3v3h2v2h-6l-2 3v-3H3z"/></svg></div>
+        <div style="flex-grow: 1;">
+          <div class="mono" style="font-size: 16px; font-weight: 600; color: #8E0F1A;">23580001</div>
+          <div style="font-size: 13px; color: #55595F;">ACE-23 · Fusil · Compañía Alcatraz · Depósito Caruru</div>
+        </div>
+        <span style="background: #EDEFF2; color: #2C3340; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 20px;">En depósito</span>
+      </div>
+
+      <!-- select soldier -->
+      <div class="lbl" style="margin: 20px 0 8px;">Soldado receptor <span style="color:#8E0F1A; text-transform: none; letter-spacing: 0;">— solo soldados de la compañía Alcatraz</span></div>
+      <div style="display: flex; align-items: center; background: #fff; border: 1px solid #D8CFB8; border-radius: 10px; padding: 0 14px; height: 46px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8E0F1A" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+        <input value="Ramírez" style="border: none; outline: none; flex-grow: 1; padding: 0 12px; font-size: 14px; font-family: inherit; background: transparent;">
+      </div>
+      <div style="margin-top: 8px; background: #fff; border: 1px solid #E4DCC8; border-radius: 10px; overflow: hidden;">
+        <div style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: #FBE7E3;">
+          <div class="osw" style="width: 34px; height: 34px; border-radius: 50%; background: #B01722; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 13px;">RG</div>
+          <div style="flex-grow: 1;"><div style="font-size: 14px; font-weight: 600; color: #1B1E24;">SLP. Ramírez Gómez, Andrés</div><div style="font-size: 12px; color: #55595F;">Compañía Alcatraz · Pelotón 2</div></div>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B01722" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-top: 1px solid #F0EBDD;">
+          <div class="osw" style="width: 34px; height: 34px; border-radius: 50%; background: #E4DCC8; color: #4A4E55; display: flex; align-items: center; justify-content: center; font-size: 13px;">RQ</div>
+          <div style="flex-grow: 1;"><div style="font-size: 14px; color: #1B1E24;">SLP. Ramírez Quintero, Luis</div><div style="font-size: 12px; color: #55595F;">Compañía Alcatraz · Pelotón 4</div></div>
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px;">
+        <button style="height: 46px; padding: 0 20px; background: #fff; color: #2C3340; border: 1px solid #D8CFB8; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; font-family: inherit;">Cancelar</button>
+        <button style="height: 46px; padding: 0 26px; background: #B01722; color: #fff; border: none; border-radius: 8px; font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 15px; letter-spacing: 1px; text-transform: uppercase; cursor: pointer;">Confirmar entrega</button>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

@@ -1,0 +1,208 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap');
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "IBM Plex Sans", system-ui, sans-serif; background: #0E1420; color: #1B1E24; }
+    a { color: #B01722; text-decoration: none; } a:hover { color: #8E0F1A; }
+    .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+    .osw { font-family: "Oswald", "IBM Plex Sans", sans-serif; }
+    .cell { padding: 14px 16px; }
+    .chip-mano { background: #FBE7E3; color: #8E0F1A; }
+    .chip-dep { background: #EDEFF2; color: #2C3340; }
+    .chip-baja { background: #F0F1EC; color: #6B6F76; }
+  </style>
+</helmet>
+
+<div style="display: grid; grid-template-columns: 248px 1fr; height: 980px; background: #F4F0E6;">
+
+  <!-- SIDEBAR -->
+  <aside style="display: flex; flex-direction: column; background: #0E1420; border-right: 2px solid #C0973F;">
+    <div style="display: flex; align-items: center; gap: 12px; padding: 20px 18px; border-bottom: 1px solid #23262F;">
+      <img src="logo.jpg" alt="Escudo" style="width: 42px; height: auto; display: block; filter: drop-shadow(0 1px 2px rgba(0,0,0,.5));">
+      <div style="line-height: 1.15;">
+        <div class="osw" style="color: #F4F0E6; font-weight: 700; font-size: 18px; letter-spacing: 2px;">SIGA</div>
+        <div style="color: #8A9099; font-size: 10px; letter-spacing: .5px; text-transform: uppercase;">Batallón de Selva 52</div>
+      </div>
+    </div>
+
+    <nav style="display: flex; flex-direction: column; gap: 2px; padding: 14px 12px;">
+      <div style="display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-radius: 6px; background: #B01722; color: #fff; font-weight: 600; font-size: 14px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        Inventario
+      </div>
+      <div style="display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-radius: 6px; color: #C3C8CF; font-size: 14px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="8" width="16" height="12" rx="1"/><path d="M8 8V6a4 4 0 0 1 8 0v2"/></svg>
+        Munición
+      </div>
+      <div style="display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-radius: 6px; color: #C3C8CF; font-size: 14px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 12 0v1"/></svg>
+        Soldados
+      </div>
+      <div style="display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-radius: 6px; color: #C3C8CF; font-size: 14px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h6l2 5 3-10 2 5h5"/></svg>
+        Movimientos
+      </div>
+      <div style="display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-radius: 6px; color: #C3C8CF; font-size: 14px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg>
+        Administración
+      </div>
+    </nav>
+
+    <div style="margin-top: auto; padding: 16px; border-top: 1px solid #23262F; display: flex; align-items: center; gap: 12px;">
+      <div style="width: 38px; height: 38px; border-radius: 50%; background: #B01722; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-family: 'Oswald', sans-serif;">DB</div>
+      <div style="line-height: 1.2;">
+        <div style="color: #F4F0E6; font-size: 13px; font-weight: 600;">David Bolaños</div>
+        <div style="color: #C0973F; font-size: 11px; letter-spacing: .4px; text-transform: uppercase;">Administrador</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main style="display: flex; flex-direction: column; overflow: hidden;">
+
+    <!-- Topbar -->
+    <header style="display: flex; align-items: center; gap: 18px; padding: 16px 28px; background: #FBF9F3; border-bottom: 1px solid #E4DCC8;">
+      <div style="display: flex; align-items: center; gap: 8px; padding: 8px 14px; background: #0E1420; color: #fff; border-radius: 6px; font-weight: 600; font-size: 13px;">
+        <span style="color: #C0973F; text-transform: uppercase; letter-spacing: .5px; font-size: 11px;">Compañía</span>
+        <span style="letter-spacing: .5px;">ALCATRAZ · A</span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C0973F" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+      </div>
+      <div style="flex-grow: 1; display: flex; align-items: center; background: #fff; border: 1px solid #D8CFB8; border-radius: 8px; padding: 0 12px; height: 44px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8E0F1A" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+        <input placeholder="Buscar por número de serie, tipo, soldado o depósito…" style="border: none; outline: none; flex-grow: 1; padding: 0 12px; font-size: 14px; font-family: inherit; color: #1B1E24; background: transparent;">
+        <kbd class="mono" style="font-size: 11px; color: #6B6F76; border: 1px solid #E4DCC8; border-radius: 4px; padding: 2px 6px;">⌘K</kbd>
+      </div>
+      <button style="height: 44px; padding: 0 20px; background: #B01722; color: #fff; border: none; border-radius: 8px; font-weight: 600; font-size: 14px; font-family: inherit; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+        Registrar armamento
+      </button>
+    </header>
+
+    <!-- Scroll body -->
+    <div style="flex-grow: 1; overflow: auto; padding: 26px 28px;">
+
+      <div style="display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 18px;">
+        <div>
+          <h1 class="osw" style="margin: 0; font-size: 26px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #10151E;">Inventario</h1>
+          <div style="color: #6B6F76; font-size: 13px; margin-top: 3px;">Compañía Alcatraz · 365 elementos serializados</div>
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <span style="font-size: 13px; color: #4A4E55; border: 1px solid #D8CFB8; background: #fff; border-radius: 20px; padding: 7px 14px;">Pelotón ▾</span>
+          <span style="font-size: 13px; color: #4A4E55; border: 1px solid #D8CFB8; background: #fff; border-radius: 20px; padding: 7px 14px;">Estado ▾</span>
+          <span style="font-size: 13px; color: #4A4E55; border: 1px solid #D8CFB8; background: #fff; border-radius: 20px; padding: 7px 14px;">Categoría ▾</span>
+        </div>
+      </div>
+
+      <!-- KPI row -->
+      <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 22px;">
+        <div style="background: #fff; border: 1px solid #E4DCC8; border-left: 3px solid #0E1420; border-radius: 8px; padding: 16px 18px;">
+          <div style="font-size: 12px; text-transform: uppercase; letter-spacing: .6px; color: #6B6F76;">Total</div>
+          <div class="osw" style="font-size: 30px; font-weight: 700; color: #10151E;">365</div>
+        </div>
+        <div style="background: #fff; border: 1px solid #E4DCC8; border-left: 3px solid #C0973F; border-radius: 8px; padding: 16px 18px;">
+          <div style="font-size: 12px; text-transform: uppercase; letter-spacing: .6px; color: #6B6F76;">En depósito</div>
+          <div class="osw" style="font-size: 30px; font-weight: 700; color: #10151E;">212</div>
+        </div>
+        <div style="background: #fff; border: 1px solid #E4DCC8; border-left: 3px solid #B01722; border-radius: 8px; padding: 16px 18px;">
+          <div style="font-size: 12px; text-transform: uppercase; letter-spacing: .6px; color: #6B6F76;">En mano</div>
+          <div class="osw" style="font-size: 30px; font-weight: 700; color: #10151E;">148</div>
+        </div>
+        <div style="background: #fff; border: 1px solid #E4DCC8; border-left: 3px solid #9AA0A6; border-radius: 8px; padding: 16px 18px;">
+          <div style="font-size: 12px; text-transform: uppercase; letter-spacing: .6px; color: #6B6F76;">De baja</div>
+          <div class="osw" style="font-size: 30px; font-weight: 700; color: #10151E;">5</div>
+        </div>
+      </div>
+
+      <!-- Table -->
+      <div style="background: #fff; border: 1px solid #E4DCC8; border-radius: 10px; overflow: hidden;">
+        <div style="display: grid; grid-template-columns: 155px 1.25fr 0.9fr 130px 120px 180px; background: #0E1420; color: #E9E4D6; font-family: 'Oswald', sans-serif; font-size: 12px; letter-spacing: 1px; text-transform: uppercase;">
+          <div class="cell" style="padding: 13px 16px;">N.º de serie</div>
+          <div class="cell" style="padding: 13px 16px;">Denominación</div>
+          <div class="cell" style="padding: 13px 16px;">Categoría</div>
+          <div class="cell" style="padding: 13px 16px;">Pelotón</div>
+          <div class="cell" style="padding: 13px 16px;">Estado</div>
+          <div class="cell" style="padding: 13px 16px;">Responsable</div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 155px 1.25fr 0.9fr 130px 120px 180px; align-items: center; border-bottom: 1px solid #F0EBDD; font-size: 14px;">
+          <div class="cell mono" style="color: #8E0F1A; font-weight: 600;">23579992</div>
+          <div class="cell" style="color: #1B1E24;">ACE-23</div>
+          <div class="cell" style="color: #55595F;">Fusil</div>
+          <div class="cell" style="color: #1B1E24; font-weight: 600;">Alcatraz 2</div>
+          <div class="cell"><span class="chip-mano" style="font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 20px;">En mano</span></div>
+          <div class="cell" style="color: #55595F; font-size: 13px;">SLP. Ramírez G.</div>
+        </div>
+        <div style="display: grid; grid-template-columns: 155px 1.25fr 0.9fr 130px 120px 180px; align-items: center; border-bottom: 1px solid #F0EBDD; font-size: 14px; background: #FBFAF5;">
+          <div class="cell mono" style="color: #8E0F1A; font-weight: 600;">23580001</div>
+          <div class="cell" style="color: #1B1E24;">ACE-23</div>
+          <div class="cell" style="color: #55595F;">Fusil</div>
+          <div class="cell" style="color: #9AA0A6;">—</div>
+          <div class="cell"><span class="chip-dep" style="font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 20px;">En depósito</span></div>
+          <div class="cell" style="color: #55595F; font-size: 13px;">Depósito Caruru</div>
+        </div>
+        <div style="display: grid; grid-template-columns: 155px 1.25fr 0.9fr 130px 120px 180px; align-items: center; border-bottom: 1px solid #F0EBDD; font-size: 14px;">
+          <div class="cell mono" style="color: #8E0F1A; font-weight: 600;">809843</div>
+          <div class="cell" style="color: #1B1E24;">AN PVS 14</div>
+          <div class="cell" style="color: #55595F;">Visor nocturno</div>
+          <div class="cell" style="color: #9AA0A6;">—</div>
+          <div class="cell"><span class="chip-dep" style="font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 20px;">En depósito</span></div>
+          <div class="cell" style="color: #55595F; font-size: 13px;">Depósito Apiay</div>
+        </div>
+        <div style="display: grid; grid-template-columns: 155px 1.25fr 0.9fr 130px 120px 180px; align-items: center; border-bottom: 1px solid #F0EBDD; font-size: 14px; background: #FBFAF5;">
+          <div class="cell mono" style="color: #8E0F1A; font-weight: 600;">M60-4471</div>
+          <div class="cell" style="color: #1B1E24;">M-60 E-4</div>
+          <div class="cell" style="color: #55595F;">Ametralladora</div>
+          <div class="cell" style="color: #1B1E24; font-weight: 600;">Alcatraz 1</div>
+          <div class="cell"><span class="chip-mano" style="font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 20px;">En mano</span></div>
+          <div class="cell" style="color: #55595F; font-size: 13px;">SLP. Cortés M.</div>
+        </div>
+        <div style="display: grid; grid-template-columns: 155px 1.25fr 0.9fr 130px 120px 180px; align-items: center; border-bottom: 1px solid #F0EBDD; font-size: 14px;">
+          <div class="cell mono" style="color: #8E0F1A; font-weight: 600;">08-0294</div>
+          <div class="cell" style="color: #1B1E24;">TIPO MK1</div>
+          <div class="cell" style="color: #55595F;">Lanzagranadas</div>
+          <div class="cell" style="color: #9AA0A6;">—</div>
+          <div class="cell"><span class="chip-dep" style="font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 20px;">En depósito</span></div>
+          <div class="cell" style="color: #55595F; font-size: 13px;">Depósito Apiay</div>
+        </div>
+        <div style="display: grid; grid-template-columns: 155px 1.25fr 0.9fr 130px 120px 180px; align-items: center; border-bottom: 1px solid #F0EBDD; font-size: 14px; background: #FBFAF5;">
+          <div class="cell mono" style="color: #8E0F1A; font-weight: 600;">7315</div>
+          <div class="cell" style="color: #1B1E24;">B-500</div>
+          <div class="cell" style="color: #55595F;">Mortero 81 mm</div>
+          <div class="cell" style="color: #9AA0A6;">—</div>
+          <div class="cell"><span class="chip-baja" style="font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 20px;">De baja</span></div>
+          <div class="cell" style="color: #55595F; font-size: 13px;">—</div>
+        </div>
+        <div style="display: grid; grid-template-columns: 155px 1.25fr 0.9fr 130px 120px 180px; align-items: center; font-size: 14px;">
+          <div class="cell mono" style="color: #8E0F1A; font-weight: 600;">PX4-00612</div>
+          <div class="cell" style="color: #1B1E24;">PX4 STORM</div>
+          <div class="cell" style="color: #55595F;">Pistola</div>
+          <div class="cell" style="color: #1B1E24; font-weight: 600;">Alcatraz 3</div>
+          <div class="cell"><span class="chip-mano" style="font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 20px;">En mano</span></div>
+          <div class="cell" style="color: #55595F; font-size: 13px;">TE. Duarte A.</div>
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 16px; color: #6B6F76; font-size: 13px;">
+        <span>Mostrando 7 de 365</span>
+        <div style="display: flex; gap: 6px;">
+          <span style="border: 1px solid #D8CFB8; background: #fff; border-radius: 6px; padding: 6px 12px;">Anterior</span>
+          <span style="border: 1px solid #0E1420; background: #0E1420; color: #fff; border-radius: 6px; padding: 6px 12px;">1</span>
+          <span style="border: 1px solid #D8CFB8; background: #fff; border-radius: 6px; padding: 6px 12px;">2</span>
+          <span style="border: 1px solid #D8CFB8; background: #fff; border-radius: 6px; padding: 6px 12px;">Siguiente</span>
+        </div>
+      </div>
+
+    </div>
+  </main>
+</div>
+</x-dc>
+</body>
+</html>

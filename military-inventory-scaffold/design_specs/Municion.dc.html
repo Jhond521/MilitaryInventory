@@ -1,0 +1,126 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap');
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "IBM Plex Sans", system-ui, sans-serif; background: #F4F0E6; }
+    a { color: #B01722; } a:hover { color: #8E0F1A; }
+    .osw { font-family: "Oswald", sans-serif; }
+    .mono { font-family: "IBM Plex Mono", monospace; }
+    .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: #6B6F76; }
+  </style>
+</helmet>
+
+<div style="min-height: 980px; background: #F4F0E6;">
+  <div style="display: flex; align-items: center; gap: 14px; padding: 16px 30px; background: #0E1420; border-bottom: 2px solid #C0973F;">
+    <img src="logo.jpg" alt="Escudo" style="width: 30px; height: auto;">
+    <span class="osw" style="color: #F4F0E6; font-size: 17px; letter-spacing: 1.5px; text-transform: uppercase;">Munición · existencias por lote</span>
+    <div style="margin-left: auto; display: flex; align-items: center; gap: 8px; padding: 7px 12px; background: #151D2B; color: #fff; border-radius: 6px; font-size: 13px;"><span style="color: #C0973F; font-size: 11px; text-transform: uppercase;">Compañía</span> ALCATRAZ · A</div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: 1.6fr 1fr; gap: 20px; padding: 26px 30px;">
+
+    <!-- existencias -->
+    <div style="background: #fff; border: 1px solid #E4DCC8; border-radius: 12px; overflow: hidden;">
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 18px 22px; border-bottom: 1px solid #F0EBDD;">
+        <div class="osw" style="font-size: 15px; letter-spacing: 1px; text-transform: uppercase; color: #10151E;">Existencias de munición</div>
+        <span style="font-size: 12px; color: #6B6F76;">por lote y compañía</span>
+      </div>
+      <div style="display: grid; grid-template-columns: 150px 1.3fr 1fr 120px; background: #0E1420; color: #E9E4D6; font-family: 'Oswald', sans-serif; font-size: 12px; letter-spacing: 1px; text-transform: uppercase;">
+        <div style="padding: 12px 20px;">Lote</div>
+        <div style="padding: 12px 20px;">Denominación</div>
+        <div style="padding: 12px 20px;">Depósito</div>
+        <div style="padding: 12px 20px; text-align: right;">Cantidad</div>
+      </div>
+      <div style="display: grid; grid-template-columns: 150px 1.3fr 1fr 120px; align-items: center; border-bottom: 1px solid #F0EBDD; font-size: 14px;">
+        <div class="mono" style="padding: 13px 20px; color: #8E0F1A; font-weight: 600;">L-5561-A</div>
+        <div style="padding: 13px 20px;">Cartucho 5.56 mm</div>
+        <div style="padding: 13px 20px; color: #55595F;">Caruru</div>
+        <div class="mono" style="padding: 13px 20px; text-align: right; font-weight: 600;">12.000</div>
+      </div>
+      <div style="display: grid; grid-template-columns: 150px 1.3fr 1fr 120px; align-items: center; border-bottom: 1px solid #F0EBDD; font-size: 14px; background: #FBFAF5;">
+        <div class="mono" style="padding: 13px 20px; color: #8E0F1A; font-weight: 600;">L-762-C</div>
+        <div style="padding: 13px 20px;">Cartucho 7.62 mm eslabonado</div>
+        <div style="padding: 13px 20px; color: #55595F;">Apiay</div>
+        <div class="mono" style="padding: 13px 20px; text-align: right; font-weight: 600;">8.500</div>
+      </div>
+      <div style="display: grid; grid-template-columns: 150px 1.3fr 1fr 120px; align-items: center; border-bottom: 1px solid #F0EBDD; font-size: 14px;">
+        <div class="mono" style="padding: 13px 20px; color: #8E0F1A; font-weight: 600;">L-09-B</div>
+        <div style="padding: 13px 20px;">Cartucho 9 mm</div>
+        <div style="padding: 13px 20px; color: #55595F;">Caruru</div>
+        <div class="mono" style="padding: 13px 20px; text-align: right; font-weight: 600;">3.200</div>
+      </div>
+      <div style="display: grid; grid-template-columns: 150px 1.3fr 1fr 120px; align-items: center; border-bottom: 1px solid #F0EBDD; font-size: 14px; background: #FBFAF5;">
+        <div class="mono" style="padding: 13px 20px; color: #8E0F1A; font-weight: 600;">L-40MM-A</div>
+        <div style="padding: 13px 20px;">Granada 40 mm HE</div>
+        <div style="padding: 13px 20px; color: #55595F;">Apiay</div>
+        <div class="mono" style="padding: 13px 20px; text-align: right; font-weight: 600;">640</div>
+      </div>
+      <div style="display: grid; grid-template-columns: 150px 1.3fr 1fr 120px; align-items: center; font-size: 14px;">
+        <div class="mono" style="padding: 13px 20px; color: #8E0F1A; font-weight: 600;">L-50-A</div>
+        <div style="padding: 13px 20px;">Cartucho .50 (12.7 mm)</div>
+        <div style="padding: 13px 20px; color: #55595F;">Caruru</div>
+        <div class="mono" style="padding: 13px 20px; text-align: right; font-weight: 600;">1.750</div>
+      </div>
+    </div>
+
+    <!-- préstamo entre compañías -->
+    <div style="display: flex; flex-direction: column; gap: 18px;">
+      <div style="background: #0E1420; border: 1px solid #C0973F; border-radius: 12px; padding: 22px 22px;">
+        <div class="osw" style="font-size: 15px; letter-spacing: 1px; text-transform: uppercase; color: #F4F0E6; display: flex; align-items: center; gap: 10px;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C0973F" stroke-width="2"><path d="M7 7h11l-3-3M17 17H6l3 3"/></svg>
+          Prestar munición
+        </div>
+        <div style="color: #8A9099; font-size: 12px; margin-top: 6px;">La munición sí puede prestarse entre compañías.</div>
+
+        <div style="margin-top: 18px;">
+          <div class="lbl" style="color: #8A9099;">Lote</div>
+          <div style="margin-top: 6px; background: #151D2B; border: 1px solid #2A3140; border-radius: 8px; padding: 12px 14px; color: #F4F0E6; font-size: 14px; display: flex; justify-content: space-between;"><span class="mono">L-5561-A · 5.56 mm</span><span style="color:#8A9099;">▾</span></div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px;">
+          <div>
+            <div class="lbl" style="color: #8A9099;">Origen</div>
+            <div style="margin-top: 6px; background: #151D2B; border: 1px solid #2A3140; border-radius: 8px; padding: 12px 14px; color: #F4F0E6; font-size: 14px;">Alcatraz</div>
+          </div>
+          <div>
+            <div class="lbl" style="color: #8A9099;">Destino</div>
+            <div style="margin-top: 6px; background: #151D2B; border: 1px solid #B01722; border-radius: 8px; padding: 12px 14px; color: #F4F0E6; font-size: 14px;">Bisonte</div>
+          </div>
+        </div>
+
+        <div style="margin-top: 14px;">
+          <div class="lbl" style="color: #8A9099;">Cantidad a prestar</div>
+          <div style="margin-top: 6px; background: #fff; border: 1px solid #C0973F; border-radius: 8px; padding: 12px 14px; font-size: 18px; font-weight: 600; color: #10151E;" class="mono">5.000</div>
+        </div>
+
+        <button style="width: 100%; margin-top: 18px; height: 48px; background: #B01722; color: #fff; border: none; border-radius: 8px; font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 15px; letter-spacing: 1px; text-transform: uppercase; cursor: pointer;">Registrar préstamo</button>
+      </div>
+
+      <!-- resulting balances -->
+      <div style="background: #fff; border: 1px solid #E4DCC8; border-radius: 12px; padding: 18px 20px;">
+        <div class="lbl" style="margin-bottom: 12px;">Saldo resultante — Lote L-5561-A</div>
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 0;">
+          <span style="font-size: 14px; color: #1B1E24;">Alcatraz</span>
+          <span class="mono" style="font-size: 14px;">12.000 → <b style="color:#8E0F1A;">7.000</b></span>
+        </div>
+        <div style="height: 1px; background: #F0EBDD;"></div>
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 0;">
+          <span style="font-size: 14px; color: #1B1E24;">Bisonte</span>
+          <span class="mono" style="font-size: 14px;">4.000 → <b style="color:#2C7A3F;">9.000</b></span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

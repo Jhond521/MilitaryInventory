@@ -10,7 +10,6 @@ dependencies = [
     "python-dotenv>=1.0",
     "gunicorn>=23.0",
     "whitenoise>=6.7",
-    "openpyxl>=3.1",
 ]
 
 [dependency-groups]

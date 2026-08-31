@@ -34,3 +34,7 @@ build/
 db.sqlite3
 staticfiles/
 media/
+
+# Claude Code local artifacts (los comandos y kanban.md SÍ se versionan)
+.claude/tmp/
+.claude/settings.local.json

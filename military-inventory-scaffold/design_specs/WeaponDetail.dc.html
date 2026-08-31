@@ -1,0 +1,120 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap');
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "IBM Plex Sans", system-ui, sans-serif; background: #F4F0E6; }
+    a { color: #B01722; } a:hover { color: #8E0F1A; }
+    .osw { font-family: "Oswald", sans-serif; }
+    .mono { font-family: "IBM Plex Mono", monospace; }
+    .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: #6B6F76; }
+    .val { font-size: 15px; color: #1B1E24; margin-top: 3px; }
+  </style>
+</helmet>
+
+<div style="min-height: 900px; background: #F4F0E6;">
+
+  <!-- top bar -->
+  <div style="display: flex; align-items: center; gap: 14px; padding: 16px 30px; background: #0E1420; border-bottom: 2px solid #C0973F;">
+    <img src="logo.jpg" alt="Escudo" style="width: 30px; height: auto;">
+    <span style="color: #8A9099; font-size: 13px;">Inventario</span>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4A515C" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+    <span style="color: #F4F0E6; font-size: 13px; font-weight: 600;">Detalle del armamento</span>
+  </div>
+
+  <div style="padding: 26px 30px;">
+
+    <!-- header card -->
+    <div style="background: #fff; border: 1px solid #E4DCC8; border-radius: 12px; padding: 24px 26px; display: flex; align-items: center; justify-content: space-between;">
+      <div style="display: flex; align-items: center; gap: 20px;">
+        <div style="width: 64px; height: 64px; border-radius: 12px; background: #0E1420; display: flex; align-items: center; justify-content: center;">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#C0973F" stroke-width="1.7"><path d="M3 11h13l3-3v3h2v2h-6l-2 3v-3H3z"/></svg>
+        </div>
+        <div>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span class="mono" style="font-size: 24px; font-weight: 600; color: #8E0F1A;">23579992</span>
+            <span style="background: #FBE7E3; color: #8E0F1A; font-size: 12px; font-weight: 600; padding: 4px 12px; border-radius: 20px;">En mano</span>
+          </div>
+          <div class="osw" style="font-size: 18px; color: #10151E; letter-spacing: .5px; margin-top: 4px;">FUSIL ACE-23 · Compañía Alcatraz</div>
+        </div>
+      </div>
+      <div style="display: flex; gap: 10px;">
+        <button style="height: 42px; padding: 0 18px; background: #B01722; color: #fff; border: none; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; font-family: inherit;">Devolver a depósito</button>
+        <button style="height: 42px; padding: 0 18px; background: #fff; color: #2C3340; border: 1px solid #D8CFB8; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; font-family: inherit;">Dar de baja</button>
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1.15fr 1fr; gap: 20px; margin-top: 20px;">
+
+      <!-- left: data + custom fields -->
+      <div style="display: flex; flex-direction: column; gap: 20px;">
+        <div style="background: #fff; border: 1px solid #E4DCC8; border-radius: 12px; padding: 22px 24px;">
+          <div class="osw" style="font-size: 15px; letter-spacing: 1px; text-transform: uppercase; color: #10151E; margin-bottom: 18px;">Datos del armamento</div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 18px 24px;">
+            <div><div class="lbl">Número de serie</div><div class="val mono">23579992</div></div>
+            <div><div class="lbl">Categoría</div><div class="val">Fusil</div></div>
+            <div><div class="lbl">Denominación</div><div class="val">ACE-23</div></div>
+            <div><div class="lbl">Compañía dueña</div><div class="val">Alcatraz (A)</div></div>
+            <div><div class="lbl">Pelotón</div><div class="val">Alcatraz 2</div></div>
+            <div><div class="lbl">Responsable</div><div class="val">En mano · SLP. Ramírez G.</div></div>
+            <div><div class="lbl">Estado</div><div class="val">Activo</div></div>
+          </div>
+
+          <div style="border-top: 1px solid #F0EBDD; margin: 22px 0 16px;"></div>
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
+            <div class="osw" style="font-size: 13px; letter-spacing: 1px; text-transform: uppercase; color: #6B6F76;">Campos personalizados</div>
+            <span style="font-size: 12px; color: #B01722; display: flex; align-items: center; gap: 5px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Agregar campo</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 18px 24px;">
+            <div><div class="lbl">Estado físico</div><div class="val">Operativo</div></div>
+            <div><div class="lbl">Fecha de ingreso</div><div class="val">2024-03-12</div></div>
+            <div><div class="lbl">Observaciones</div><div class="val">Culata reemplazada</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- right: movement history -->
+      <div style="background: #fff; border: 1px solid #E4DCC8; border-radius: 12px; padding: 22px 24px;">
+        <div class="osw" style="font-size: 15px; letter-spacing: 1px; text-transform: uppercase; color: #10151E; margin-bottom: 20px;">Historial de movimientos</div>
+
+        <div style="display: flex; flex-direction: column; gap: 0;">
+          <div style="display: grid; grid-template-columns: 20px 1fr; gap: 14px;">
+            <div style="display: flex; flex-direction: column; align-items: center;"><div style="width: 12px; height: 12px; border-radius: 50%; background: #B01722;"></div><div style="width: 2px; flex-grow: 1; background: #EDE6D5;"></div></div>
+            <div style="padding-bottom: 22px;">
+              <div style="font-weight: 600; color: #1B1E24; font-size: 14px;">Entrega a soldado</div>
+              <div style="color: #55595F; font-size: 13px; margin-top: 2px;">A SLP. Ramírez G. · desde Depósito Caruru</div>
+              <div style="color: #9A9FA6; font-size: 12px; margin-top: 4px;">2026-08-20 · 14:32 · por Enlace J. Losada</div>
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: 20px 1fr; gap: 14px;">
+            <div style="display: flex; flex-direction: column; align-items: center;"><div style="width: 12px; height: 12px; border-radius: 50%; background: #2C3340;"></div><div style="width: 2px; flex-grow: 1; background: #EDE6D5;"></div></div>
+            <div style="padding-bottom: 22px;">
+              <div style="font-weight: 600; color: #1B1E24; font-size: 14px;">Devolución a depósito</div>
+              <div style="color: #55595F; font-size: 13px; margin-top: 2px;">A Depósito Caruru · desde SLP. Ortiz P.</div>
+              <div style="color: #9A9FA6; font-size: 12px; margin-top: 4px;">2026-07-02 · 09:10 · por Enlace M. Pérez</div>
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: 20px 1fr; gap: 14px;">
+            <div style="display: flex; flex-direction: column; align-items: center;"><div style="width: 12px; height: 12px; border-radius: 50%; background: #C0973F;"></div></div>
+            <div>
+              <div style="font-weight: 600; color: #1B1E24; font-size: 14px;">Alta en inventario</div>
+              <div style="color: #55595F; font-size: 13px; margin-top: 2px;">Carga inicial · Depósito Caruru</div>
+              <div style="color: #9A9FA6; font-size: 12px; margin-top: 4px;">2024-03-12 · por Administrador</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>
