@@ -1,11 +1,14 @@
 # SIGA — Armory Inventory
 
+[![CI](https://github.com/Jhond521/MilitaryInventory/actions/workflows/ci.yml/badge.svg)](https://github.com/Jhond521/MilitaryInventory/actions/workflows/ci.yml)
+
 Web app to track a battalion's weapons inventory by serial number, company and
 location (assigned to a soldier or stored in a deposit). Internal tool for a
 small set of authorized users. Built for Batallón de Selva No. 52. Works on mobile
 and is installable as a PWA (add to home screen, opens like an app).
 
-**Status**: early development (domain model + Django admin working; operator UI in backlog)
+**Status**: v1 MVP domain complete (Django admin as the UI); operator-specific screens
+(H-08…H-17's guided UI, mobile-first PWA templates) are still backlog.
 
 ## Requirements
 
@@ -20,11 +23,11 @@ git clone <repo-url>
 cd armory-inventory
 python -m venv .venv
 . .venv/bin/activate            # Windows: .venv\Scripts\activate
-pip install django "psycopg[binary]" dj-database-url python-dotenv gunicorn whitenoise pytest pytest-django ruff
+pip install django "psycopg[binary]" dj-database-url python-dotenv gunicorn whitenoise openpyxl pytest pytest-django ruff
 cp .env.example .env            # fill in the values
 
 python manage.py migrate
-python manage.py seed_initial   # 1 unidad, 7 compañías, 2 depósitos, 23 tipos de armamento
+python manage.py seed_initial   # 1 unidad, 7 compañías, 2 depósitos, 28 pelotones, 29 tipos
 python manage.py createsuperuser
 ```
 
@@ -50,12 +53,15 @@ python -m pytest          # or: python manage.py test
 ruff check .
 ```
 
+GitHub Actions (`.github/workflows/ci.yml`) runs both on every push and pull request.
+
 ## Project layout
 
 ```
 config/        # Django project (settings, urls)
 apps/          # accounts (users/roles) + inventory (domain model)
 docs/          # PRD, backlog and architecture decisions
+.github/       # CI (tests + ruff on every push)
 ```
 
 ## Documentation

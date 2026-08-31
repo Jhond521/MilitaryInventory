@@ -22,7 +22,16 @@ Controlar quién entra y qué puede hacer.
 - **Historia**: Como comandante, quiero que cada usuario tenga correo y un rol (administrador/enlace).
 - **Criterios de aceptación**:
   - [x] Modelo `User` con login por correo y campo `role` (ADMIN/ENLACE).
-  - [x] Panel de admin para crear/editar usuarios y asignar rol.
+  - [x] Pantalla para crear/editar usuarios y asignar rol.
+- **Actualización (ADR-0004)**: la gestión de usuarios se reconstruyó en
+  `apps/accounts/views.py` (`usuario_list`/`_crear`/`_editar`/`_restablecer_password`,
+  `UsuarioForm` en `apps/accounts/forms.py`) — solo ADMIN, enlazada desde "Ajustes". El
+  login/logout/cambio de contraseña propios (antes del `AdminSite`) también viven ahí,
+  sobre las vistas genéricas de `django.contrib.auth.views`.
+- **Mejora post-E2E**: `usuario_editar` bloquea que un ADMIN se quite a sí mismo el rol o
+  se desactive — con 6 usuarios en total (y sin el admin de Django como red de
+  seguridad), eso podía dejar a todos sin nadie que gestione usuarios. Sí puede hacerlo
+  sobre *otro* administrador.
 
 #### H-02 — Lista blanca de correos ✅
 
@@ -32,15 +41,44 @@ Controlar quién entra y qué puede hacer.
   - [x] `AllowlistModelBackend` rechaza correos fuera de `AUTHORIZED_EMAILS`.
   - [x] Test que verifica correo autorizado (pasa) y no autorizado (rechazado).
 
-#### H-03 — Permisos por rol en la interfaz
+#### H-03 — Permisos por rol en la interfaz ✅
 
 - **Requerimiento**: RF-01, RF-10
-- **Estado**: Pendiente
+- **Estado**: Hecho
 - **Historia**: Como comandante, quiero que el rol enlace solo vea/busque y registre movimientos, sin tocar datos maestros.
 - **Criterios de aceptación**:
-  - [ ] El rol enlace no puede crear/editar compañías, depósitos, tipos, usuarios ni dar altas/bajas.
-  - [ ] El rol enlace sí puede registrar entregas y devoluciones.
-- **Notas técnicas**: mapear `role` a permisos/grupos de Django o gates en las vistas.
+  - [x] El rol enlace no puede crear/editar compañías, depósitos, tipos, usuarios ni dar altas/bajas.
+  - [x] El rol enlace sí puede registrar entregas y devoluciones.
+- **Notas técnicas**: `apps/accounts/admin_mixins.py` define los gates por rol (no grupos/permisos
+  de Django — con solo 2 roles fijos, comprobar `user.role` directamente es más simple y evita
+  depender de `auth.Permission`/grupos que este proyecto nunca asigna):
+  - `ViewOnlyForEnlaceMixin` (Unidad, Compañía, Depósito, Pelotón, Soldado, Tipo de armamento,
+    Campo personalizado, Armamento, Movimiento, Existencia): cualquier usuario autorizado ve;
+    solo Administrador agrega/edita/borra.
+  - `MovimientoRegistrableMixin` (Préstamo): agregar también es "registrar un movimiento"
+    (RF-15) — ambos roles pueden; editar/borrar sigue siendo solo Administrador.
+  - `AdminOnlyMixin` (Usuarios): Enlace ni siquiera ve la sección — gestión de cuentas es
+    sensible y el PRD no pide que Enlace la vea.
+  - Las acciones de entrega/devolución de `ArmamentoAdmin` (H-09) se validan contra
+    `has_view_permission`, no `has_change_permission` — RF-10 autoriza a Enlace a registrar
+    movimientos aunque no tenga permiso de edición sobre Armamento; Django ya sirve el
+    detalle de solo lectura cuando hay `view` pero no `change`.
+  - Al implementar esto se corrigieron dos brechas reales: `has_module_permission` (por
+    defecto usa permisos reales de Django, que este proyecto nunca asigna, así que ocultaría
+    toda la app hasta a un Administrador no-superusuario) se sobreescribió con la misma
+    lógica de rol; y `PrestamoAdmin` pedía elegir "usuario" en una lista al registrar un
+    préstamo — ahora se asigna solo con `request.user` (RNF-03).
+  - **Supuesto**: "datos maestros" se interpretó en sentido amplio (incluye Soldado y
+    Pelotón, agrupados como tal en la Épica E-02 del backlog, aunque el PRD no los nombra
+    en la lista literal de RF-01/sección 3) — a confirmar con David si Enlace necesita poder
+    reasignar el pelotón de un soldado directamente (cambia con frecuencia, S-8).
+  - **Actualización (T-06/H-17, luego ADR-0004)**: el admin de Django se retiró por
+    completo — toda la app, incluidos login y datos maestros, vive en la superficie móvil.
+    `apps/accounts/admin_mixins.py` (mixins de `ModelAdmin`) se reemplazó por
+    `apps/accounts/permissions.py` (`es_administrador`/`usuario_autorizado` + decoradores
+    `requiere_admin`/`requiere_autorizado` para vistas función, `UserPassesTestMixin` para
+    las CBV de `apps/inventory/crud.py`) — mismas reglas de rol, expresadas para vistas
+    normales en vez de `ModelAdmin`.
 
 ### Épica E-02 — Datos maestros
 
@@ -49,9 +87,19 @@ Compañías, depósitos, tipos y soldados.
 #### H-04 — CRUD de compañías, depósitos y tipos ✅
 
 - **Requerimiento**: RF-03, RF-04, RF-05
-- **Estado**: Hecho (scaffold, vía admin)
+- **Estado**: Hecho
 - **Criterios de aceptación**:
-  - [x] Modelos y admin para Compañía, Depósito y TipoArmamento; se pueden crear nuevos.
+  - [x] Modelos y CRUD para Compañía, Depósito y TipoArmamento; se pueden crear nuevos.
+- **Actualización (ADR-0004)**: el admin de Django se retiró por completo; el CRUD ahora
+  vive en `apps/inventory/crud.py` (`ListView`/`CreateView`/`UpdateView`/`DeleteView`
+  genéricas de Django + `templates/inventory/master_*.html`, reusadas también por Pelotón
+  y CampoPersonalizado) — accesible desde "Ajustes" en el header. Solo ADMIN
+  añade/edita/borra (RF-01), cualquiera ve.
+- **Mejora post-E2E**: borrar un registro referenciado por otro (p.ej. una compañía con
+  pelotones — todas las FK de datos maestros son `on_delete=PROTECT`) reventaba con un
+  `ProtectedError` sin capturar (500). `MasterDeleteView.form_valid()` ahora lo atrapa y
+  muestra un mensaje claro en vez de la página de confirmación. Se probó borrando
+  compañías, tipos y depósitos con dependientes.
 
 #### H-05 — Siembra de datos iniciales ✅
 
@@ -63,9 +111,16 @@ Compañías, depósitos, tipos y soldados.
 #### H-06 — Registro de soldados ✅
 
 - **Requerimiento**: RF-06
-- **Estado**: Hecho (scaffold, vía admin)
+- **Estado**: Hecho
 - **Criterios de aceptación**:
   - [x] Soldado con apellidos/nombres y una sola compañía; no es usuario.
+- **Actualización (ADR-0004)**: alta/edición propias (`inventory:soldado_crear`/
+  `_editar`, `SoldadoForm` en `forms.py`) enlazadas desde la pantalla de Soldados —
+  solo ADMIN, mismo criterio que el resto de datos maestros.
+- **Mejora post-E2E**: faltaba borrar un soldado (el admin retirado sí lo permitía).
+  `inventory:soldado_borrar` lo agrega, con el mismo manejo de `ProtectedError` que el
+  CRUD genérico (`_borrar_protegido()` en `views.py` — reusado también por
+  `existencia_borrar`, que tenía el mismo hueco).
 
 ### Épica E-03 — Armamento y movimientos
 
@@ -74,66 +129,157 @@ El corazón del sistema.
 #### H-07 — Alta de armamento con serie ✅
 
 - **Requerimiento**: RF-07
-- **Estado**: Hecho (scaffold, vía admin)
+- **Estado**: Hecho
 - **Criterios de aceptación**:
   - [x] Arma con serie única, tipo y compañía; ubicación por defecto "en depósito".
   - [x] Validación de coherencia ubicación/soldado/depósito en `clean()`.
+- **Actualización (ADR-0004)**: pantalla propia `inventory:armamento_crear`
+  (`ArmamentoCrearForm` en `forms.py`, restringe `tipo` a `control=SERIE` y fija
+  `ubicacion=DEPOSITO`) — botón "+ Añadir" en Inventario, solo ADMIN.
 
-#### H-08 — Selección de compañía de trabajo
+#### H-08 — Selección de compañía de trabajo ✅
 
 - **Requerimiento**: RF-02
-- **Estado**: Pendiente
+- **Estado**: Hecho
 - **Historia**: Como usuario, al ingresar elijo la compañía con la que trabajo y los listados se filtran a ella.
 - **Criterios de aceptación**:
-  - [ ] Selector de compañía tras el login; contexto guardado en sesión.
-  - [ ] Listados de inventario y soldados filtrados por el contexto; se puede cambiar sin cerrar sesión.
+  - [x] Selector de compañía tras el login; contexto guardado en sesión.
+  - [x] Listados de inventario y soldados filtrados por el contexto; se puede cambiar sin cerrar sesión.
+- **Notas técnicas**: `CompaniaContextMiddleware` (`apps/inventory/middleware.py`) manda a
+  `/compania/` (`apps/inventory/views.py::elegir_compania`) a quien no tiene compañía en
+  sesión; `CompaniaContextoMixin` (`admin.py`) filtra por defecto el changelist de
+  Armamento y Soldado. Header ("Compañía: X — ver todas — cambiar compañía") vía
+  `templates/admin/base_site.html` + `context_processors.compania_actual`. Es solo un
+  valor por defecto (S-2): "ver todas" y el filtro explícito de compañía lo desactivan.
+- **Actualización (T-06/H-17)**: el selector de compañía (`/compania/`) sigue igual, pero
+  ahora redirige por defecto a la nueva pantalla de Inventario (`inventory:armamento_list`,
+  en `/`) en vez de al admin — el admin se movió a `/admin/` (ADR-0003). El badge de
+  compañía y el enlace "cambiar compañía" también viven en el header de la nueva UI móvil
+  (`templates/inventory/base_mobile.html`), no solo en el admin.
 
-#### H-09 — Entregar y devolver con historial
+#### H-09 — Entregar y devolver con historial ✅
 
 - **Requerimiento**: RF-10
-- **Estado**: Pendiente
+- **Estado**: Hecho (vía acciones del admin)
 - **Historia**: Como administrador o enlace, entrego un arma a un soldado y la recibo de vuelta, dejando rastro.
 - **Criterios de aceptación**:
-  - [ ] Acción de entrega (depósito → mano) validando que el soldado sea de la compañía del arma.
-  - [ ] Acción de devolución (mano → depósito).
-  - [ ] Cada acción crea un `Movimiento` con usuario y fecha/hora.
-- **Notas técnicas**: el modelo `Movimiento` ya existe; falta el flujo de acción y la transacción.
+  - [x] Acción de entrega (depósito → mano) validando que el soldado sea de la compañía del arma.
+  - [x] Acción de devolución (mano → depósito).
+  - [x] Cada acción crea un `Movimiento` con usuario y fecha/hora.
+- **Notas técnicas**: `Armamento.entregar()`/`.devolver()` (transaccionales, en `models.py`) hacen el
+  cambio de ubicación y crean el `Movimiento`; expuestos como acciones masivas del admin
+  ("Entregar a un soldado" / "Devolver a depósito") con una página intermedia
+  (`templates/admin/inventory/armamento/`) para elegir soldado/depósito y observación.
+  Falta una pantalla guiada propia (H-08…H-11) y el filtrado de permisos por rol (H-03).
+- **Actualización (T-06/H-17)**: pantallas guiadas propias añadidas —
+  `inventory:armamento_entregar` (`templates/inventory/armamento_entregar.html`, flujo de
+  3 pasos Arma → Soldado → Confirmar) e `inventory:armamento_devolver`
+  (`templates/inventory/armamento_devolver.html`, un solo paso). Ambas llaman a
+  `Armamento.entregar()`/`.devolver()` igual que las acciones del admin — no duplican la
+  lógica, solo dan una UI mobile-first propia. Las acciones del admin (`entregar_view`/
+  `devolver_view`) siguen existiendo tal cual, para operar por lote desde `/admin/`.
 
-#### H-10 — Baja de armamento
+#### H-10 — Baja de armamento ✅
 
 - **Requerimiento**: RF-11
-- **Estado**: Pendiente
+- **Estado**: Hecho (vía acción del admin)
 - **Criterios de aceptación**:
-  - [ ] Solo administrador; registra motivo (dañada/perdida/robada) y fecha.
-  - [ ] El arma sale del inventario activo pero conserva su historial.
+  - [x] Solo administrador; registra motivo (dañada/perdida/robada) y fecha.
+  - [x] El arma sale del inventario activo pero conserva su historial.
+- **Notas técnicas**: `Armamento.dar_de_baja(motivo, fecha, usuario, observacion="")` (transaccional,
+  en `models.py`) marca `estado=BAJA` y crea un `Movimiento` tipo BAJA (RNF-03) — funciona sin
+  importar si el arma está en mano o en depósito, a diferencia de entregar/devolver. `clean()`
+  exige motivo y fecha siempre que `estado=BAJA` (aunque se edite por el form crudo del admin,
+  no solo por esta acción), y `entregar()` ahora rechaza un arma que no esté `ACTIVO`. Expuesta
+  como acción masiva del admin ("Dar de baja") con página intermedia
+  (`templates/admin/inventory/armamento/dar_de_baja.html`); a diferencia de H-09, esta acción
+  declara `permissions=["change"]` para que ni siquiera aparezca en el desplegable de Enlace
+  (RF-11 es "solo administrador", no ambos roles como RF-10).
+- **Actualización (ADR-0004)**: pantalla propia `inventory:armamento_baja`
+  (`templates/inventory/armamento_baja.html`, mismo estilo que Devolver), enlazada como
+  botón de "zona de peligro" desde `armamento_editar` — sigue siendo `@requiere_admin`
+  (Enlace ni la ve ni puede llamarla directamente, RF-11).
 
-#### H-11 — Búsqueda global por cualquier dato
+#### H-11 — Búsqueda global por cualquier dato ✅
 
 - **Requerimiento**: RF-12
-- **Estado**: Pendiente (parcial: el admin ya busca por serie/soldado/tipo)
+- **Estado**: Hecho (vía el buscador del admin)
 - **Historia**: Como usuario, busco por serie (o cualquier dato) y veo de inmediato tipo, compañía, estado y ubicación.
 - **Criterios de aceptación**:
-  - [ ] Búsqueda por serie devuelve el estado completo del arma en < 2 s (RNF-01).
-  - [ ] Filtros por compañía, depósito y estado.
+  - [x] Búsqueda por serie devuelve el estado completo del arma en < 2 s (RNF-01).
+  - [x] Filtros por compañía, depósito y estado.
+- **Notas técnicas**: `ArmamentoAdmin.search_fields` (RF-12: "por cualquier dato") cubre
+  serie, soldado, tipo, compañía, depósito y campos personalizados (`datos_extra`, JSON).
+  `numero_serie` ya tenía índice de BD (RNF-01) y el changelist ya muestra tipo, compañía,
+  ubicación, depósito, soldado, pelotón y estado en cada fila. Al arreglar la búsqueda en
+  `datos_extra` se encontró y corrigió un bug real: `JSONField` escapa por defecto los
+  acentos como `\uXXXX` (`ensure_ascii=True`), lo que rompía la búsqueda de texto en
+  español con tildes — se agregó `UnicodeJSONEncoder` (`models.py`) para guardarlos tal
+  cual.
+- **Actualización (T-06/H-17, luego ADR-0004)**: la pantalla de Inventario
+  (`inventory:armamento_list`, `/`) tiene su propio buscador reusando el mismo criterio
+  (serie, soldado, tipo, compañía, depósito, `datos_extra`), más chips de filtro por
+  pelotón/ubicación/tipo. El admin de Django (y su buscador) ya no existe (ADR-0004) —
+  esta es la única búsqueda global del sistema.
 
-#### H-12 — Campos personalizados del armamento
+#### H-12 — Campos personalizados del armamento ✅
 
 - **Requerimiento**: RF-08
-- **Estado**: Pendiente (parcial: modelo `CampoPersonalizado` + `datos_extra` ya existen)
+- **Estado**: Hecho
 - **Criterios de aceptación**:
-  - [ ] El administrador define un campo (nombre + tipo texto/número/fecha).
-  - [ ] El campo aparece para capturar/ver en cada arma; aplica solo al armamento.
+  - [x] El administrador define un campo (nombre + tipo texto/número/fecha).
+  - [x] El campo aparece para capturar/ver en cada arma; aplica solo al armamento.
+- **Notas técnicas**: `ArmamentoAdmin.get_form()`/`get_fieldsets()` (`apps/inventory/admin.py`)
+  generan un campo de formulario propio (texto/número/fecha según `CampoPersonalizado.tipo`)
+  por cada `CampoPersonalizado` sembrado, agrupados en una sección "Campos personalizados";
+  `save_model()` los guarda/quita de `Armamento.datos_extra`. El primer diseño (un campo de
+  formulario por cada uno, sea o no editable) chocó con una limitación real de Django: cuando
+  Enlace solo tiene permiso de "view", el admin excluye TODOS los campos reales del modelo y
+  cambia a un modo de solo lectura que solo sabe leer atributos reales o métodos del
+  ModelAdmin — nunca entradas sueltas de `form.fields` — así que esos campos dinámicos se
+  veían como "Campo 1: None" en vez del valor real. La solución: cuando el usuario no tiene
+  permiso de "change", en vez de los campos por uno se muestra un único método de solo lectura
+  (`campos_personalizados_resumen`) con el resumen real. De paso, otro intento de arreglar el
+  formulario ("fields=None" para que `ModelAdmin.get_form()` no derive `fields` desde
+  `get_fieldsets()`, que incluye los campo\_&lt;pk&gt; y no son campos reales) causó
+  recursión infinita: `get_fieldsets()`/`get_fields()` internamente llaman a `self.get_form()`,
+  que siempre resuelve al método sobreescrito — la solución fue filtrar la lista de `fields`
+  ya recibida en vez de recalcularla llamando a esos métodos.
+- **Actualización (ADR-0004)**: con el admin retirado, `ArmamentoEditarForm`
+  (`apps/inventory/forms.py`) reemplaza a `ArmamentoAdmin.get_form()` — agrega los mismos
+  campos `campo_<pk>` en `__init__()`, y `aplicar_campos_personalizados()` (también en
+  `forms.py`, llamada desde `inventory:armamento_editar`) reemplaza `save_model()`. Mucho
+  más simple sin la dualidad admin/no-admin: `armamento_editar` es `@requiere_admin`
+  directamente, así que no hace falta el modo de solo lectura ni el resumen — Enlace ni
+  ve el formulario.
 
 ### Épica E-04 — Carga inicial
 
-#### H-13 — Importar el inventario del Excel
+#### H-13 — Importar el inventario del Excel ✅
 
 - **Requerimiento**: RF-13
-- **Estado**: Pendiente
+- **Estado**: Hecho (a falta del Excel real para verificar contra él)
 - **Historia**: Como equipo, cargamos el inventario inicial (Excel por compañías) antes de operar.
 - **Criterios de aceptación**:
-  - [ ] Script/management command que lee el Excel entregado y crea armamento con serie, tipo, compañía y ubicación.
-  - [ ] Valida unicidad de serie y reporta conflictos antes de cargar.
+  - [x] Script/management command que lee el Excel entregado y crea armamento con serie, tipo, compañía y ubicación.
+  - [x] Valida unicidad de serie y reporta conflictos antes de cargar.
+- **Notas técnicas**: `python manage.py importar_armamento archivo.xlsx [--deposito NOMBRE] [--dry-run]`
+  (`apps/inventory/management/commands/importar_armamento.py`). Valida el archivo completo
+  antes de crear nada — todo o nada: si hay un solo conflicto (serie repetida en el archivo
+  o ya existente en la base, tipo/depósito no reconocido, serie o denominación vacía), no crea
+  ningún registro y reporta todos los conflictos encontrados. Todo lo importado queda "en
+  depósito" (asignar soldados es un paso posterior, RF-10).
+  - **Supuesto (a confirmar contra el Excel real, P-1/P-6 aún pendientes)**: David todavía no
+    ha entregado `ACTIVOS FIJOS COMPAÑIA.xlsx`, así que el comando asume una estructura
+    normalizada razonable (documentada en su docstring) en vez del layout real de "bloques
+    por denominación" del archivo — una hoja por compañía, fila de encabezados con columnas
+    Serie/Denominación/Depósito. Cuando llegue el archivo real, validar contra él y, si el
+    layout no calza, adaptar la detección de encabezados/bloques del comando (el núcleo de
+    validación y reporte de conflictos debería servir igual).
+  - Al escribir esto se notó que el catálogo sembrado (`seed_initial`) no tenía Pistolas ni
+    Visores nocturnos pese a estar en el Anexo A del PRD — se agregaron 5 tipos nuevos (todos
+    por SERIE): PISTOLA PX4 STORM, PISTOLA PRIETO BERETTA, VISOR NOCTURNO AN PVS 14, VISOR
+    NOCTURNO AN PVS 7B, VISOR NOCTURNO DUAL/DOBLE (24 → 29 tipos).
 
 ## Fase 2 — Siguiente
 
@@ -145,7 +291,6 @@ El corazón del sistema.
 ## Fase 3 — Algún día
 
 - Multi-unidad con configurador de unidades
-- App móvil / vista optimizada para celular
 - Firma o acuse de entrega del soldado
 - Escaneo de código o serie con la cámara
 
@@ -153,25 +298,58 @@ El corazón del sistema.
 
 - [x] T-01 — Scaffold Django, modelos, migraciones, tests, siembra, admin
 - [ ] T-02 — Configurar despliegue en Railway (variables, Postgres, primer deploy + seed)
-- [ ] T-03 — CI (tests + ruff en cada push) — opcional, no incluido en el scaffold
+- [x] T-03 — CI (tests + ruff en cada push)
+  - **Notas técnicas**: `.github/workflows/ci.yml` — un solo job en Ubuntu con Python 3.12
+    (fijo por `requires-python` en `pyproject.toml`), corre en cada push y pull request.
+    Usa `pip install -e . --group dev` (PEP 735, ya documentado en `CLAUDE.md`) tras
+    actualizar pip (el soporte de `--group` requiere pip ≥25.1). No necesita Postgres ni
+    variables de entorno — corre igual que en local, con el fallback a SQLite y los
+    valores por defecto de `AUTHORIZED_EMAILS`/`SECRET_KEY` ya presentes en `settings.py`.
 - [ ] T-04 — Definir política de respaldo del Postgres (RNF-06)
 - [ ] T-05 — Cerrar la lista de 6 correos y el rol de cada persona (P-1, P-2)
-- [ ] T-06 — Habilitar PWA: web app manifest + service worker, íconos (escudo), responsive mobile-first, navegación inferior (RF-17, RNF-04)
+- [x] T-06 — Habilitar PWA: web app manifest + service worker, íconos (escudo), responsive mobile-first, navegación inferior (RF-17, RNF-04)
+  - **Notas técnicas**: manifest/service worker ya existían (T-07); esta historia agregó
+    las plantillas mobile-first reales — `templates/inventory/base_mobile.html` (header +
+    navegación inferior de 4 ítems) y las 6 pantallas que cuelgan
+    de ella (`armamento_list`, `armamento_entregar`, `armamento_devolver`,
+    `movimiento_list`, `soldado_list`, `existencia_list`), estilizadas con
+    `static/css/mobile.css` (Oswald + IBM Plex Sans/Mono, paleta extraída de un canvas de
+    diseño). Ver ADR-0003: esto implicó mover el admin de Django de `/` a `/admin/` —
+    luego, ADR-0004 lo retiró por completo (login/datos maestros/usuarios también se
+    reconstruyeron en el diseño móvil; `/admin/` ya no existe). El ícono sigue siendo el
+    placeholder (`static/icons/icon.svg`) — falta el escudo real.
 
 ## Actualizaciones v1.1–v1.3 (nuevas historias)
 
-Derivadas del PRD actualizado; pendientes de ajustar el modelo del scaffold.
+Derivadas del PRD actualizado. T-07 (Hecho) alineó el modelo del scaffold; las
+historias H-14…H-17 siguen pendientes en su parte de interfaz/UI.
 
 - H-14 — Pelotones: 4 por compañía; pelotón como dato del soldado (editable), mostrado en inventario/detalle/entrega; el arma deriva su pelotón del soldado (RF-16)
+  - **Estado**: modelo listo (T-07) — `Peloton`, `Soldado.peloton` (validado contra su compañía) y `Armamento.peloton_actual` (derivado, `None` en depósito). Falta mostrarlo en pantallas propias (H-08…H-11).
 - H-15 — Existencias por cantidad: munición y cascos por cantidad; carga desde "CARGOS SAP" (RF-14)
-- H-16 — Préstamo de munición entre compañías con saldos y trazabilidad (RF-15)
-- H-17 — App móvil responsive e instalable (PWA): manifest, service worker, íconos, navegación móvil (RF-17)
+  - **Estado**: modelo listo (T-07) — `Existencia` (tipo + compañía + depósito + lote opcional + cantidad), gestionable desde el admin. Falta el importador desde "CARGOS SAP" (fase siguiente) y una pantalla de ajuste guiado.
+- H-16 — Préstamo de munición entre compañías con saldos y trazabilidad (RF-15) ✅
+  - **Estado**: Hecho (ADR-0004) — `inventory:prestamo_transferir` (un solo formulario,
+    mismo estilo que Devolver; ambos roles pueden registrar, RF-15) construye el
+    `Prestamo` y llama a `full_clean()`/`.save()`, que ya hacía el ajuste atómico de
+    existencias (T-07) y toda la validación (tipo, cantidad, saldo). `inventory:
+    prestamo_list` de solo lectura. No hay pantalla de edición/borrado de préstamos
+    existentes — nadie la pidió y el admin tampoco la exponía de forma guiada.
+- H-17 — App móvil responsive e instalable (PWA): manifest, service worker, íconos, navegación móvil (RF-17) ✅
+  - **Estado**: Hecho (T-06) — plantillas mobile-first y navegación inferior reales, ver
+    notas técnicas de T-06 arriba. Sigue pendiente el ícono real del escudo del batallón
+    (placeholder en `static/icons/icon.svg`).
 - T-07 — Ajustar modelos del scaffold: separar control por SERIE vs CANTIDAD, agregar Pelotón, existencias y préstamos
+  - **Estado**: Hecho — ver detalle de estado en cada historia (H-14…H-17) arriba.
 
 ## Orden sugerido para arrancar
 
-1. H-09 — Entregar/devolver con historial: es el flujo operativo central y el que más valor da sobre el Excel.
-2. H-08 — Selección de compañía: da el marco de trabajo diario a los usuarios.
-3. H-11 — Búsqueda global: la pregunta "¿dónde está la serie X?" es la razón de ser del sistema.
-4. H-03 — Permisos por rol: cierra el control de acceso antes de abrirlo a los 6 usuarios.
-5. H-13 — Carga inicial: para arrancar con datos reales.
+Las 5 completadas (✅ arriba). Siguiente candidato natural: H-10 (baja de
+armamento, cierra la Épica E-03) o H-12 (campos personalizados, ya tiene el
+modelo listo desde el scaffold).
+
+1. H-09 — Entregar/devolver con historial: es el flujo operativo central y el que más valor da sobre el Excel. ✅
+2. H-08 — Selección de compañía: da el marco de trabajo diario a los usuarios. ✅
+3. H-11 — Búsqueda global: la pregunta "¿dónde está la serie X?" es la razón de ser del sistema. ✅
+4. H-03 — Permisos por rol: cierra el control de acceso antes de abrirlo a los 6 usuarios. ✅
+5. H-13 — Carga inicial: para arrancar con datos reales (a falta del Excel real de David). ✅
