@@ -753,7 +753,7 @@ class InventarioEscritorioTests(TestCase):
         response = self.client.get(reverse("inventory:armamento_list"))
         content = response.content.decode()
         self.assertIn('class="siga-table-wrap"', content)
-        self.assertIn('class="siga-card-list"', content)
+        self.assertIn('class="siga-card-list siga-card-list--inventario"', content)
         for serie in ("EN-DEP-1", "EN-MANO-1"):
             msg = f"{serie} debería aparecer en tabla y tarjeta"
             self.assertEqual(content.count(serie), 2, msg)
@@ -1300,6 +1300,52 @@ class MasterCrudTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(Deposito.objects.filter(nombre="Apiay").count(), 1)
+
+
+@override_settings(STORAGES=_PLAIN_STATIC_STORAGE)
+class CardListaVisibleEnEscritorioTests(TestCase):
+    """issue #8: #3 (ba1e771) escondió `.siga-card-list` en escritorio pensando
+    que era exclusiva de Inventario, pero la clase la reusan `ajustes.html`,
+    `master_list.html` y varias listas más — quedaron en blanco en escritorio.
+    Estos tests no evalúan CSS (pytest no renderiza estilos), pero fijan la
+    estructura HTML que el fix depende de: Inventario debe llevar el modificador
+    `--inventario` que sí se esconde, y las demás pantallas deben conservar la
+    clase base sin ese modificador para no quedar atrapadas por la misma regla
+    si alguien la vuelve a escribir sin escopar."""
+
+    def setUp(self):
+        self.unidad = Unidad.objects.create(nombre="Batallón de Prueba")
+        self.compania = Compania.objects.create(unidad=self.unidad, nombre="Alcatraz")
+        self.deposito = Deposito.objects.create(nombre="Apiay")
+        self.tipo = TipoArmamento.objects.create(
+            nombre="ACE-23", control=TipoArmamento.Control.SERIE
+        )
+        Armamento.objects.create(
+            numero_serie="CARD-1", tipo=self.tipo, compania=self.compania,
+            ubicacion=Armamento.Ubicacion.DEPOSITO, deposito=self.deposito,
+        )
+        user_model = get_user_model()
+        self.admin = user_model.objects.create_user(
+            email="admin@example.com", password="x", role=user_model.Role.ADMIN
+        )
+        self.client.force_login(self.admin)
+        session = self.client.session
+        session[SESSION_KEY] = self.compania.pk
+        session.save()
+
+    def test_ajustes_conserva_la_clase_de_tarjetas_sin_el_modificador_de_inventario(self):
+        response = self.client.get(reverse("inventory:ajustes"))
+        self.assertContains(response, 'class="siga-card-list"')
+        self.assertNotContains(response, "siga-card-list--inventario")
+
+    def test_lista_generica_de_datos_maestros_conserva_la_clase_de_tarjetas(self):
+        response = self.client.get(reverse("inventory:compania_list"))
+        self.assertContains(response, 'class="siga-card-list"')
+        self.assertNotContains(response, "siga-card-list--inventario")
+
+    def test_inventario_lleva_el_modificador_que_si_se_esconde_en_escritorio(self):
+        response = self.client.get(reverse("inventory:armamento_list"))
+        self.assertContains(response, "siga-card-list--inventario")
 
 
 @override_settings(STORAGES=_PLAIN_STATIC_STORAGE)

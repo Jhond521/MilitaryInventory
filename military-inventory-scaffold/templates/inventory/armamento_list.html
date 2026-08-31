@@ -102,7 +102,7 @@
   </table>
 </div>
 
-<div class="siga-card-list">
+<div class="siga-card-list siga-card-list--inventario">
   {% for arma in armamentos %}
   <div class="siga-card">
     <a href="{% url 'inventory:armamento_detalle' arma.pk %}" style="display:block; text-decoration:none; color:inherit;">

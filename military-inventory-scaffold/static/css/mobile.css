@@ -966,8 +966,13 @@ body.siga-app {
     color: #10151e;
   }
 
-  /* Table replaces the mobile card list */
-  .siga-card-list {
+  /* Table replaces the mobile card list — scoped to Inventario specifically
+     (issue #8): .siga-card-list is a generic class reused by ajustes.html,
+     master_list.html (Compañías/Depósitos/Pelotones/Tipos de armamento/
+     Campos personalizados/Unidades), existencia_list.html, movimiento_list.html,
+     prestamo_list.html and usuario_list.html — hiding it unscoped blanked out
+     all of those screens at desktop width. */
+  .siga-card-list--inventario {
     display: none;
   }
 
