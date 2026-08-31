@@ -629,6 +629,82 @@ class CompaniaContextoTests(TestCase):
 
 
 @override_settings(STORAGES=_PLAIN_STATIC_STORAGE)
+class InventarioEscritorioTests(TestCase):
+    """Layout de escritorio de Inventario: sidebar + KPIs + tabla (issue #3)."""
+
+    def setUp(self):
+        self.unidad = Unidad.objects.create(nombre="Batallón de Prueba")
+        self.compania = Compania.objects.create(unidad=self.unidad, nombre="Alcatraz")
+        self.deposito = Deposito.objects.create(nombre="Apiay")
+        self.peloton = Peloton.objects.create(compania=self.compania, nombre="Alcatraz 1")
+        self.soldado = Soldado.objects.create(
+            apellidos_nombres="Ramírez G.", compania=self.compania, peloton=self.peloton
+        )
+        self.tipo = TipoArmamento.objects.create(
+            nombre="ACE-23", control=TipoArmamento.Control.SERIE
+        )
+        Armamento.objects.create(
+            numero_serie="EN-DEP-1", tipo=self.tipo, compania=self.compania,
+            ubicacion=Armamento.Ubicacion.DEPOSITO, deposito=self.deposito,
+        )
+        Armamento.objects.create(
+            numero_serie="EN-MANO-1", tipo=self.tipo, compania=self.compania,
+            ubicacion=Armamento.Ubicacion.EN_MANO, soldado=self.soldado,
+        )
+        arma_baja = Armamento.objects.create(
+            numero_serie="DE-BAJA-1", tipo=self.tipo, compania=self.compania,
+            ubicacion=Armamento.Ubicacion.DEPOSITO, deposito=self.deposito,
+        )
+
+        user_model = get_user_model()
+        self.admin_user = user_model.objects.create_user(
+            email="admin@example.com", password="x", role=user_model.Role.ADMIN
+        )
+        arma_baja.dar_de_baja(
+            motivo=Armamento.MotivoBaja.DANO, fecha=date.today(), usuario=self.admin_user
+        )
+        self.client.force_login(self.admin_user)
+        session = self.client.session
+        session[SESSION_KEY] = self.compania.pk
+        session.save()
+
+    def test_kpis_reflejan_el_desglose_por_ubicacion_y_estado(self):
+        response = self.client.get(reverse("inventory:armamento_list"))
+        self.assertEqual(response.context["kpi_total"], 3)
+        self.assertEqual(response.context["kpi_en_deposito"], 1)
+        self.assertEqual(response.context["kpi_en_mano"], 1)
+        self.assertEqual(response.context["kpi_de_baja"], 1)
+
+    def test_kpis_no_cuentan_otra_compania(self):
+        otra_compania = Compania.objects.create(unidad=self.unidad, nombre="Bisonte")
+        Armamento.objects.create(
+            numero_serie="OTRA-COMP", tipo=self.tipo, compania=otra_compania,
+            ubicacion=Armamento.Ubicacion.DEPOSITO, deposito=self.deposito,
+        )
+        response = self.client.get(reverse("inventory:armamento_list"))
+        self.assertEqual(response.context["kpi_total"], 3)
+
+    def test_tabla_de_escritorio_muestra_las_mismas_series_que_las_tarjetas(self):
+        response = self.client.get(reverse("inventory:armamento_list"))
+        content = response.content.decode()
+        self.assertIn('class="siga-table-wrap"', content)
+        self.assertIn('class="siga-card-list"', content)
+        for serie in ("EN-DEP-1", "EN-MANO-1"):
+            msg = f"{serie} debería aparecer en tabla y tarjeta"
+            self.assertEqual(content.count(serie), 2, msg)
+
+    def test_sidebar_incluye_administracion_apuntando_a_ajustes(self):
+        response = self.client.get(reverse("inventory:armamento_list"))
+        self.assertContains(response, 'class="siga-sidebar__nav"')
+        self.assertContains(response, reverse("inventory:ajustes"))
+        self.assertContains(response, "Administración")
+
+    def test_item_activo_del_sidebar_resalta_inventario(self):
+        response = self.client.get(reverse("inventory:armamento_list"))
+        self.assertContains(response, "siga-sidebar__link--active")
+
+
+@override_settings(STORAGES=_PLAIN_STATIC_STORAGE)
 class BusquedaGlobalArmamentoTests(TestCase):
     """Búsqueda global por cualquier dato del armamento (RF-12, H-11)."""
 

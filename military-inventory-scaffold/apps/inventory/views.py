@@ -135,6 +135,21 @@ def armamento_list(request):
         pelotones = Peloton.objects.all()
     tipos = TipoArmamento.objects.filter(control=TipoArmamento.Control.SERIE).order_by("nombre")
 
+    # KPIs del layout de escritorio (issue #3): sobre el alcance de compañía
+    # actual, sin aplicar q/peloton/ubicacion/tipo — mismo criterio que el
+    # subtítulo "Compañía X" ya usa, no el resultado ya filtrado por texto.
+    kpi_qs = Armamento.objects.all()
+    if compania_id and not ver_todas:
+        kpi_qs = kpi_qs.filter(compania_id=compania_id)
+    kpi_total = kpi_qs.count()
+    kpi_en_deposito = kpi_qs.filter(
+        estado=Armamento.Estado.ACTIVO, ubicacion=Armamento.Ubicacion.DEPOSITO
+    ).count()
+    kpi_en_mano = kpi_qs.filter(
+        estado=Armamento.Estado.ACTIVO, ubicacion=Armamento.Ubicacion.EN_MANO
+    ).count()
+    kpi_de_baja = kpi_qs.filter(estado=Armamento.Estado.BAJA).count()
+
     context = {
         "armamentos": qs,
         "q": q,
@@ -145,6 +160,10 @@ def armamento_list(request):
         "ubicacion_choices": Armamento.Ubicacion.choices,
         "tipo_id": tipo_id,
         "ver_todas": ver_todas,
+        "kpi_total": kpi_total,
+        "kpi_en_deposito": kpi_en_deposito,
+        "kpi_en_mano": kpi_en_mano,
+        "kpi_de_baja": kpi_de_baja,
     }
     return render(request, "inventory/armamento_list.html", context)
 

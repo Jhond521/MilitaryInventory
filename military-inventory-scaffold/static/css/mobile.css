@@ -546,3 +546,284 @@ body.siga-app {
   background: var(--siga-badge-en-mano-bg);
   color: var(--siga-red-dark);
 }
+
+/* Desktop dashboard (issue #3) — sidebar nav + topbar + KPI row + table,
+   matching design_specs/Main.dc.html. Mobile-first: everything below is
+   hidden/off by default and only switches on past the breakpoint, so the
+   phone layout above is untouched under 1024px. */
+.siga-sidebar {
+  display: none;
+}
+
+.siga-kpi-row {
+  display: none;
+}
+
+.siga-table-wrap {
+  display: none;
+}
+
+.siga-header__compania-arrow {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  body.siga-app {
+    padding-bottom: 0;
+  }
+
+  .siga-shell {
+    display: flex;
+    align-items: stretch;
+    min-height: 100vh;
+  }
+
+  .siga-sidebar {
+    display: flex;
+    flex-direction: column;
+    width: 248px;
+    flex-shrink: 0;
+    background: var(--siga-header-bg);
+    border-right: 2px solid var(--siga-header-rule);
+  }
+
+  .siga-sidebar__brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 20px 18px;
+    border-bottom: 1px solid #23262f;
+  }
+
+  .siga-sidebar__brand-title {
+    font-family: var(--font-heading);
+    font-weight: 700;
+    font-size: 18px;
+    letter-spacing: 2px;
+    color: #f4f0e6;
+  }
+
+  .siga-sidebar__brand-sub {
+    color: #8a9099;
+    font-size: 10px;
+    letter-spacing: .5px;
+    text-transform: uppercase;
+  }
+
+  .siga-sidebar__nav {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 14px 12px;
+  }
+
+  .siga-sidebar__link {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 14px;
+    border-radius: 6px;
+    color: #c3c8cf;
+    font-size: 14px;
+    font-family: var(--font-body);
+  }
+
+  .siga-sidebar__link svg {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+  }
+
+  .siga-sidebar .siga-sidebar__link--active {
+    background: var(--siga-red);
+    color: #fff;
+    font-weight: 600;
+  }
+
+  .siga-sidebar__user {
+    margin-top: auto;
+    padding: 16px;
+    border-top: 1px solid #23262f;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .siga-sidebar__avatar {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: var(--siga-red);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-family: var(--font-heading);
+    flex-shrink: 0;
+  }
+
+  .siga-sidebar__user-name {
+    display: block;
+    color: #f4f0e6;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .siga-sidebar__user-role {
+    display: block;
+    color: var(--siga-header-rule);
+    font-size: 11px;
+    letter-spacing: .4px;
+    text-transform: uppercase;
+  }
+
+  .siga-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .siga-bottom-nav {
+    display: none;
+  }
+
+  /* Topbar: reuse .siga-header, restyled — brand lives in the sidebar now */
+  .siga-header {
+    position: static;
+    background: #fbf9f3;
+    color: var(--siga-text);
+    border-bottom: 1px solid var(--siga-card-border);
+    padding: 16px 28px;
+  }
+
+  .siga-header__crest,
+  .siga-header__title {
+    display: none;
+  }
+
+  .siga-header__compania {
+    margin-left: 0;
+    background: var(--siga-header-bg);
+    padding: 8px 14px;
+    font-size: 13px;
+  }
+
+  .siga-header__compania-arrow {
+    display: block;
+    color: var(--siga-header-rule);
+  }
+
+  .siga-header__icon-btn {
+    color: var(--siga-text-muted);
+  }
+
+  .siga-content {
+    max-width: none;
+    margin: 0;
+    padding: 26px 28px;
+  }
+
+  /* KPI row */
+  .siga-kpi-row {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+    margin-bottom: 22px;
+  }
+
+  .siga-kpi {
+    background: var(--siga-card-bg);
+    border: 1px solid var(--siga-card-border);
+    border-left: 3px solid var(--siga-header-bg);
+    border-radius: 8px;
+    padding: 16px 18px;
+  }
+
+  .siga-kpi--deposito {
+    border-left-color: var(--siga-header-rule);
+  }
+
+  .siga-kpi--mano {
+    border-left-color: var(--siga-red);
+  }
+
+  .siga-kpi--baja {
+    border-left-color: #9aa0a6;
+  }
+
+  .siga-kpi__label {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: .6px;
+    color: var(--siga-text-muted);
+  }
+
+  .siga-kpi__value {
+    font-family: var(--font-heading);
+    font-size: 30px;
+    font-weight: 700;
+    color: #10151e;
+  }
+
+  /* Table replaces the mobile card list */
+  .siga-card-list {
+    display: none;
+  }
+
+  .siga-table-wrap {
+    display: block;
+    background: var(--siga-card-bg);
+    border: 1px solid var(--siga-card-border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .siga-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+
+  .siga-table thead {
+    background: var(--siga-header-bg);
+    color: #e9e4d6;
+    font-family: var(--font-heading);
+    font-size: 12px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .siga-table th,
+  .siga-table td {
+    padding: 13px 16px;
+    text-align: left;
+  }
+
+  .siga-table tbody tr {
+    border-bottom: 1px solid #f0ebdd;
+  }
+
+  .siga-table tbody tr:last-child {
+    border-bottom: none;
+  }
+
+  .siga-table tbody tr:nth-child(even) {
+    background: #fbfaf5;
+  }
+
+  .siga-table tbody tr:hover {
+    background: #f5f2e6;
+  }
+
+  .siga-table__serie {
+    font-family: var(--font-mono);
+    color: var(--siga-red-dark);
+    font-weight: 600;
+  }
+
+  .siga-table__muted {
+    color: var(--siga-text-muted);
+  }
+}

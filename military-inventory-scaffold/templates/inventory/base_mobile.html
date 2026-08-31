@@ -11,37 +11,81 @@
     el número cada vez que cambie mobile.css, o un navegador/service worker
     puede seguir sirviendo una copia vieja indefinidamente.
   {% endcomment %}
-  <link rel="stylesheet" href="{% static 'css/mobile.css' %}?v=4">
+  <link rel="stylesheet" href="{% static 'css/mobile.css' %}?v=5">
 </head>
 <body class="siga-app">
-  <header class="siga-header">
-    <img class="siga-header__crest" src="{% static 'icons/icon.svg' %}" alt="" width="32" height="32" style="background:none;">
-    <span class="siga-header__title">SIGA</span>
-    <a class="siga-header__compania" href="{% url 'inventory:elegir_compania' %}?next={{ request.path|urlencode }}">
-      <span class="siga-header__compania-label">CP</span>
-      {{ compania_actual|default:"Elegir" }}
-    </a>
-    <a class="siga-header__icon-btn" href="{% url 'inventory:ajustes' %}" aria-label="Ajustes" title="Ajustes">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-    </a>
-    <a class="siga-header__icon-btn" href="{% url 'accounts:cuenta' %}" aria-label="Mi cuenta" title="Mi cuenta">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="3.2"/><path d="M5 20c0-3.9 3.1-7 7-7s7 3.1 7 7"/></svg>
-    </a>
-  </header>
+  {% with url_name=request.resolver_match.url_name %}
+  <div class="siga-shell">
+    <aside class="siga-sidebar">
+      <div class="siga-sidebar__brand">
+        <img src="{% static 'icons/icon.svg' %}" alt="" width="32" height="32" style="border-radius:6px;">
+        <div>
+          <div class="siga-sidebar__brand-title">SIGA</div>
+          <div class="siga-sidebar__brand-sub">Batallón de Selva 52</div>
+        </div>
+      </div>
+      <nav class="siga-sidebar__nav">
+        <a class="siga-sidebar__link{% if url_name == 'armamento_list' or url_name == 'armamento_entregar' or url_name == 'armamento_devolver' %} siga-sidebar__link--active{% endif %}" href="{% url 'inventory:armamento_list' %}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 4v16"/></svg>
+          Inventario
+        </a>
+        <a class="siga-sidebar__link{% if url_name == 'existencia_list' %} siga-sidebar__link--active{% endif %}" href="{% url 'inventory:existencia_list' %}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l8 4v10l-8 4-8-4V7z"/><path d="M4 7l8 4 8-4M12 11v10"/></svg>
+          Munición
+        </a>
+        <a class="siga-sidebar__link{% if url_name == 'soldado_list' %} siga-sidebar__link--active{% endif %}" href="{% url 'inventory:soldado_list' %}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="3.2"/><path d="M5 20c0-3.9 3.1-7 7-7s7 3.1 7 7"/></svg>
+          Soldados
+        </a>
+        <a class="siga-sidebar__link{% if url_name == 'movimiento_list' %} siga-sidebar__link--active{% endif %}" href="{% url 'inventory:movimiento_list' %}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12h4l2-7 4 14 2-7h6"/></svg>
+          Movimientos
+        </a>
+        <a class="siga-sidebar__link{% if url_name == 'ajustes' %} siga-sidebar__link--active{% endif %}" href="{% url 'inventory:ajustes' %}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+          Administración
+        </a>
+      </nav>
+      <a class="siga-sidebar__user" href="{% url 'accounts:cuenta' %}">
+        <span class="siga-sidebar__avatar">{{ user.email|slice:":2"|upper }}</span>
+        <span>
+          <span class="siga-sidebar__user-name">{{ user.email }}</span>
+          <span class="siga-sidebar__user-role">{{ user.get_role_display }}</span>
+        </span>
+      </a>
+    </aside>
 
-  <main class="siga-content">
-    {% if messages %}
-    <ul class="siga-messages">
-      {% for message in messages %}
-      <li class="{{ message.tags }}">{{ message }}</li>
-      {% endfor %}
-    </ul>
-    {% endif %}
-    {% block content %}{% endblock %}
-  </main>
+    <div class="siga-main">
+      <header class="siga-header">
+        <img class="siga-header__crest" src="{% static 'icons/icon.svg' %}" alt="" width="32" height="32" style="background:none;">
+        <span class="siga-header__title">SIGA</span>
+        <a class="siga-header__compania" href="{% url 'inventory:elegir_compania' %}?next={{ request.path|urlencode }}">
+          <span class="siga-header__compania-label">Compañía</span>
+          {{ compania_actual|default:"Elegir" }}
+          <svg class="siga-header__compania-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+        </a>
+        <a class="siga-header__icon-btn" href="{% url 'inventory:ajustes' %}" aria-label="Ajustes" title="Ajustes">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        </a>
+        <a class="siga-header__icon-btn" href="{% url 'accounts:cuenta' %}" aria-label="Mi cuenta" title="Mi cuenta">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="3.2"/><path d="M5 20c0-3.9 3.1-7 7-7s7 3.1 7 7"/></svg>
+        </a>
+      </header>
+
+      <main class="siga-content">
+        {% if messages %}
+        <ul class="siga-messages">
+          {% for message in messages %}
+          <li class="{{ message.tags }}">{{ message }}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
 
   <nav class="siga-bottom-nav">
-    {% with url_name=request.resolver_match.url_name %}
     <a class="siga-bottom-nav__item{% if url_name == 'armamento_list' or url_name == 'armamento_entregar' or url_name == 'armamento_devolver' %} siga-bottom-nav__item--active{% endif %}" href="{% url 'inventory:armamento_list' %}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 4v16"/></svg>
       Inventario
@@ -58,7 +102,7 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l8 4v10l-8 4-8-4V7z"/><path d="M4 7l8 4 8-4M12 11v10"/></svg>
       Munición
     </a>
-    {% endwith %}
   </nav>
+  {% endwith %}
 </body>
 </html>
