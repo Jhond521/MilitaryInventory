@@ -26,4 +26,5 @@
   {% endfor %}
   <button type="submit" class="siga-btn-primary" style="background:var(--siga-red-dark);">Confirmar baja</button>
 </form>
+<a class="siga-btn-secondary" style="display:block; text-decoration:none; margin-top:10px;" href="{% url 'inventory:armamento_editar' arma.pk %}">Cancelar</a>
 {% endblock %}

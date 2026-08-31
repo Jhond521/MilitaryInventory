@@ -28,6 +28,10 @@ Controlar quién entra y qué puede hacer.
   `UsuarioForm` en `apps/accounts/forms.py`) — solo ADMIN, enlazada desde "Ajustes". El
   login/logout/cambio de contraseña propios (antes del `AdminSite`) también viven ahí,
   sobre las vistas genéricas de `django.contrib.auth.views`.
+- **Mejora post-E2E**: `usuario_editar` bloquea que un ADMIN se quite a sí mismo el rol o
+  se desactive — con 6 usuarios en total (y sin el admin de Django como red de
+  seguridad), eso podía dejar a todos sin nadie que gestione usuarios. Sí puede hacerlo
+  sobre *otro* administrador.
 
 #### H-02 — Lista blanca de correos ✅
 
@@ -91,6 +95,11 @@ Compañías, depósitos, tipos y soldados.
   genéricas de Django + `templates/inventory/master_*.html`, reusadas también por Pelotón
   y CampoPersonalizado) — accesible desde "Ajustes" en el header. Solo ADMIN
   añade/edita/borra (RF-01), cualquiera ve.
+- **Mejora post-E2E**: borrar un registro referenciado por otro (p.ej. una compañía con
+  pelotones — todas las FK de datos maestros son `on_delete=PROTECT`) reventaba con un
+  `ProtectedError` sin capturar (500). `MasterDeleteView.form_valid()` ahora lo atrapa y
+  muestra un mensaje claro en vez de la página de confirmación. Se probó borrando
+  compañías, tipos y depósitos con dependientes.
 
 #### H-05 — Siembra de datos iniciales ✅
 
@@ -108,6 +117,10 @@ Compañías, depósitos, tipos y soldados.
 - **Actualización (ADR-0004)**: alta/edición propias (`inventory:soldado_crear`/
   `_editar`, `SoldadoForm` en `forms.py`) enlazadas desde la pantalla de Soldados —
   solo ADMIN, mismo criterio que el resto de datos maestros.
+- **Mejora post-E2E**: faltaba borrar un soldado (el admin retirado sí lo permitía).
+  `inventory:soldado_borrar` lo agrega, con el mismo manejo de `ProtectedError` que el
+  CRUD genérico (`_borrar_protegido()` en `views.py` — reusado también por
+  `existencia_borrar`, que tenía el mismo hueco).
 
 ### Épica E-03 — Armamento y movimientos
 
@@ -297,7 +310,7 @@ El corazón del sistema.
 - [x] T-06 — Habilitar PWA: web app manifest + service worker, íconos (escudo), responsive mobile-first, navegación inferior (RF-17, RNF-04)
   - **Notas técnicas**: manifest/service worker ya existían (T-07); esta historia agregó
     las plantillas mobile-first reales — `templates/inventory/base_mobile.html` (header +
-    banner de instalación + navegación inferior de 4 ítems) y las 6 pantallas que cuelgan
+    navegación inferior de 4 ítems) y las 6 pantallas que cuelgan
     de ella (`armamento_list`, `armamento_entregar`, `armamento_devolver`,
     `movimiento_list`, `soldado_list`, `existencia_list`), estilizadas con
     `static/css/mobile.css` (Oswald + IBM Plex Sans/Mono, paleta extraída de un canvas de

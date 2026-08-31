@@ -65,6 +65,22 @@ def usuario_editar(request, pk):
     if request.method == "POST":
         form = UsuarioForm(request.POST, instance=usuario, es_edicion=True)
         if form.is_valid():
+            # Con 6 usuarios en total, un ADMIN podría quitarse a sí mismo el
+            # rol o desactivarse sin darse cuenta, dejando a todos sin nadie
+            # que gestione usuarios (nadie más puede revertirlo desde la UI).
+            if usuario.pk == request.user.pk and (
+                form.cleaned_data["role"] != User.Role.ADMIN
+                or not form.cleaned_data["is_active"]
+            ):
+                messages.error(
+                    request,
+                    "No puedes quitarte a ti mismo el rol de administrador ni desactivarte.",
+                )
+                return render(
+                    request,
+                    "accounts/usuario_form.html",
+                    {"form": form, "titulo": f"Editar {usuario.email}", "usuario": usuario},
+                )
             form.save()
             messages.success(request, f"Usuario {usuario.email} actualizado.")
             return redirect("accounts:usuario_list")

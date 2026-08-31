@@ -47,6 +47,7 @@
     {% if user.is_admin_role %}
     <div class="siga-card__meta" style="margin-top:8px;">
       <a href="{% url 'inventory:existencia_editar' existencia.pk %}">Editar</a>
+      <a href="{% url 'inventory:existencia_borrar' existencia.pk %}" style="color:var(--siga-red-dark);">Borrar</a>
     </div>
     {% endif %}
   </div>

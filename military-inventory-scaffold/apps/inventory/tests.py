@@ -987,3 +987,145 @@ class ImportarArmamentoTests(TestCase):
             dry_run=True,
         )
         self.assertEqual(Armamento.objects.count(), 0)
+
+
+@override_settings(STORAGES=_PLAIN_STATIC_STORAGE)
+class MasterCrudTests(TestCase):
+    """CRUD genérico de datos maestros (`apps/inventory/crud.py`)."""
+
+    def setUp(self):
+        self.unidad = Unidad.objects.create(nombre="Batallón de Prueba")
+        self.compania = Compania.objects.create(unidad=self.unidad, nombre="Alcatraz")
+        self.deposito = Deposito.objects.create(nombre="Apiay")
+        user_model = get_user_model()
+        self.admin = user_model.objects.create_user(
+            email="admin@example.com", password="x", role=user_model.Role.ADMIN
+        )
+        self.client.force_login(self.admin)
+        session = self.client.session
+        session[SESSION_KEY] = self.compania.pk
+        session.save()
+
+    def test_borrar_compania_sin_dependientes(self):
+        response = self.client.post(
+            reverse("inventory:compania_borrar", args=[self.compania.pk])
+        )
+        self.assertRedirects(response, reverse("inventory:compania_list"))
+        self.assertFalse(Compania.objects.filter(pk=self.compania.pk).exists())
+
+    def test_borrar_compania_con_dependientes_no_revienta(self):
+        """Compania.pelotones usa on_delete=PROTECT — borrar una compañía con
+        pelotones debe mostrar un error, no un 500 (ProtectedError sin
+        capturar)."""
+        Peloton.objects.create(compania=self.compania, nombre="Alcatraz 1")
+        response = self.client.post(
+            reverse("inventory:compania_borrar", args=[self.compania.pk]), follow=True
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(Compania.objects.filter(pk=self.compania.pk).exists())
+        self.assertContains(response, "No se puede borrar")
+
+    def test_crear_editar_borrar_deposito(self):
+        response = self.client.post(
+            reverse("inventory:deposito_crear"), {"nombre": "Caruru", "descripcion": ""}
+        )
+        self.assertRedirects(response, reverse("inventory:deposito_list"))
+        nuevo = Deposito.objects.get(nombre="Caruru")
+
+        response = self.client.post(
+            reverse("inventory:deposito_editar", args=[nuevo.pk]),
+            {"nombre": "Caruru", "descripcion": "Depósito secundario"},
+        )
+        self.assertRedirects(response, reverse("inventory:deposito_list"))
+        nuevo.refresh_from_db()
+        self.assertEqual(nuevo.descripcion, "Depósito secundario")
+
+        response = self.client.post(reverse("inventory:deposito_borrar", args=[nuevo.pk]))
+        self.assertRedirects(response, reverse("inventory:deposito_list"))
+        self.assertFalse(Deposito.objects.filter(pk=nuevo.pk).exists())
+
+    def test_nombre_duplicado_muestra_error_de_formulario(self):
+        response = self.client.post(
+            reverse("inventory:deposito_crear"), {"nombre": "Apiay", "descripcion": ""}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Deposito.objects.filter(nombre="Apiay").count(), 1)
+
+
+@override_settings(STORAGES=_PLAIN_STATIC_STORAGE)
+class SoldadoExistenciaBorrarTests(TestCase):
+    """Borrar soldado/existencia (ADMIN-only), con el mismo manejo de
+    ProtectedError que `MasterDeleteView` (ver `_borrar_protegido`)."""
+
+    def setUp(self):
+        self.unidad = Unidad.objects.create(nombre="Batallón de Prueba")
+        self.compania = Compania.objects.create(unidad=self.unidad, nombre="Alcatraz")
+        self.peloton = Peloton.objects.create(compania=self.compania, nombre="Alcatraz 1")
+        self.deposito = Deposito.objects.create(nombre="Apiay")
+        self.municion = TipoArmamento.objects.create(
+            nombre="MUNICION CAL 5.56MM", control=TipoArmamento.Control.CANTIDAD
+        )
+        user_model = get_user_model()
+        self.admin = user_model.objects.create_user(
+            email="admin@example.com", password="x", role=user_model.Role.ADMIN
+        )
+        self.client.force_login(self.admin)
+        session = self.client.session
+        session[SESSION_KEY] = self.compania.pk
+        session.save()
+
+    def test_borrar_soldado_sin_armas(self):
+        soldado = Soldado.objects.create(
+            apellidos_nombres="Pérez Juan", compania=self.compania, peloton=self.peloton
+        )
+        response = self.client.post(reverse("inventory:soldado_borrar", args=[soldado.pk]))
+        self.assertRedirects(response, reverse("inventory:soldado_list"))
+        self.assertFalse(Soldado.objects.filter(pk=soldado.pk).exists())
+
+    def test_borrar_soldado_con_arma_en_mano_no_revienta(self):
+        soldado = Soldado.objects.create(
+            apellidos_nombres="Pérez Juan", compania=self.compania, peloton=self.peloton
+        )
+        tipo = TipoArmamento.objects.create(
+            nombre="FUSIL AR CAL. 5.56 MM", control=TipoArmamento.Control.SERIE
+        )
+        Armamento.objects.create(
+            numero_serie="S-1", tipo=tipo, compania=self.compania,
+            ubicacion=Armamento.Ubicacion.EN_MANO, soldado=soldado,
+        )
+        response = self.client.post(
+            reverse("inventory:soldado_borrar", args=[soldado.pk]), follow=True
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(Soldado.objects.filter(pk=soldado.pk).exists())
+        self.assertContains(response, "No se puede borrar")
+
+    def test_borrar_existencia(self):
+        existencia = Existencia.objects.create(
+            tipo=self.municion, compania=self.compania, deposito=self.deposito, cantidad=10
+        )
+        response = self.client.post(
+            reverse("inventory:existencia_borrar", args=[existencia.pk])
+        )
+        self.assertRedirects(response, reverse("inventory:existencia_list"))
+        self.assertFalse(Existencia.objects.filter(pk=existencia.pk).exists())
+
+    def test_enlace_no_puede_borrar_soldado_ni_existencia(self):
+        soldado = Soldado.objects.create(
+            apellidos_nombres="Pérez Juan", compania=self.compania, peloton=self.peloton
+        )
+        existencia = Existencia.objects.create(
+            tipo=self.municion, compania=self.compania, deposito=self.deposito, cantidad=10
+        )
+        enlace = get_user_model().objects.create_user(email="enlace@example.com", password="x")
+        self.client.force_login(enlace)
+        session = self.client.session
+        session[SESSION_KEY] = self.compania.pk
+        session.save()
+
+        response = self.client.post(reverse("inventory:soldado_borrar", args=[soldado.pk]))
+        self.assertEqual(response.status_code, 403)
+        response = self.client.post(
+            reverse("inventory:existencia_borrar", args=[existencia.pk])
+        )
+        self.assertEqual(response.status_code, 403)

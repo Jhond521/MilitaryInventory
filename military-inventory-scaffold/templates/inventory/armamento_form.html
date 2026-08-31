@@ -17,6 +17,7 @@
 {% endif %}
 <form method="post">
   {% csrf_token %}
+  {% if form.non_field_errors %}<div class="siga-field-error" style="margin-bottom:14px;">{{ form.non_field_errors|join:" " }}</div>{% endif %}
   {% for field in form %}
   <div class="siga-field">
     <label for="{{ field.id_for_label }}">{{ field.label }}</label>
@@ -26,7 +27,8 @@
   {% endfor %}
   <button type="submit" class="siga-btn-primary">Guardar</button>
 </form>
+<a class="siga-btn-secondary" style="display:block; text-decoration:none; margin-top:10px;" href="{% url 'inventory:armamento_list' %}">Cancelar</a>
 {% if arma %}
-<a class="siga-btn-secondary" style="display:block; text-decoration:none; margin-top:14px; color:var(--siga-red-dark); border-color:var(--siga-red-dark);" href="{% url 'inventory:armamento_baja' arma.pk %}">Dar de baja</a>
+<a class="siga-btn-secondary" style="display:block; text-decoration:none; margin-top:10px; color:var(--siga-red-dark); border-color:var(--siga-red-dark);" href="{% url 'inventory:armamento_baja' arma.pk %}">Dar de baja</a>
 {% endif %}
 {% endblock %}

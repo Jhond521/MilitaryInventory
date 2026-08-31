@@ -15,4 +15,7 @@
   {% if form.non_field_errors %}<div class="siga-field-error">{{ form.non_field_errors|join:" " }}</div>{% endif %}
   <button type="submit" class="siga-btn-primary">Guardar</button>
 </form>
+{% if cancelar_url %}
+<a class="siga-btn-secondary" style="display:block; text-decoration:none; margin-top:10px;" href="{% url cancelar_url %}">Cancelar</a>
+{% endif %}
 {% endblock %}

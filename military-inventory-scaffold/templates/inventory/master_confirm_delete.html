@@ -7,4 +7,5 @@
   {% csrf_token %}
   <button type="submit" class="siga-btn-primary" style="background:var(--siga-red-dark);">Sí, borrar</button>
 </form>
+<a class="siga-btn-secondary" style="display:block; text-decoration:none; margin-top:10px;" href="{% url cancelar_url %}">Cancelar</a>
 {% endblock %}

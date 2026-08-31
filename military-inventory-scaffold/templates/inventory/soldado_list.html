@@ -42,6 +42,7 @@
     </span>
     {% if user.is_admin_role %}
     <a href="{% url 'inventory:soldado_editar' soldado.pk %}">Editar</a>
+    <a href="{% url 'inventory:soldado_borrar' soldado.pk %}" style="margin-left:8px; color:var(--siga-red-dark);">Borrar</a>
     {% endif %}
   </div>
   {% empty %}

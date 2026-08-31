@@ -4,6 +4,7 @@
 <h1 class="siga-page-title">{{ titulo }}</h1>
 <form method="post">
   {% csrf_token %}
+  {% if form.non_field_errors %}<div class="siga-field-error" style="margin-bottom:14px;">{{ form.non_field_errors|join:" " }}</div>{% endif %}
   {% for field in form %}
   <div class="siga-field">
     <label for="{{ field.id_for_label }}">{{ field.label }}</label>
@@ -14,6 +15,7 @@
   <button type="submit" class="siga-btn-primary">Guardar</button>
 </form>
 {% if usuario %}
-<a class="siga-btn-secondary" style="display:block; text-decoration:none; margin-top:14px;" href="{% url 'accounts:usuario_restablecer_password' usuario.pk %}">Restablecer contraseña</a>
+<a class="siga-btn-secondary" style="display:block; text-decoration:none; margin-top:10px;" href="{% url 'accounts:usuario_restablecer_password' usuario.pk %}">Restablecer contraseña</a>
 {% endif %}
+<a class="siga-btn-secondary" style="display:block; text-decoration:none; margin-top:10px;" href="{% url 'accounts:usuario_list' %}">Cancelar</a>
 {% endblock %}

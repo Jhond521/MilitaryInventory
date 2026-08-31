@@ -5,7 +5,7 @@ existe (ADR-0004); esto es la única UI de la aplicación.
 """
 from django.contrib import messages
 from django.core.exceptions import ValidationError
-from django.db.models import Q
+from django.db.models import ProtectedError, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -69,6 +69,23 @@ def ajustes(request):
     """Reemplazo del índice del admin de Django: enlaces a los módulos de
     datos maestros y (solo ADMIN) usuarios."""
     return render(request, "inventory/ajustes.html")
+
+
+def _borrar_protegido(request, obj, redirect_url_name):
+    """Borra `obj`, mostrando un error claro (en vez de un 500) si otro
+    registro depende de él vía on_delete=PROTECT — mismo criterio que
+    `MasterDeleteView.form_valid` en `crud.py`, para las vistas de Soldado/
+    Existencia que no usan el CRUD genérico (llevan su propio listado con
+    búsqueda y contexto de compañía)."""
+    try:
+        obj.delete()
+    except ProtectedError:
+        messages.error(
+            request, f'No se puede borrar "{obj}" porque otros registros dependen de él.'
+        )
+    else:
+        messages.success(request, f'"{obj}" borrado.')
+    return redirect(redirect_url_name)
 
 
 def _companias_scope(request):
@@ -318,9 +335,8 @@ def soldado_crear(request):
             return redirect("inventory:soldado_list")
     else:
         form = SoldadoForm()
-    return render(
-        request, "inventory/master_form.html", {"form": form, "titulo": "Añadir soldado"}
-    )
+    context = {"form": form, "titulo": "Añadir soldado", "cancelar_url": "inventory:soldado_list"}
+    return render(request, "inventory/master_form.html", context)
 
 
 @requiere_admin
@@ -334,11 +350,19 @@ def soldado_editar(request, pk):
             return redirect("inventory:soldado_list")
     else:
         form = SoldadoForm(instance=soldado)
-    return render(
-        request,
-        "inventory/master_form.html",
-        {"form": form, "titulo": f"Editar {soldado}"},
-    )
+    context = {
+        "form": form, "titulo": f"Editar {soldado}", "cancelar_url": "inventory:soldado_list",
+    }
+    return render(request, "inventory/master_form.html", context)
+
+
+@requiere_admin
+def soldado_borrar(request, pk):
+    soldado = get_object_or_404(Soldado, pk=pk)
+    if request.method == "POST":
+        return _borrar_protegido(request, soldado, "inventory:soldado_list")
+    context = {"object": soldado, "cancelar_url": "inventory:soldado_list"}
+    return render(request, "inventory/master_confirm_delete.html", context)
 
 
 @requiere_autorizado
@@ -376,9 +400,10 @@ def existencia_crear(request):
             return redirect("inventory:existencia_list")
     else:
         form = ExistenciaForm()
-    return render(
-        request, "inventory/master_form.html", {"form": form, "titulo": "Añadir existencia"}
-    )
+    context = {
+        "form": form, "titulo": "Añadir existencia", "cancelar_url": "inventory:existencia_list",
+    }
+    return render(request, "inventory/master_form.html", context)
 
 
 @requiere_admin
@@ -392,11 +417,20 @@ def existencia_editar(request, pk):
             return redirect("inventory:existencia_list")
     else:
         form = ExistenciaForm(instance=existencia)
-    return render(
-        request,
-        "inventory/master_form.html",
-        {"form": form, "titulo": f"Editar {existencia}"},
-    )
+    context = {
+        "form": form, "titulo": f"Editar {existencia}",
+        "cancelar_url": "inventory:existencia_list",
+    }
+    return render(request, "inventory/master_form.html", context)
+
+
+@requiere_admin
+def existencia_borrar(request, pk):
+    existencia = get_object_or_404(Existencia, pk=pk)
+    if request.method == "POST":
+        return _borrar_protegido(request, existencia, "inventory:existencia_list")
+    context = {"object": existencia, "cancelar_url": "inventory:existencia_list"}
+    return render(request, "inventory/master_confirm_delete.html", context)
 
 
 @requiere_autorizado
