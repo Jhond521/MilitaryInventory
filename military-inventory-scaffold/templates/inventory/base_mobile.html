@@ -6,7 +6,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>{% block title %}SIGA{% endblock %} — Batallón de Selva No. 52</title>
   {% include "inventory/_pwa_head.html" %}
-  <link rel="stylesheet" href="{% static 'css/mobile.css' %}">
+  {% comment %}
+    ?v= es un cache-buster manual (sin manifest de estáticos en dev) — subir
+    el número cada vez que cambie mobile.css, o un navegador/service worker
+    puede seguir sirviendo una copia vieja indefinidamente.
+  {% endcomment %}
+  <link rel="stylesheet" href="{% static 'css/mobile.css' %}?v=3">
 </head>
 <body class="siga-app">
   <header class="siga-header">

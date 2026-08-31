@@ -493,11 +493,11 @@ body.siga-app {
   gap: 3px;
   min-height: 40px;
   padding: 8px 0 10px;
-  /* #8a9099 sobre el fondo #0e1420 pasa el mínimo de contraste de texto
-     (WCAG AA, ~5.3:1) pero un ícono de trazo fino (1.6px) es mucho más
-     difícil de percibir que texto a ese mismo contraste — sobre todo en
-     pantallas OLED/luz solar — así que se sube a un gris más claro. */
-  color: #b4bcc7;
+  /* Un gris intermedio seguía leyéndose apagado en trazos finos de ícono
+     (no solo texto) en algunas pantallas — se sube al mismo crema casi
+     blanco que ya se usa para el texto del header, contraste máximo. */
+  color: #f4f0e6;
+  opacity: .72;
   font-size: 10px;
   font-family: var(--font-body);
   text-transform: uppercase;
@@ -511,6 +511,7 @@ body.siga-app {
 
 .siga-bottom-nav__item--active {
   color: var(--siga-header-rule);
+  opacity: 1;
 }
 
 /* Messages */
