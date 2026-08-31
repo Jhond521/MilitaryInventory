@@ -1,24 +1,190 @@
-{% extends "inventory/base_mobile.html" %}
-{% block title %}Elegir compañía{% endblock %}
-{% block content %}
-<h1 class="siga-page-title">Elegir compañía de trabajo</h1>
-<p class="siga-page-subtitle">
-  Esta es tu compañía de trabajo: los listados de inventario y soldados se filtran a ella
-  por defecto, pero puedes seguir viendo las demás y cambiarla cuando quieras sin cerrar
-  sesión.
-</p>
-<form method="post">
-  {% csrf_token %}
-  <input type="hidden" name="next" value="{{ next }}">
-  <div class="siga-pick-list">
-    {% for compania in companias %}
-    <label class="siga-pick-item" style="cursor:pointer;">
-      <input type="radio" name="compania" value="{{ compania.pk }}"
-        {% if compania.pk == actual_id %}checked{% endif %}>
-      <span class="siga-pick-item__name">{{ compania.nombre }}</span>
-    </label>
-    {% endfor %}
-  </div>
-  <button type="submit" class="siga-btn-primary">Continuar</button>
-</form>
-{% endblock %}
+<!DOCTYPE html>
+{% load static %}
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Elegir compañía — SIGA</title>
+  {% include "inventory/_pwa_head.html" %}
+  <link rel="stylesheet" href="{% static 'css/mobile.css' %}?v=8">
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+
+    body.siga-compania-picker {
+      min-height: 100vh;
+      background: radial-gradient(120% 80% at 50% -10%, #172032 0%, #0e1420 60%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 48px 20px;
+      font-family: var(--font-body);
+    }
+
+    .siga-compania-picker__crest {
+      width: 72px;
+      height: auto;
+      border-radius: 6px;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, .6);
+    }
+
+    .siga-compania-picker__title {
+      margin-top: 18px;
+      color: #f4f0e6;
+      font-family: var(--font-heading);
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      text-align: center;
+    }
+
+    .siga-compania-picker__subtitle {
+      color: #9aa0a8;
+      font-size: 13px;
+      margin-top: 6px;
+      text-align: center;
+    }
+
+    .siga-compania-picker__grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+      margin-top: 36px;
+      width: 100%;
+      max-width: 1060px;
+    }
+
+    @media (min-width: 640px) {
+      .siga-compania-picker__grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    }
+
+    .siga-compania-card {
+      display: block;
+      width: 100%;
+      text-align: left;
+      cursor: pointer;
+      background: rgba(18, 25, 37, .5);
+      border: 1px solid #2a3140;
+      border-radius: 12px;
+      padding: 20px;
+      color: inherit;
+      font: inherit;
+    }
+
+    .siga-compania-card--reciente {
+      background: #f7f4ec;
+      border-color: var(--siga-header-rule);
+    }
+
+    .siga-compania-card__top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .siga-compania-card__badge {
+      width: 48px;
+      height: 48px;
+      border-radius: 10px;
+      background: #0b0f16;
+      color: var(--siga-header-rule);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-heading);
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .siga-compania-card--reciente .siga-compania-card__badge {
+      background: var(--siga-header-bg);
+    }
+
+    .siga-compania-card__tag {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      color: var(--siga-red-dark);
+      border: 1px solid #e3c6c1;
+      background: var(--siga-badge-en-mano-bg);
+      border-radius: 20px;
+      padding: 3px 9px;
+    }
+
+    .siga-compania-card__name {
+      margin-top: 14px;
+      font-family: var(--font-heading);
+      font-size: 17px;
+      font-weight: 600;
+      letter-spacing: .5px;
+      color: #f4f0e6;
+    }
+
+    .siga-compania-card--reciente .siga-compania-card__name {
+      color: #10151e;
+    }
+
+    .siga-compania-card__meta {
+      color: #8a9099;
+      font-size: 12px;
+      margin-top: 3px;
+    }
+
+    .siga-compania-card--reciente .siga-compania-card__meta {
+      color: var(--siga-text-muted);
+    }
+
+    .siga-compania-card--nueva {
+      border-style: dashed;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      color: #7c828b;
+      text-align: center;
+      text-decoration: none;
+    }
+
+    .siga-compania-picker__footer {
+      margin-top: 30px;
+      color: #7c828b;
+      font-size: 12px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body class="siga-compania-picker">
+  <img class="siga-compania-picker__crest" src="{% static 'icons/crest.png' %}" alt="Escudo del Batallón de Selva No. 52">
+  <div class="siga-compania-picker__title">Seleccione compañía</div>
+  <div class="siga-compania-picker__subtitle">Batallón de Selva N.º 52 · elija con qué compañía va a trabajar</div>
+
+  <form method="post" id="siga-compania-form">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ next }}">
+    <div class="siga-compania-picker__grid">
+      {% for opcion in opciones %}
+      <label class="siga-compania-card{% if opcion.reciente %} siga-compania-card--reciente{% endif %}">
+        <input type="radio" name="compania" value="{{ opcion.compania.pk }}" style="position:absolute; opacity:0; pointer-events:none;"
+          {% if opcion.reciente %}checked{% endif %} onchange="document.getElementById('siga-compania-form').submit()">
+        <div class="siga-compania-card__top">
+          <span class="siga-compania-card__badge">{{ opcion.codigo }}</span>
+          {% if opcion.reciente %}<span class="siga-compania-card__tag">Reciente</span>{% endif %}
+        </div>
+        <div class="siga-compania-card__name">{{ opcion.compania.nombre|upper }}</div>
+        <div class="siga-compania-card__meta">Código {{ opcion.codigo }} · {{ opcion.total }} elemento{{ opcion.total|pluralize }}</div>
+      </label>
+      {% endfor %}
+      {% if user.is_admin_role %}
+      <a class="siga-compania-card siga-compania-card--nueva" href="{% url 'inventory:compania_crear' %}">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--siga-header-rule)" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+        Nueva compañía
+      </a>
+      {% endif %}
+    </div>
+  </form>
+
+  <div class="siga-compania-picker__footer">Podrá cambiar de compañía en cualquier momento sin cerrar sesión.</div>
+</body>
+</html>

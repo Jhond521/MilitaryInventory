@@ -37,6 +37,15 @@ from .models import (
 SESSION_KEY = "compania_actual_id"
 
 
+def _codigo_compania(nombre):
+    """Código corto para la tarjeta de selección (issue #6). `Compania` no
+    tiene un campo `codigo` propio (PRD P-5, aún sin confirmar por David) —
+    se deriva de `nombre` reproduciendo el mapeo que ya describe el PRD
+    (RF-03): una letra para los nombres largos, el nombre tal cual para los
+    que ya son cortos/siglas (ASPC, IR)."""
+    return nombre if len(nombre) <= 4 else nombre[0].upper()
+
+
 @requiere_autorizado
 def elegir_compania(request):
     companias = Compania.objects.order_by("nombre")
@@ -55,10 +64,22 @@ def elegir_compania(request):
             request.session[SESSION_KEY] = int(compania_id)
             return redirect(next_url)
 
+    actual_id = request.session.get(SESSION_KEY)
+    opciones = [
+        {
+            "compania": compania,
+            "codigo": _codigo_compania(compania.nombre),
+            "total": Armamento.objects.filter(compania=compania).count(),
+            "reciente": compania.pk == actual_id,
+        }
+        for compania in companias
+    ]
+
     context = {
         "title": "Elegir compañía de trabajo",
         "companias": companias,
-        "actual_id": request.session.get(SESSION_KEY),
+        "opciones": opciones,
+        "actual_id": actual_id,
         "next": next_url,
     }
     return render(request, "inventory/elegir_compania.html", context)

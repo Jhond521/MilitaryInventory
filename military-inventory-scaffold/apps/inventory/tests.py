@@ -629,6 +629,71 @@ class CompaniaContextoTests(TestCase):
 
 
 @override_settings(STORAGES=_PLAIN_STATIC_STORAGE)
+class CompanySelectorTests(TestCase):
+    """Pantalla independiente de selección de compañía (issue #6)."""
+
+    def setUp(self):
+        self.unidad = Unidad.objects.create(nombre="Batallón de Prueba")
+        self.alcatraz = Compania.objects.create(unidad=self.unidad, nombre="Alcatraz")
+        self.aspc = Compania.objects.create(unidad=self.unidad, nombre="ASPC")
+        self.deposito = Deposito.objects.create(nombre="Apiay")
+        self.tipo = TipoArmamento.objects.create(
+            nombre="ACE-23", control=TipoArmamento.Control.SERIE
+        )
+        Armamento.objects.create(
+            numero_serie="SEL-1", tipo=self.tipo, compania=self.alcatraz,
+            ubicacion=Armamento.Ubicacion.DEPOSITO, deposito=self.deposito,
+        )
+        Armamento.objects.create(
+            numero_serie="SEL-2", tipo=self.tipo, compania=self.alcatraz,
+            ubicacion=Armamento.Ubicacion.DEPOSITO, deposito=self.deposito,
+        )
+        user_model = get_user_model()
+        self.admin_user = user_model.objects.create_user(
+            email="admin@example.com", password="x", role=user_model.Role.ADMIN
+        )
+        self.enlace_user = user_model.objects.create_user(
+            email="enlace@example.com", password="x", role=user_model.Role.ENLACE
+        )
+
+    def test_tarjeta_muestra_codigo_derivado_y_total(self):
+        self.client.force_login(self.admin_user)
+        response = self.client.get(reverse("inventory:elegir_compania"))
+        self.assertContains(response, "ALCATRAZ")
+        self.assertContains(response, "Código A · 2 elementos")
+        self.assertContains(response, "ASPC")
+        self.assertContains(response, "Código ASPC · 0 elementos")
+
+    def test_compania_en_sesion_tiene_tag_reciente(self):
+        self.client.force_login(self.admin_user)
+        session = self.client.session
+        session[SESSION_KEY] = self.alcatraz.pk
+        session.save()
+
+        response = self.client.get(reverse("inventory:elegir_compania"))
+        content = response.content.decode()
+        self.assertIn("siga-compania-card--reciente", content)
+        self.assertIn("Reciente", content)
+
+    def test_nueva_compania_visible_solo_para_administrador(self):
+        crear_url = reverse("inventory:compania_crear")
+
+        self.client.force_login(self.admin_user)
+        response = self.client.get(reverse("inventory:elegir_compania"))
+        self.assertContains(response, crear_url)
+
+        self.client.force_login(self.enlace_user)
+        response = self.client.get(reverse("inventory:elegir_compania"))
+        self.assertNotContains(response, crear_url)
+
+    def test_no_hereda_el_sidebar_ni_el_bottom_nav_compartidos(self):
+        self.client.force_login(self.admin_user)
+        response = self.client.get(reverse("inventory:elegir_compania"))
+        self.assertNotContains(response, "siga-sidebar__nav")
+        self.assertNotContains(response, "siga-bottom-nav")
+
+
+@override_settings(STORAGES=_PLAIN_STATIC_STORAGE)
 class InventarioEscritorioTests(TestCase):
     """Layout de escritorio de Inventario: sidebar + KPIs + tabla (issue #3)."""
 
