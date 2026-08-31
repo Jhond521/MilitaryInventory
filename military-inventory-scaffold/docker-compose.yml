@@ -6,7 +6,10 @@ services:
       POSTGRES_PASSWORD: armory
       POSTGRES_DB: armory
     ports:
-      - "5432:5432"
+      # Mapeado a 5433 en el host: 5432 ya lo usa otro proyecto local
+      # (finanzasfamilia-db-1); dentro de la red de Docker `web` sigue
+      # hablando con `db:5432` sin cambios.
+      - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

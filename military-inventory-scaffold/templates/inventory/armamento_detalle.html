@@ -1,0 +1,89 @@
+{% extends "inventory/base_mobile.html" %}
+{% block title %}{{ arma.numero_serie }}{% endblock %}
+{% block content %}
+<div class="siga-detail-header">
+  <div class="siga-detail-header__id">
+    <span class="siga-detail-header__crest">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#C0973F" stroke-width="1.7"><path d="M3 11h13l3-3v3h2v2h-6l-2 3v-3H3z"/></svg>
+    </span>
+    <div>
+      <div class="siga-detail-header__top">
+        <span class="siga-card__serie" style="font-size:22px;">{{ arma.numero_serie }}</span>
+        {% if arma.ubicacion == "EN_MANO" %}
+        <span class="siga-badge siga-badge--en-mano">En mano</span>
+        {% else %}
+        <span class="siga-badge siga-badge--en-deposito">En depósito</span>
+        {% endif %}
+      </div>
+      <div class="siga-detail-header__sub">{{ arma.tipo.nombre }} · Compañía {{ arma.compania.nombre }}</div>
+    </div>
+  </div>
+  <div class="siga-detail-header__actions">
+    {% if arma.ubicacion == "DEPOSITO" %}
+    <a class="siga-btn-primary" style="width:auto; height:auto; padding:0 18px; line-height:42px; text-decoration:none;" href="{% url 'inventory:armamento_entregar' arma.pk %}">Entregar</a>
+    {% else %}
+    <a class="siga-btn-primary" style="width:auto; height:auto; padding:0 18px; line-height:42px; text-decoration:none;" href="{% url 'inventory:armamento_devolver' arma.pk %}">Devolver a depósito</a>
+    {% endif %}
+    {% if user.is_admin_role %}
+    <a class="siga-btn-secondary" style="width:auto; height:auto; padding:0 18px; line-height:42px; text-decoration:none;" href="{% url 'inventory:armamento_baja' arma.pk %}">Dar de baja</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="siga-detail-grid">
+  <div class="siga-detail-panel">
+    <div class="siga-detail-panel__title">Datos del armamento</div>
+    <div class="siga-datos-grid">
+      <div><div class="lbl">Número de serie</div><div class="val mono">{{ arma.numero_serie }}</div></div>
+      <div><div class="lbl">Denominación</div><div class="val">{{ arma.tipo.nombre }}</div></div>
+      <div><div class="lbl">Compañía dueña</div><div class="val">{{ arma.compania.nombre }}</div></div>
+      <div><div class="lbl">Pelotón</div><div class="val">{{ arma.peloton_actual.nombre|default:"—" }}</div></div>
+      <div>
+        <div class="lbl">Responsable</div>
+        <div class="val">
+          {% if arma.ubicacion == "EN_MANO" %}En mano · {{ arma.soldado.apellidos_nombres }}{% else %}En depósito · {{ arma.deposito.nombre }}{% endif %}
+        </div>
+      </div>
+      <div><div class="lbl">Estado</div><div class="val">{{ arma.get_estado_display }}</div></div>
+    </div>
+
+    <div class="siga-detail-panel__divider"></div>
+    <div class="siga-detail-panel__subhead">
+      <span>Campos personalizados</span>
+      {% if user.is_admin_role %}
+      <a href="{% url 'inventory:armamento_editar' arma.pk %}">+ Agregar campo</a>
+      {% endif %}
+    </div>
+    {% if campos_personalizados %}
+    <div class="siga-datos-grid">
+      {% for nombre, valor in campos_personalizados %}
+      <div><div class="lbl">{{ nombre }}</div><div class="val">{{ valor }}</div></div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="siga-empty" style="padding:8px 0;">Sin campos personalizados.</p>
+    {% endif %}
+  </div>
+
+  <div class="siga-detail-panel">
+    <div class="siga-detail-panel__title">Historial de movimientos</div>
+    <div class="siga-timeline">
+      {% for item in historial %}
+      <div class="siga-timeline__row">
+        <div class="siga-timeline__rail">
+          <span class="siga-timeline__dot siga-timeline__dot--{{ item.titulo|slugify }}"></span>
+          {% if not forloop.last %}<span class="siga-timeline__line"></span>{% endif %}
+        </div>
+        <div class="siga-timeline__content">
+          <div class="siga-timeline__titulo">{{ item.titulo }}</div>
+          <div class="siga-timeline__detalle">{{ item.detalle }}</div>
+          <div class="siga-timeline__meta">
+            {{ item.fecha|date:"Y-m-d · H:i" }}{% if item.usuario %} · por {{ item.usuario.email }}{% endif %}
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

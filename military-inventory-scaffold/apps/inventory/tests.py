@@ -629,6 +629,256 @@ class CompaniaContextoTests(TestCase):
 
 
 @override_settings(STORAGES=_PLAIN_STATIC_STORAGE)
+class CompanySelectorTests(TestCase):
+    """Pantalla independiente de selección de compañía (issue #6)."""
+
+    def setUp(self):
+        self.unidad = Unidad.objects.create(nombre="Batallón de Prueba")
+        self.alcatraz = Compania.objects.create(unidad=self.unidad, nombre="Alcatraz")
+        self.aspc = Compania.objects.create(unidad=self.unidad, nombre="ASPC")
+        self.deposito = Deposito.objects.create(nombre="Apiay")
+        self.tipo = TipoArmamento.objects.create(
+            nombre="ACE-23", control=TipoArmamento.Control.SERIE
+        )
+        Armamento.objects.create(
+            numero_serie="SEL-1", tipo=self.tipo, compania=self.alcatraz,
+            ubicacion=Armamento.Ubicacion.DEPOSITO, deposito=self.deposito,
+        )
+        Armamento.objects.create(
+            numero_serie="SEL-2", tipo=self.tipo, compania=self.alcatraz,
+            ubicacion=Armamento.Ubicacion.DEPOSITO, deposito=self.deposito,
+        )
+        user_model = get_user_model()
+        self.admin_user = user_model.objects.create_user(
+            email="admin@example.com", password="x", role=user_model.Role.ADMIN
+        )
+        self.enlace_user = user_model.objects.create_user(
+            email="enlace@example.com", password="x", role=user_model.Role.ENLACE
+        )
+
+    def test_tarjeta_muestra_codigo_derivado_y_total(self):
+        self.client.force_login(self.admin_user)
+        response = self.client.get(reverse("inventory:elegir_compania"))
+        self.assertContains(response, "ALCATRAZ")
+        self.assertContains(response, "Código A · 2 elementos")
+        self.assertContains(response, "ASPC")
+        self.assertContains(response, "Código ASPC · 0 elementos")
+
+    def test_compania_en_sesion_tiene_tag_reciente(self):
+        self.client.force_login(self.admin_user)
+        session = self.client.session
+        session[SESSION_KEY] = self.alcatraz.pk
+        session.save()
+
+        response = self.client.get(reverse("inventory:elegir_compania"))
+        content = response.content.decode()
+        self.assertIn("siga-compania-card--reciente", content)
+        self.assertIn("Reciente", content)
+
+    def test_nueva_compania_visible_solo_para_administrador(self):
+        crear_url = reverse("inventory:compania_crear")
+
+        self.client.force_login(self.admin_user)
+        response = self.client.get(reverse("inventory:elegir_compania"))
+        self.assertContains(response, crear_url)
+
+        self.client.force_login(self.enlace_user)
+        response = self.client.get(reverse("inventory:elegir_compania"))
+        self.assertNotContains(response, crear_url)
+
+    def test_no_hereda_el_sidebar_ni_el_bottom_nav_compartidos(self):
+        self.client.force_login(self.admin_user)
+        response = self.client.get(reverse("inventory:elegir_compania"))
+        self.assertNotContains(response, "siga-sidebar__nav")
+        self.assertNotContains(response, "siga-bottom-nav")
+
+
+@override_settings(STORAGES=_PLAIN_STATIC_STORAGE)
+class InventarioEscritorioTests(TestCase):
+    """Layout de escritorio de Inventario: sidebar + KPIs + tabla (issue #3)."""
+
+    def setUp(self):
+        self.unidad = Unidad.objects.create(nombre="Batallón de Prueba")
+        self.compania = Compania.objects.create(unidad=self.unidad, nombre="Alcatraz")
+        self.deposito = Deposito.objects.create(nombre="Apiay")
+        self.peloton = Peloton.objects.create(compania=self.compania, nombre="Alcatraz 1")
+        self.soldado = Soldado.objects.create(
+            apellidos_nombres="Ramírez G.", compania=self.compania, peloton=self.peloton
+        )
+        self.tipo = TipoArmamento.objects.create(
+            nombre="ACE-23", control=TipoArmamento.Control.SERIE
+        )
+        Armamento.objects.create(
+            numero_serie="EN-DEP-1", tipo=self.tipo, compania=self.compania,
+            ubicacion=Armamento.Ubicacion.DEPOSITO, deposito=self.deposito,
+        )
+        Armamento.objects.create(
+            numero_serie="EN-MANO-1", tipo=self.tipo, compania=self.compania,
+            ubicacion=Armamento.Ubicacion.EN_MANO, soldado=self.soldado,
+        )
+        arma_baja = Armamento.objects.create(
+            numero_serie="DE-BAJA-1", tipo=self.tipo, compania=self.compania,
+            ubicacion=Armamento.Ubicacion.DEPOSITO, deposito=self.deposito,
+        )
+
+        user_model = get_user_model()
+        self.admin_user = user_model.objects.create_user(
+            email="admin@example.com", password="x", role=user_model.Role.ADMIN
+        )
+        arma_baja.dar_de_baja(
+            motivo=Armamento.MotivoBaja.DANO, fecha=date.today(), usuario=self.admin_user
+        )
+        self.client.force_login(self.admin_user)
+        session = self.client.session
+        session[SESSION_KEY] = self.compania.pk
+        session.save()
+
+    def test_kpis_reflejan_el_desglose_por_ubicacion_y_estado(self):
+        response = self.client.get(reverse("inventory:armamento_list"))
+        self.assertEqual(response.context["kpi_total"], 3)
+        self.assertEqual(response.context["kpi_en_deposito"], 1)
+        self.assertEqual(response.context["kpi_en_mano"], 1)
+        self.assertEqual(response.context["kpi_de_baja"], 1)
+
+    def test_kpis_no_cuentan_otra_compania(self):
+        otra_compania = Compania.objects.create(unidad=self.unidad, nombre="Bisonte")
+        Armamento.objects.create(
+            numero_serie="OTRA-COMP", tipo=self.tipo, compania=otra_compania,
+            ubicacion=Armamento.Ubicacion.DEPOSITO, deposito=self.deposito,
+        )
+        response = self.client.get(reverse("inventory:armamento_list"))
+        self.assertEqual(response.context["kpi_total"], 3)
+
+    def test_tabla_de_escritorio_muestra_las_mismas_series_que_las_tarjetas(self):
+        response = self.client.get(reverse("inventory:armamento_list"))
+        content = response.content.decode()
+        self.assertIn('class="siga-table-wrap"', content)
+        self.assertIn('class="siga-card-list"', content)
+        for serie in ("EN-DEP-1", "EN-MANO-1"):
+            msg = f"{serie} debería aparecer en tabla y tarjeta"
+            self.assertEqual(content.count(serie), 2, msg)
+
+    def test_sidebar_incluye_administracion_apuntando_a_ajustes(self):
+        response = self.client.get(reverse("inventory:armamento_list"))
+        self.assertContains(response, 'class="siga-sidebar__nav"')
+        self.assertContains(response, reverse("inventory:ajustes"))
+        self.assertContains(response, "Administración")
+
+    def test_item_activo_del_sidebar_resalta_inventario(self):
+        response = self.client.get(reverse("inventory:armamento_list"))
+        self.assertContains(response, "siga-sidebar__link--active")
+
+
+@override_settings(STORAGES=_PLAIN_STATIC_STORAGE)
+class ArmamentoDetalleTests(TestCase):
+    """Pantalla de detalle del armamento con historial (issue #5)."""
+
+    def setUp(self):
+        self.unidad = Unidad.objects.create(nombre="Batallón de Prueba")
+        self.compania = Compania.objects.create(unidad=self.unidad, nombre="Alcatraz")
+        self.apiay = Deposito.objects.create(nombre="Apiay")
+        self.caruru = Deposito.objects.create(nombre="Caruru")
+        self.peloton = Peloton.objects.create(compania=self.compania, nombre="Alcatraz 1")
+        self.soldado1 = Soldado.objects.create(
+            apellidos_nombres="Pérez A.", compania=self.compania, peloton=self.peloton
+        )
+        self.soldado2 = Soldado.objects.create(
+            apellidos_nombres="Gómez L.", compania=self.compania, peloton=self.peloton
+        )
+        self.tipo = TipoArmamento.objects.create(
+            nombre="ACE-23", control=TipoArmamento.Control.SERIE
+        )
+        self.arma = Armamento.objects.create(
+            numero_serie="DET-1", tipo=self.tipo, compania=self.compania,
+            ubicacion=Armamento.Ubicacion.DEPOSITO, deposito=self.apiay,
+            datos_extra={"Estado físico": "Operativo"},
+        )
+        user_model = get_user_model()
+        self.admin_user = user_model.objects.create_user(
+            email="admin@example.com", password="x", role=user_model.Role.ADMIN
+        )
+        self.enlace_user = user_model.objects.create_user(
+            email="enlace@example.com", password="x", role=user_model.Role.ENLACE
+        )
+        self.client.force_login(self.admin_user)
+        session = self.client.session
+        session[SESSION_KEY] = self.compania.pk
+        session.save()
+
+    def test_boton_entregar_cuando_esta_en_deposito(self):
+        response = self.client.get(reverse("inventory:armamento_detalle", args=[self.arma.pk]))
+        self.assertContains(response, reverse("inventory:armamento_entregar", args=[self.arma.pk]))
+        self.assertNotContains(
+            response, reverse("inventory:armamento_devolver", args=[self.arma.pk])
+        )
+
+    def test_boton_devolver_cuando_esta_en_mano(self):
+        self.arma.entregar(soldado=self.soldado1, usuario=self.admin_user)
+        response = self.client.get(reverse("inventory:armamento_detalle", args=[self.arma.pk]))
+        self.assertContains(response, reverse("inventory:armamento_devolver", args=[self.arma.pk]))
+        self.assertNotContains(
+            response, reverse("inventory:armamento_entregar", args=[self.arma.pk])
+        )
+
+    def test_boton_dar_de_baja_solo_para_administrador(self):
+        url = reverse("inventory:armamento_detalle", args=[self.arma.pk])
+        baja_url = reverse("inventory:armamento_baja", args=[self.arma.pk])
+
+        response = self.client.get(url)
+        self.assertContains(response, baja_url)
+
+        self.client.force_login(self.enlace_user)
+        session = self.client.session
+        session[SESSION_KEY] = self.compania.pk
+        session.save()
+        response = self.client.get(url)
+        self.assertNotContains(response, baja_url)
+
+    def test_agregar_campo_solo_para_administrador(self):
+        url = reverse("inventory:armamento_detalle", args=[self.arma.pk])
+        editar_url = reverse("inventory:armamento_editar", args=[self.arma.pk])
+
+        response = self.client.get(url)
+        self.assertContains(response, editar_url)
+
+        self.client.force_login(self.enlace_user)
+        session = self.client.session
+        session[SESSION_KEY] = self.compania.pk
+        session.save()
+        response = self.client.get(url)
+        self.assertNotContains(response, editar_url)
+
+    def test_campos_personalizados_se_muestran(self):
+        response = self.client.get(reverse("inventory:armamento_detalle", args=[self.arma.pk]))
+        self.assertContains(response, "Estado físico")
+        self.assertContains(response, "Operativo")
+
+    def test_historial_mas_reciente_primero_con_origen_encadenado(self):
+        self.arma.entregar(soldado=self.soldado1, usuario=self.admin_user)
+        self.arma.devolver(deposito=self.caruru, usuario=self.admin_user)
+        self.arma.entregar(soldado=self.soldado2, usuario=self.admin_user)
+
+        response = self.client.get(reverse("inventory:armamento_detalle", args=[self.arma.pk]))
+        historial = response.context["historial"]
+
+        self.assertEqual(len(historial), 4)
+        self.assertEqual(historial[0]["titulo"], "Entrega a soldado")
+        self.assertEqual(historial[0]["detalle"], "A Gómez L. · desde Caruru")
+        self.assertEqual(historial[1]["titulo"], "Devolución a depósito")
+        self.assertEqual(historial[1]["detalle"], "A Caruru · desde Pérez A.")
+        self.assertEqual(historial[2]["titulo"], "Entrega a soldado")
+        self.assertEqual(historial[2]["detalle"], "A Pérez A.")
+        self.assertEqual(historial[3]["titulo"], "Alta en inventario")
+
+    def test_lista_enlaza_al_detalle_no_directo_a_entregar_o_devolver(self):
+        response = self.client.get(reverse("inventory:armamento_list"))
+        self.assertContains(response, reverse("inventory:armamento_detalle", args=[self.arma.pk]))
+        self.assertNotContains(
+            response, reverse("inventory:armamento_entregar", args=[self.arma.pk])
+        )
+
+
+@override_settings(STORAGES=_PLAIN_STATIC_STORAGE)
 class BusquedaGlobalArmamentoTests(TestCase):
     """Búsqueda global por cualquier dato del armamento (RF-12, H-11)."""
 

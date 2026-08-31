@@ -48,10 +48,64 @@
   </label>
 </form>
 
+<div class="siga-kpi-row">
+  <div class="siga-kpi">
+    <div class="siga-kpi__label">Total</div>
+    <div class="siga-kpi__value">{{ kpi_total }}</div>
+  </div>
+  <div class="siga-kpi siga-kpi--deposito">
+    <div class="siga-kpi__label">En depósito</div>
+    <div class="siga-kpi__value">{{ kpi_en_deposito }}</div>
+  </div>
+  <div class="siga-kpi siga-kpi--mano">
+    <div class="siga-kpi__label">En mano</div>
+    <div class="siga-kpi__value">{{ kpi_en_mano }}</div>
+  </div>
+  <div class="siga-kpi siga-kpi--baja">
+    <div class="siga-kpi__label">De baja</div>
+    <div class="siga-kpi__value">{{ kpi_de_baja }}</div>
+  </div>
+</div>
+
+<div class="siga-table-wrap">
+  <table class="siga-table">
+    <thead>
+      <tr>
+        <th>N.º de serie</th>
+        <th>Denominación</th>
+        <th>Pelotón</th>
+        <th>Estado</th>
+        <th>Responsable</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for arma in armamentos %}
+      <tr onclick="window.location='{% url 'inventory:armamento_detalle' arma.pk %}'" style="cursor:pointer;">
+        <td class="siga-table__serie">{{ arma.numero_serie }}</td>
+        <td>{{ arma.tipo.nombre }}</td>
+        <td>{{ arma.peloton_actual.nombre|default:"—" }}</td>
+        <td>
+          {% if arma.ubicacion == "EN_MANO" %}
+          <span class="siga-badge siga-badge--en-mano">En mano</span>
+          {% else %}
+          <span class="siga-badge siga-badge--en-deposito">En depósito</span>
+          {% endif %}
+        </td>
+        <td class="siga-table__muted">
+          {% if arma.ubicacion == "EN_MANO" %}{{ arma.soldado.apellidos_nombres }}{% else %}{{ arma.deposito.nombre }}{% endif %}
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5" class="siga-empty">No hay armamento que coincida con la búsqueda.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
 <div class="siga-card-list">
   {% for arma in armamentos %}
   <div class="siga-card">
-    <a href="{% if arma.ubicacion == 'DEPOSITO' %}{% url 'inventory:armamento_entregar' arma.pk %}{% else %}{% url 'inventory:armamento_devolver' arma.pk %}{% endif %}" style="display:block; text-decoration:none; color:inherit;">
+    <a href="{% url 'inventory:armamento_detalle' arma.pk %}" style="display:block; text-decoration:none; color:inherit;">
       <div class="siga-card__top">
         <span class="siga-card__serie">{{ arma.numero_serie }}</span>
         {% if arma.ubicacion == "EN_MANO" %}

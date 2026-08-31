@@ -10,7 +10,7 @@ COPY pyproject.toml ./
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir \
         "django>=5.2,<6.0" "psycopg[binary]>=3.2" "dj-database-url>=2.2" \
-        "python-dotenv>=1.0" "gunicorn>=23.0" "whitenoise>=6.7"
+        "python-dotenv>=1.0" "gunicorn>=23.0" "whitenoise>=6.7" "openpyxl>=3.1"
 
 COPY . .
 

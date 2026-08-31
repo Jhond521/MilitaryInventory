@@ -33,6 +33,7 @@ def _crud_urls(prefix, name, class_prefix):
 urlpatterns = [
     path("", views.armamento_list, name="armamento_list"),
     path("armamento/nuevo/", views.armamento_crear, name="armamento_crear"),
+    path("armamento/<int:pk>/", views.armamento_detalle, name="armamento_detalle"),
     path("armamento/<int:pk>/editar/", views.armamento_editar, name="armamento_editar"),
     path("armamento/<int:pk>/entregar/", views.armamento_entregar, name="armamento_entregar"),
     path("armamento/<int:pk>/devolver/", views.armamento_devolver, name="armamento_devolver"),

@@ -80,11 +80,22 @@ body.siga-app {
   align-items: center;
   gap: 6px;
   background: #151d2b;
-  color: #fff;
   border-radius: 6px;
   padding: 6px 10px;
   font-size: 12px;
   font-family: var(--font-body);
+}
+
+/* .siga-app a { color: inherit } (class+type, 0-1-1) outranks the bare
+   .siga-header__compania class (0-1-0) above — this chip has its own dark
+   background in both mobile and desktop headers, so it needs an explicit
+   light color regardless of what .siga-header's own text color is; scope
+   with the parent instead of relying on inheritance (unlike .siga-sidebar,
+   .siga-header's color legitimately differs between mobile/desktop). Was
+   silently masked on mobile because .siga-header's inherited color already
+   happened to be light there — broke once desktop set it dark (issue #4). */
+.siga-header .siga-header__compania {
+  color: #fff;
 }
 
 .siga-header__icon-btn {
@@ -94,8 +105,13 @@ body.siga-app {
   width: 32px;
   height: 32px;
   border-radius: 6px;
-  color: #f4f0e6;
   flex-shrink: 0;
+}
+
+/* Same .siga-app a specificity issue as .siga-header__compania above —
+   scope with the parent so this actually wins. */
+.siga-header .siga-header__icon-btn {
+  color: #f4f0e6;
 }
 
 .siga-header__icon-btn svg {
@@ -480,6 +496,12 @@ body.siga-app {
   right: 0;
   display: flex;
   background: var(--siga-header-bg);
+  /* .siga-app a { color: inherit } outranks .siga-bottom-nav__item's own
+     color (class selector vs. class+type — inherit always wins) and falls
+     through to it, so this nav needs its own color to inherit, same as
+     .siga-header already has. Without this the items silently inherit
+     body's dark text color and disappear against this dark background. */
+  color: #f4f0e6;
   border-top: 2px solid var(--siga-header-rule);
   z-index: 100;
   padding-bottom: env(safe-area-inset-bottom, 0px);
@@ -509,7 +531,10 @@ body.siga-app {
   height: 20px;
 }
 
-.siga-bottom-nav__item--active {
+/* Specificity needs to beat .siga-app a (class+type) the same way
+   .siga-bottom-nav__item's own color now does via inheritance — a bare
+   class selector here would still lose to it. */
+.siga-bottom-nav .siga-bottom-nav__item--active {
   color: var(--siga-header-rule);
   opacity: 1;
 }
@@ -536,4 +561,484 @@ body.siga-app {
 .siga-messages li.error {
   background: var(--siga-badge-en-mano-bg);
   color: var(--siga-red-dark);
+}
+
+/* Desktop dashboard (issue #3) — sidebar nav + topbar + KPI row + table,
+   matching design_specs/Main.dc.html. Mobile-first: everything below is
+   hidden/off by default and only switches on past the breakpoint, so the
+   phone layout above is untouched under 1024px. */
+.siga-sidebar {
+  display: none;
+}
+
+.siga-kpi-row {
+  display: none;
+}
+
+.siga-table-wrap {
+  display: none;
+}
+
+.siga-header__compania-arrow {
+  display: none;
+}
+
+/* Weapon detail base (mobile-first) — issue #5 */
+.lbl {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  color: var(--siga-text-muted);
+}
+
+.val {
+  font-size: 14px;
+  color: var(--siga-text);
+  margin-top: 3px;
+}
+
+.siga-detail-header {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: var(--siga-card-bg);
+  border: 1px solid var(--siga-card-border);
+  border-radius: 12px;
+  padding: 18px;
+  margin-bottom: 16px;
+}
+
+.siga-detail-header__id {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.siga-detail-header__crest {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  background: var(--siga-header-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.siga-detail-header__top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.siga-detail-header__sub {
+  font-family: var(--font-heading);
+  font-size: 14px;
+  color: var(--siga-text);
+  margin-top: 2px;
+}
+
+.siga-detail-header__actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.siga-detail-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.siga-detail-panel {
+  background: var(--siga-card-bg);
+  border: 1px solid var(--siga-card-border);
+  border-radius: 12px;
+  padding: 18px;
+}
+
+.siga-detail-panel__title {
+  font-family: var(--font-heading);
+  font-size: 14px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #10151e;
+  margin-bottom: 16px;
+}
+
+.siga-detail-panel__divider {
+  border-top: 1px solid #f0ebdd;
+  margin: 18px 0 14px;
+}
+
+.siga-detail-panel__subhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  font-family: var(--font-heading);
+  font-size: 12px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--siga-text-muted);
+}
+
+.siga-detail-panel__subhead a {
+  color: var(--siga-red);
+  font-size: 12px;
+  text-transform: none;
+  letter-spacing: 0;
+  font-family: var(--font-body);
+}
+
+.siga-datos-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px 18px;
+}
+
+/* Movement history timeline */
+.siga-timeline__row {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  gap: 12px;
+}
+
+.siga-timeline__rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.siga-timeline__dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--siga-red);
+  flex-shrink: 0;
+}
+
+.siga-timeline__dot--devolucion-a-deposito {
+  background: #2c3340;
+}
+
+.siga-timeline__dot--alta-en-inventario {
+  background: var(--siga-header-rule);
+}
+
+.siga-timeline__dot--baja {
+  background: #9aa0a6;
+}
+
+.siga-timeline__line {
+  width: 2px;
+  flex-grow: 1;
+  background: #ede6d5;
+  margin-top: 2px;
+}
+
+.siga-timeline__content {
+  padding-bottom: 18px;
+}
+
+.siga-timeline__titulo {
+  font-weight: 600;
+  color: var(--siga-text);
+  font-size: 14px;
+}
+
+.siga-timeline__detalle {
+  color: #55595f;
+  font-size: 13px;
+  margin-top: 2px;
+}
+
+.siga-timeline__meta {
+  color: #9a9fa6;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+@media (min-width: 1024px) {
+  body.siga-app {
+    padding-bottom: 0;
+  }
+
+  .siga-shell {
+    display: flex;
+    align-items: stretch;
+    min-height: 100vh;
+  }
+
+  .siga-sidebar {
+    display: flex;
+    flex-direction: column;
+    width: 248px;
+    flex-shrink: 0;
+    background: var(--siga-header-bg);
+    border-right: 2px solid var(--siga-header-rule);
+    /* .siga-app a { color: inherit } (class+type, 0-1-1) outranks a bare
+       .siga-sidebar__link (class only, 0-1-0) the same way it did for
+       .siga-bottom-nav__item before — set the light color here, on the
+       non-<a> ancestor, so the links' forced `inherit` resolves to it
+       instead of falling through to the dark body text color. */
+    color: #c3c8cf;
+  }
+
+  .siga-sidebar__brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 20px 18px;
+    border-bottom: 1px solid #23262f;
+  }
+
+  .siga-sidebar__brand-title {
+    font-family: var(--font-heading);
+    font-weight: 700;
+    font-size: 18px;
+    letter-spacing: 2px;
+    color: #f4f0e6;
+  }
+
+  .siga-sidebar__brand-sub {
+    color: #8a9099;
+    font-size: 10px;
+    letter-spacing: .5px;
+    text-transform: uppercase;
+  }
+
+  .siga-sidebar__nav {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 14px 12px;
+  }
+
+  .siga-sidebar__link {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 14px;
+    border-radius: 6px;
+    /* color comes from .siga-sidebar (inherit), not set here — see its
+       comment for why a bare class selector can't win this one. */
+    font-size: 14px;
+    font-family: var(--font-body);
+  }
+
+  .siga-sidebar__link svg {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+  }
+
+  .siga-sidebar .siga-sidebar__link--active {
+    background: var(--siga-red);
+    color: #fff;
+    font-weight: 600;
+  }
+
+  .siga-sidebar__user {
+    margin-top: auto;
+    padding: 16px;
+    border-top: 1px solid #23262f;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .siga-sidebar__avatar {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: var(--siga-red);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-family: var(--font-heading);
+    flex-shrink: 0;
+  }
+
+  .siga-sidebar__user-name {
+    display: block;
+    color: #f4f0e6;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .siga-sidebar__user-role {
+    display: block;
+    color: var(--siga-header-rule);
+    font-size: 11px;
+    letter-spacing: .4px;
+    text-transform: uppercase;
+  }
+
+  .siga-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .siga-bottom-nav {
+    display: none;
+  }
+
+  /* Topbar: reuse .siga-header, restyled — brand lives in the sidebar now */
+  .siga-header {
+    position: static;
+    background: #fbf9f3;
+    color: var(--siga-text);
+    border-bottom: 1px solid var(--siga-card-border);
+    padding: 16px 28px;
+  }
+
+  .siga-header__crest,
+  .siga-header__title {
+    display: none;
+  }
+
+  .siga-header__compania {
+    margin-left: 0;
+    background: var(--siga-header-bg);
+    padding: 8px 14px;
+    font-size: 13px;
+  }
+
+  .siga-header__compania-arrow {
+    display: block;
+    color: var(--siga-header-rule);
+  }
+
+  .siga-header .siga-header__icon-btn {
+    color: var(--siga-text-muted);
+  }
+
+  .siga-content {
+    max-width: none;
+    margin: 0;
+    padding: 26px 28px;
+  }
+
+  /* KPI row */
+  .siga-kpi-row {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+    margin-bottom: 22px;
+  }
+
+  .siga-kpi {
+    background: var(--siga-card-bg);
+    border: 1px solid var(--siga-card-border);
+    border-left: 3px solid var(--siga-header-bg);
+    border-radius: 8px;
+    padding: 16px 18px;
+  }
+
+  .siga-kpi--deposito {
+    border-left-color: var(--siga-header-rule);
+  }
+
+  .siga-kpi--mano {
+    border-left-color: var(--siga-red);
+  }
+
+  .siga-kpi--baja {
+    border-left-color: #9aa0a6;
+  }
+
+  .siga-kpi__label {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: .6px;
+    color: var(--siga-text-muted);
+  }
+
+  .siga-kpi__value {
+    font-family: var(--font-heading);
+    font-size: 30px;
+    font-weight: 700;
+    color: #10151e;
+  }
+
+  /* Table replaces the mobile card list */
+  .siga-card-list {
+    display: none;
+  }
+
+  .siga-table-wrap {
+    display: block;
+    background: var(--siga-card-bg);
+    border: 1px solid var(--siga-card-border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .siga-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+
+  .siga-table thead {
+    background: var(--siga-header-bg);
+    color: #e9e4d6;
+    font-family: var(--font-heading);
+    font-size: 12px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .siga-table th,
+  .siga-table td {
+    padding: 13px 16px;
+    text-align: left;
+  }
+
+  .siga-table tbody tr {
+    border-bottom: 1px solid #f0ebdd;
+  }
+
+  .siga-table tbody tr:last-child {
+    border-bottom: none;
+  }
+
+  .siga-table tbody tr:nth-child(even) {
+    background: #fbfaf5;
+  }
+
+  .siga-table tbody tr:hover {
+    background: #f5f2e6;
+  }
+
+  .siga-table__serie {
+    font-family: var(--font-mono);
+    color: var(--siga-red-dark);
+    font-weight: 600;
+  }
+
+  .siga-table__muted {
+    color: var(--siga-text-muted);
+  }
+
+  /* Weapon detail (issue #5) — two-column grid at desktop */
+  .siga-detail-header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .siga-detail-grid {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+
+  .siga-detail-panel {
+    flex: 1;
+  }
 }

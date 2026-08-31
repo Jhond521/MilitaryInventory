@@ -20,6 +20,14 @@ dev = [
     "ruff>=0.6",
 ]
 
+# This is a Django project run via manage.py, not an importable library — there's
+# nothing for setuptools to build. Without this, `pip install -e .` fails: it finds
+# apps/, config/, static/, templates/, design_specs/ at the top level and refuses to
+# guess which one is "the package" (this has been broken since CI was first set up,
+# T-03 — every run failed at the install step).
+[tool.setuptools]
+py-modules = []
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"

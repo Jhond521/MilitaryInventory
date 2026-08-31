@@ -297,7 +297,16 @@ El corazón del sistema.
 ## Trabajo técnico
 
 - [x] T-01 — Scaffold Django, modelos, migraciones, tests, siembra, admin
-- [ ] T-02 — Configurar despliegue en Railway (variables, Postgres, primer deploy + seed)
+- [x] T-02 — Configurar despliegue en Railway (variables, Postgres, primer deploy + seed)
+  - **Notas técnicas**: proyecto `inventario-militar`, dos entornos — `dev` (servicio `web`,
+    sigue `develop`) y `production` (servicio `web-prod`, sigue `main`), cada uno con su
+    propio Postgres, `SECRET_KEY` y dominio `*.up.railway.app`. `Root Directory` de ambos
+    servicios apunta a `military-inventory-scaffold/` (el código no vive en la raíz del
+    repo). El dominio de cada servicio debe apuntar al puerto real de gunicorn (el que
+    asigna Railway vía `$PORT`, no el `8000` del `Dockerfile`) — verificar con
+    `railway domain list` si un dominio nuevo devuelve 502. `seed_initial` corrido en
+    ambos vía `railway ssh -- python manage.py seed_initial`. Falta cargar el inventario
+    real (H-13) y la lista completa de usuarios autorizados (P-1).
 - [x] T-03 — CI (tests + ruff en cada push)
   - **Notas técnicas**: `.github/workflows/ci.yml` — un solo job en Ubuntu con Python 3.12
     (fijo por `requires-python` en `pyproject.toml`), corre en cada push y pull request.

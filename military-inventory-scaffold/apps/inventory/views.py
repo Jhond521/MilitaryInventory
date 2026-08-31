@@ -37,6 +37,15 @@ from .models import (
 SESSION_KEY = "compania_actual_id"
 
 
+def _codigo_compania(nombre):
+    """Código corto para la tarjeta de selección (issue #6). `Compania` no
+    tiene un campo `codigo` propio (PRD P-5, aún sin confirmar por David) —
+    se deriva de `nombre` reproduciendo el mapeo que ya describe el PRD
+    (RF-03): una letra para los nombres largos, el nombre tal cual para los
+    que ya son cortos/siglas (ASPC, IR)."""
+    return nombre if len(nombre) <= 4 else nombre[0].upper()
+
+
 @requiere_autorizado
 def elegir_compania(request):
     companias = Compania.objects.order_by("nombre")
@@ -55,10 +64,22 @@ def elegir_compania(request):
             request.session[SESSION_KEY] = int(compania_id)
             return redirect(next_url)
 
+    actual_id = request.session.get(SESSION_KEY)
+    opciones = [
+        {
+            "compania": compania,
+            "codigo": _codigo_compania(compania.nombre),
+            "total": Armamento.objects.filter(compania=compania).count(),
+            "reciente": compania.pk == actual_id,
+        }
+        for compania in companias
+    ]
+
     context = {
         "title": "Elegir compañía de trabajo",
         "companias": companias,
-        "actual_id": request.session.get(SESSION_KEY),
+        "opciones": opciones,
+        "actual_id": actual_id,
         "next": next_url,
     }
     return render(request, "inventory/elegir_compania.html", context)
@@ -135,6 +156,21 @@ def armamento_list(request):
         pelotones = Peloton.objects.all()
     tipos = TipoArmamento.objects.filter(control=TipoArmamento.Control.SERIE).order_by("nombre")
 
+    # KPIs del layout de escritorio (issue #3): sobre el alcance de compañía
+    # actual, sin aplicar q/peloton/ubicacion/tipo — mismo criterio que el
+    # subtítulo "Compañía X" ya usa, no el resultado ya filtrado por texto.
+    kpi_qs = Armamento.objects.all()
+    if compania_id and not ver_todas:
+        kpi_qs = kpi_qs.filter(compania_id=compania_id)
+    kpi_total = kpi_qs.count()
+    kpi_en_deposito = kpi_qs.filter(
+        estado=Armamento.Estado.ACTIVO, ubicacion=Armamento.Ubicacion.DEPOSITO
+    ).count()
+    kpi_en_mano = kpi_qs.filter(
+        estado=Armamento.Estado.ACTIVO, ubicacion=Armamento.Ubicacion.EN_MANO
+    ).count()
+    kpi_de_baja = kpi_qs.filter(estado=Armamento.Estado.BAJA).count()
+
     context = {
         "armamentos": qs,
         "q": q,
@@ -145,6 +181,10 @@ def armamento_list(request):
         "ubicacion_choices": Armamento.Ubicacion.choices,
         "tipo_id": tipo_id,
         "ver_todas": ver_todas,
+        "kpi_total": kpi_total,
+        "kpi_en_deposito": kpi_en_deposito,
+        "kpi_en_mano": kpi_en_mano,
+        "kpi_de_baja": kpi_de_baja,
     }
     return render(request, "inventory/armamento_list.html", context)
 
@@ -162,6 +202,69 @@ def armamento_crear(request):
     return render(
         request, "inventory/armamento_form.html", {"form": form, "titulo": "Añadir armamento"}
     )
+
+
+def _historial_arma(armamento):
+    """Historial de movimientos del arma, más reciente primero (issue #5).
+
+    `Movimiento` solo guarda el destino de cada paso (soldado en ENTREGA,
+    depósito en DEVOLUCION) — el "desde X" se deriva encadenando el destino
+    del movimiento anterior, ya que entre dos movimientos el arma no pudo
+    haber estado en otro lado. El primer movimiento no tiene un "desde"
+    confiable (no se registra un evento al crear/cargar el arma), así que
+    se muestra sin esa cláusula; en su lugar se agrega al final una fila
+    sintética de "Alta en inventario" con `Armamento.creado`, sin usuario
+    inventado (la carga inicial es un script sin usuario asociado, RF-13)."""
+    movimientos = armamento.movimientos.select_related("soldado", "deposito", "usuario").order_by(
+        "fecha"
+    )
+    historial = []
+    origen = None
+    for mov in movimientos:
+        if mov.tipo == Movimiento.Tipo.ENTREGA:
+            titulo = "Entrega a soldado"
+            destino_nombre = mov.soldado.apellidos_nombres if mov.soldado else "—"
+            detalle = f"A {destino_nombre}"
+        elif mov.tipo == Movimiento.Tipo.DEVOLUCION:
+            titulo = "Devolución a depósito"
+            destino_nombre = mov.deposito.nombre if mov.deposito else "—"
+            detalle = f"A {destino_nombre}"
+        else:
+            titulo = "Baja"
+            destino_nombre = None
+            detalle = mov.observacion or "Dada de baja"
+        if origen:
+            detalle = f"{detalle} · desde {origen}"
+        historial.append(
+            {"titulo": titulo, "detalle": detalle, "fecha": mov.fecha, "usuario": mov.usuario}
+        )
+        origen = destino_nombre
+    historial.reverse()
+    historial.append(
+        {
+            "titulo": "Alta en inventario",
+            "detalle": "Carga inicial",
+            "fecha": armamento.creado,
+            "usuario": None,
+        }
+    )
+    return historial
+
+
+@requiere_autorizado
+def armamento_detalle(request, pk):
+    arma = get_object_or_404(
+        Armamento.objects.select_related(
+            "tipo", "compania", "deposito", "soldado", "soldado__peloton"
+        ),
+        pk=pk,
+    )
+    context = {
+        "arma": arma,
+        "historial": _historial_arma(arma),
+        "campos_personalizados": (arma.datos_extra or {}).items(),
+    }
+    return render(request, "inventory/armamento_detalle.html", context)
 
 
 @requiere_admin
