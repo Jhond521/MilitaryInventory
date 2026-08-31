@@ -183,6 +183,69 @@ def armamento_crear(request):
     )
 
 
+def _historial_arma(armamento):
+    """Historial de movimientos del arma, más reciente primero (issue #5).
+
+    `Movimiento` solo guarda el destino de cada paso (soldado en ENTREGA,
+    depósito en DEVOLUCION) — el "desde X" se deriva encadenando el destino
+    del movimiento anterior, ya que entre dos movimientos el arma no pudo
+    haber estado en otro lado. El primer movimiento no tiene un "desde"
+    confiable (no se registra un evento al crear/cargar el arma), así que
+    se muestra sin esa cláusula; en su lugar se agrega al final una fila
+    sintética de "Alta en inventario" con `Armamento.creado`, sin usuario
+    inventado (la carga inicial es un script sin usuario asociado, RF-13)."""
+    movimientos = armamento.movimientos.select_related("soldado", "deposito", "usuario").order_by(
+        "fecha"
+    )
+    historial = []
+    origen = None
+    for mov in movimientos:
+        if mov.tipo == Movimiento.Tipo.ENTREGA:
+            titulo = "Entrega a soldado"
+            destino_nombre = mov.soldado.apellidos_nombres if mov.soldado else "—"
+            detalle = f"A {destino_nombre}"
+        elif mov.tipo == Movimiento.Tipo.DEVOLUCION:
+            titulo = "Devolución a depósito"
+            destino_nombre = mov.deposito.nombre if mov.deposito else "—"
+            detalle = f"A {destino_nombre}"
+        else:
+            titulo = "Baja"
+            destino_nombre = None
+            detalle = mov.observacion or "Dada de baja"
+        if origen:
+            detalle = f"{detalle} · desde {origen}"
+        historial.append(
+            {"titulo": titulo, "detalle": detalle, "fecha": mov.fecha, "usuario": mov.usuario}
+        )
+        origen = destino_nombre
+    historial.reverse()
+    historial.append(
+        {
+            "titulo": "Alta en inventario",
+            "detalle": "Carga inicial",
+            "fecha": armamento.creado,
+            "usuario": None,
+        }
+    )
+    return historial
+
+
+@requiere_autorizado
+def armamento_detalle(request, pk):
+    arma = get_object_or_404(
+        Armamento.objects.select_related(
+            "tipo", "compania", "deposito", "soldado", "soldado__peloton"
+        ),
+        pk=pk,
+    )
+    context = {
+        "arma": arma,
+        "historial": _historial_arma(arma),
+        "campos_personalizados": (arma.datos_extra or {}).items(),
+    }
+    return render(request, "inventory/armamento_detalle.html", context)
+
+
 @requiere_admin
 def armamento_editar(request, pk):
     armamento = get_object_or_404(Armamento, pk=pk)

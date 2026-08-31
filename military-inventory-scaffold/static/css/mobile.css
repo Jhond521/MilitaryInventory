@@ -583,6 +583,182 @@ body.siga-app {
   display: none;
 }
 
+/* Weapon detail base (mobile-first) — issue #5 */
+.lbl {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  color: var(--siga-text-muted);
+}
+
+.val {
+  font-size: 14px;
+  color: var(--siga-text);
+  margin-top: 3px;
+}
+
+.siga-detail-header {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: var(--siga-card-bg);
+  border: 1px solid var(--siga-card-border);
+  border-radius: 12px;
+  padding: 18px;
+  margin-bottom: 16px;
+}
+
+.siga-detail-header__id {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.siga-detail-header__crest {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  background: var(--siga-header-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.siga-detail-header__top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.siga-detail-header__sub {
+  font-family: var(--font-heading);
+  font-size: 14px;
+  color: var(--siga-text);
+  margin-top: 2px;
+}
+
+.siga-detail-header__actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.siga-detail-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.siga-detail-panel {
+  background: var(--siga-card-bg);
+  border: 1px solid var(--siga-card-border);
+  border-radius: 12px;
+  padding: 18px;
+}
+
+.siga-detail-panel__title {
+  font-family: var(--font-heading);
+  font-size: 14px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #10151e;
+  margin-bottom: 16px;
+}
+
+.siga-detail-panel__divider {
+  border-top: 1px solid #f0ebdd;
+  margin: 18px 0 14px;
+}
+
+.siga-detail-panel__subhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  font-family: var(--font-heading);
+  font-size: 12px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--siga-text-muted);
+}
+
+.siga-detail-panel__subhead a {
+  color: var(--siga-red);
+  font-size: 12px;
+  text-transform: none;
+  letter-spacing: 0;
+  font-family: var(--font-body);
+}
+
+.siga-datos-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px 18px;
+}
+
+/* Movement history timeline */
+.siga-timeline__row {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  gap: 12px;
+}
+
+.siga-timeline__rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.siga-timeline__dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--siga-red);
+  flex-shrink: 0;
+}
+
+.siga-timeline__dot--devolucion-a-deposito {
+  background: #2c3340;
+}
+
+.siga-timeline__dot--alta-en-inventario {
+  background: var(--siga-header-rule);
+}
+
+.siga-timeline__dot--baja {
+  background: #9aa0a6;
+}
+
+.siga-timeline__line {
+  width: 2px;
+  flex-grow: 1;
+  background: #ede6d5;
+  margin-top: 2px;
+}
+
+.siga-timeline__content {
+  padding-bottom: 18px;
+}
+
+.siga-timeline__titulo {
+  font-weight: 600;
+  color: var(--siga-text);
+  font-size: 14px;
+}
+
+.siga-timeline__detalle {
+  color: #55595f;
+  font-size: 13px;
+  margin-top: 2px;
+}
+
+.siga-timeline__meta {
+  color: #9a9fa6;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
 @media (min-width: 1024px) {
   body.siga-app {
     padding-bottom: 0;
@@ -848,5 +1024,21 @@ body.siga-app {
 
   .siga-table__muted {
     color: var(--siga-text-muted);
+  }
+
+  /* Weapon detail (issue #5) — two-column grid at desktop */
+  .siga-detail-header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .siga-detail-grid {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+
+  .siga-detail-panel {
+    flex: 1;
   }
 }

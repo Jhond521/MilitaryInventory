@@ -80,7 +80,7 @@
     </thead>
     <tbody>
       {% for arma in armamentos %}
-      <tr onclick="window.location='{% if arma.ubicacion == 'DEPOSITO' %}{% url 'inventory:armamento_entregar' arma.pk %}{% else %}{% url 'inventory:armamento_devolver' arma.pk %}{% endif %}'" style="cursor:pointer;">
+      <tr onclick="window.location='{% url 'inventory:armamento_detalle' arma.pk %}'" style="cursor:pointer;">
         <td class="siga-table__serie">{{ arma.numero_serie }}</td>
         <td>{{ arma.tipo.nombre }}</td>
         <td>{{ arma.peloton_actual.nombre|default:"—" }}</td>
@@ -105,7 +105,7 @@
 <div class="siga-card-list">
   {% for arma in armamentos %}
   <div class="siga-card">
-    <a href="{% if arma.ubicacion == 'DEPOSITO' %}{% url 'inventory:armamento_entregar' arma.pk %}{% else %}{% url 'inventory:armamento_devolver' arma.pk %}{% endif %}" style="display:block; text-decoration:none; color:inherit;">
+    <a href="{% url 'inventory:armamento_detalle' arma.pk %}" style="display:block; text-decoration:none; color:inherit;">
       <div class="siga-card__top">
         <span class="siga-card__serie">{{ arma.numero_serie }}</span>
         {% if arma.ubicacion == "EN_MANO" %}
