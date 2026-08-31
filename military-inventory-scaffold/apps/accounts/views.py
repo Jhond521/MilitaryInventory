@@ -17,6 +17,18 @@ class LoginView(auth_views.LoginView):
     template_name = "accounts/login.html"
     redirect_authenticated_user = True
 
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        # "Mantener sesión" sin marcar => la sesión expira al cerrar el
+        # navegador en vez de usar el default de Django (2 semanas).
+        if not self.request.POST.get("remember"):
+            self.request.session.set_expiry(0)
+        return response
+
+
+def recuperar_password(request):
+    return render(request, "accounts/recuperar_password.html")
+
 
 class LogoutView(auth_views.LogoutView):
     next_page = "accounts:login"

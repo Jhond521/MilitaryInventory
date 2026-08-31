@@ -8,96 +8,257 @@
   {% include "inventory/_pwa_head.html" %}
   <link rel="stylesheet" href="{% static 'css/mobile.css' %}?v=3">
   <style>
-    body.siga-login {
-      margin: 0;
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body.siga-login-split {
       min-height: 100vh;
+      display: flex;
+      font-family: var(--font-body);
+    }
+
+    .siga-login-split__left {
+      flex: 0 0 45%;
+      max-width: 45%;
+      min-height: 100vh;
+      background-color: #0e1420;
+      background-image: repeating-linear-gradient(
+        -45deg, transparent 0 28px, rgba(244, 240, 230, .05) 28px 30px
+      );
+      border-top: 3px solid var(--siga-header-rule);
       display: flex;
       align-items: center;
       justify-content: center;
-      background: var(--siga-header-bg);
-      font-family: var(--font-body);
-      padding: 24px;
-      box-sizing: border-box;
+      padding: 40px 24px;
     }
-    .siga-login__wordmark {
-      text-align: center;
-      margin-bottom: 28px;
+
+    .siga-login-split__right {
+      flex: 1;
+      min-height: 100vh;
+      background: var(--siga-paper);
+      border-top: 3px solid var(--siga-header-rule);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 24px;
     }
-    .siga-login__wordmark img {
-      width: 56px;
-      height: 56px;
-      margin-bottom: 12px;
+
+    .siga-login-split__brand { text-align: center; }
+
+    .siga-login-split__crest {
+      width: 190px;
+      height: auto;
+      margin-bottom: 24px;
+      border-radius: 6px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, .35);
     }
-    .siga-login__wordmark h1 {
+
+    .siga-login-split__brand h1 {
       color: #f4f0e6;
       font-family: var(--font-heading);
-      font-size: 34px;
+      font-size: 32px;
       font-weight: 700;
       letter-spacing: 8px;
       margin: 0;
     }
-    .siga-login__wordmark p {
+
+    .siga-login-split__brand p {
       color: #9aa0a8;
       font-size: 12px;
       letter-spacing: 2px;
       text-transform: uppercase;
-      margin: 6px 0 0;
+      margin: 8px 0 20px;
     }
-    .siga-login__card {
+
+    .siga-login-split__badge {
+      display: inline-block;
+      border: 1px solid var(--siga-header-rule);
+      color: var(--siga-header-rule);
+      font-family: var(--font-heading);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      padding: 8px 16px;
+      border-radius: 4px;
+    }
+
+    .siga-login-split__form-wrap { width: 100%; max-width: 420px; }
+
+    .siga-login-split__form-wrap h2 {
+      font-family: var(--font-heading);
+      font-size: 28px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      color: var(--siga-header-bg);
+      margin: 0 0 8px;
+    }
+
+    .siga-login-split__desc {
+      color: var(--siga-text-muted);
+      font-size: 13px;
+      margin: 0 0 26px;
+    }
+
+    .siga-login-split__field { margin-bottom: 18px; }
+
+    .siga-login-split__field label {
+      display: block;
+      font-size: 12px;
+      color: var(--siga-text-muted);
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      margin-bottom: 6px;
+    }
+
+    .siga-login-split__input-wrap { position: relative; display: flex; align-items: center; }
+
+    .siga-login-split__input-wrap .icon-left {
+      position: absolute;
+      left: 12px;
+      width: 16px;
+      height: 16px;
+      color: var(--siga-red);
+      pointer-events: none;
+    }
+
+    .siga-login-split__input-wrap input {
       width: 100%;
-      max-width: 360px;
-      background: var(--siga-paper);
-      border-radius: 14px;
-      padding: 24px;
-      box-sizing: border-box;
-    }
-    .siga-login__card .siga-field:last-of-type {
-      margin-bottom: 20px;
-    }
-    .siga-login__card input {
-      width: 100%;
-      box-sizing: border-box;
       border: 1px solid var(--siga-input-border);
-      border-radius: 10px;
-      padding: 10px 12px;
+      border-radius: 8px;
+      padding: 12px 12px 12px 38px;
       font-family: inherit;
       font-size: 14px;
+      background: #fff;
     }
+
+    .siga-login-split__toggle-pw {
+      position: absolute;
+      right: 8px;
+      background: none;
+      border: none;
+      padding: 6px;
+      color: var(--siga-text-muted);
+      cursor: pointer;
+      display: flex;
+    }
+
+    .siga-login-split__row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin: 2px 0 22px;
+      font-size: 13px;
+    }
+
+    .siga-login-split__remember {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--siga-text);
+    }
+
+    .siga-login-split__row a { color: var(--siga-header-rule); }
+
+    .siga-login-split__footer {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--siga-text-muted);
+      font-size: 12px;
+      margin-top: 18px;
+    }
+
+    .siga-login-split__footer svg {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+      color: var(--siga-header-rule);
+    }
+
     .siga-login__error {
       background: var(--siga-badge-en-mano-bg);
       color: var(--siga-red-dark);
-      border-radius: 10px;
+      border-radius: 8px;
       padding: 10px 12px;
       font-size: 13px;
-      margin-bottom: 16px;
+      margin-bottom: 18px;
+    }
+
+    @media (max-width: 760px) {
+      body.siga-login-split { flex-direction: column; }
+      .siga-login-split__left, .siga-login-split__right {
+        flex: none; max-width: 100%; min-height: auto;
+      }
+      .siga-login-split__left { padding: 32px 24px; }
+      .siga-login-split__crest { width: 130px; margin-bottom: 16px; }
+      .siga-login-split__brand p { margin-bottom: 14px; }
     }
   </style>
 </head>
-<body class="siga-login">
-  <div>
-    <div class="siga-login__wordmark">
-      <img src="{% static 'icons/icon.svg' %}" alt="">
+<body class="siga-login-split">
+  <div class="siga-login-split__left">
+    <div class="siga-login-split__brand">
+      <img class="siga-login-split__crest" src="{% static 'icons/crest.png' %}" alt="Escudo del Batallón de Selva No. 52">
       <h1>SIGA</h1>
       <p>Sistema de Inventario de Armamento</p>
+      <span class="siga-login-split__badge">Batallón de Selva N.° 52</span>
     </div>
-    <div class="siga-login__card">
+  </div>
+  <div class="siga-login-split__right">
+    <div class="siga-login-split__form-wrap">
+      <h2>Acceso restringido</h2>
+      <p class="siga-login-split__desc">Solo el personal autorizado del batallón puede ingresar. Use el correo registrado.</p>
+
       {% if form.errors %}
       <div class="siga-login__error">Correo o contraseña incorrectos.</div>
       {% endif %}
+
       <form method="post">
         {% csrf_token %}
         <input type="hidden" name="next" value="{{ next }}">
-        <div class="siga-field">
+
+        <div class="siga-login-split__field">
           <label for="id_username">Correo</label>
-          <input type="email" name="username" id="id_username" autofocus required>
+          <div class="siga-login-split__input-wrap">
+            <svg class="icon-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+            <input type="email" name="username" id="id_username" placeholder="usuario@correo.com" autofocus required>
+          </div>
         </div>
-        <div class="siga-field">
+
+        <div class="siga-login-split__field">
           <label for="id_password">Contraseña</label>
-          <input type="password" name="password" id="id_password" required>
+          <div class="siga-login-split__input-wrap">
+            <svg class="icon-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+            <input type="password" name="password" id="id_password" required>
+            <button type="button" class="siga-login-split__toggle-pw" id="siga-toggle-pw" aria-label="Mostrar contraseña">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
         </div>
-        <button type="submit" class="siga-btn-primary">Iniciar sesión</button>
+
+        <div class="siga-login-split__row">
+          <label class="siga-login-split__remember">
+            <input type="checkbox" name="remember">
+            Mantener sesión
+          </label>
+          <a href="{% url 'accounts:recuperar_password' %}">¿Olvidó su contraseña?</a>
+        </div>
+
+        <button type="submit" class="siga-btn-primary">Ingresar</button>
       </form>
+
+      <p class="siga-login-split__footer">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 4 5v6c0 5 3.4 8.4 8 11 4.6-2.6 8-6 8-11V5l-8-3Z"/></svg>
+        Acceso limitado por lista de correos autorizados.
+      </p>
     </div>
   </div>
+  <script>
+    document.getElementById('siga-toggle-pw').addEventListener('click', function () {
+      var input = document.getElementById('id_password');
+      input.type = input.type === 'password' ? 'text' : 'password';
+    });
+  </script>
 </body>
 </html>
