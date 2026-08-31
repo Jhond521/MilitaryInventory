@@ -480,6 +480,12 @@ body.siga-app {
   right: 0;
   display: flex;
   background: var(--siga-header-bg);
+  /* .siga-app a { color: inherit } outranks .siga-bottom-nav__item's own
+     color (class selector vs. class+type — inherit always wins) and falls
+     through to it, so this nav needs its own color to inherit, same as
+     .siga-header already has. Without this the items silently inherit
+     body's dark text color and disappear against this dark background. */
+  color: #f4f0e6;
   border-top: 2px solid var(--siga-header-rule);
   z-index: 100;
   padding-bottom: env(safe-area-inset-bottom, 0px);
@@ -509,7 +515,10 @@ body.siga-app {
   height: 20px;
 }
 
-.siga-bottom-nav__item--active {
+/* Specificity needs to beat .siga-app a (class+type) the same way
+   .siga-bottom-nav__item's own color now does via inheritance — a bare
+   class selector here would still lose to it. */
+.siga-bottom-nav .siga-bottom-nav__item--active {
   color: var(--siga-header-rule);
   opacity: 1;
 }
