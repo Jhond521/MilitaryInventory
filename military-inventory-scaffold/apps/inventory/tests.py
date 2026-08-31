@@ -58,7 +58,7 @@ class SeedCommandTests(TestCase):
         self.assertEqual(Compania.objects.count(), 7)
         self.assertEqual(Deposito.objects.count(), 2)
         self.assertEqual(Peloton.objects.count(), 28)  # 4 por compañía x 7
-        self.assertEqual(TipoArmamento.objects.count(), 29)
+        self.assertEqual(TipoArmamento.objects.count(), 55)
 
     def test_seed_marks_control_por_serie_y_cantidad(self):
         call_command("seed_initial")
@@ -1237,6 +1237,163 @@ class ImportarArmamentoTests(TestCase):
             dry_run=True,
         )
         self.assertEqual(Armamento.objects.count(), 0)
+
+    def test_hoja_con_varios_bloques_de_encabezado_repetido(self):
+        """El Excel real trae varios bloques por categoría dentro de una misma
+        hoja (título + encabezado + datos, separados por filas en blanco) —
+        no un único encabezado al principio (issue "cargar la data real")."""
+        self._importar({
+            "Alcatraz": [
+                [None, None, None],
+                ["Categoría Uno", None, None],
+                ["Denominación", "Serie", "Depósito"],
+                ["FUSIL AR CAL. 5.56 MM", "ALC-100", "Apiay"],
+                [],
+                ["Categoría Dos", None, None],
+                ["Denominación", "Serie", "Depósito"],
+                ["FUSIL AR CAL. 5.56 MM", "ALC-101", "Caruru"],
+            ],
+        })
+        self.assertEqual(Armamento.objects.count(), 2)
+        self.assertEqual(
+            Armamento.objects.get(numero_serie="ALC-100").deposito, self.apiay
+        )
+        self.assertEqual(
+            Armamento.objects.get(numero_serie="ALC-101").deposito, self.caruru
+        )
+
+    def test_hoja_nombrada_cp_mas_codigo_se_resuelve_por_letra(self):
+        """"CP A" no coincide con ninguna Compania sembrada tal cual — se
+        resuelve quitando el prefijo y usando el mapeo A -> Alcatraz."""
+        self._importar({
+            "CP A": [
+                ["Serie", "Denominación", "Depósito"],
+                ["ALC-200", "FUSIL AR CAL. 5.56 MM", "Apiay"],
+            ],
+        })
+        self.assertEqual(Armamento.objects.get(numero_serie="ALC-200").compania, self.alcatraz)
+
+    def test_fila_sin_serie_crea_existencia_en_vez_de_armamento(self):
+        casco = TipoArmamento.objects.create(
+            nombre="BALISTICO HELMET KEVLAR N. III", control=TipoArmamento.Control.CANTIDAD
+        )
+        self._importar({
+            "Alcatraz": [
+                ["Serie", "Denominación", "Depósito"],
+                ["SIN SERIE", "BALISTICO HELMET KEVLAR N. III", "Apiay"],
+                ["SIN SERIE", "BALISTICO HELMET KEVLAR N. III", "Apiay"],
+            ],
+        })
+        self.assertEqual(Armamento.objects.count(), 0)
+        existencia = Existencia.objects.get(
+            tipo=casco, compania=self.alcatraz, deposito=self.apiay
+        )
+        self.assertEqual(existencia.cantidad, 2)
+
+    def test_deposito_multiple_se_reparte_por_turnos(self):
+        self._importar(
+            {
+                "Alcatraz": [
+                    ["Serie", "Denominación"],
+                    ["ALC-300", "FUSIL AR CAL. 5.56 MM"],
+                    ["ALC-301", "FUSIL AR CAL. 5.56 MM"],
+                    ["ALC-302", "FUSIL AR CAL. 5.56 MM"],
+                ],
+            },
+            deposito="Apiay,Caruru",
+        )
+        self.assertEqual(Armamento.objects.get(numero_serie="ALC-300").deposito, self.apiay)
+        self.assertEqual(Armamento.objects.get(numero_serie="ALC-301").deposito, self.caruru)
+        self.assertEqual(Armamento.objects.get(numero_serie="ALC-302").deposito, self.apiay)
+
+
+@override_settings(STORAGES=_PLAIN_STATIC_STORAGE)
+class ImportarExistenciasTests(TestCase):
+    """Carga de existencias por cantidad desde el archivo de consumo (RF-14, H-15)."""
+
+    def setUp(self):
+        self.unidad = Unidad.objects.create(nombre="Batallón de Prueba")
+        self.alcatraz = Compania.objects.create(unidad=self.unidad, nombre="Alcatraz")
+        self.apiay = Deposito.objects.create(nombre="Apiay")
+        self.caruru = Deposito.objects.create(nombre="Caruru")
+        self.municion = TipoArmamento.objects.create(
+            nombre="MUNICION CAL 5.56MM", control=TipoArmamento.Control.CANTIDAD
+        )
+        self._archivos = []
+        self.addCleanup(self._borrar_archivos)
+
+    def _borrar_archivos(self):
+        for ruta in self._archivos:
+            os.unlink(ruta)
+
+    def _importar(self, hojas, **opciones):
+        ruta = _crear_excel(hojas)
+        self._archivos.append(ruta)
+        call_command("importar_existencias", ruta, **opciones)
+
+    def test_importa_existencias_por_hoja_de_compania(self):
+        self._importar(
+            {"Alcatraz": [["No", "MATERIAL", "CARGOS SAP"], [1, "MUNICION CAL 5.56MM", 100]]},
+            deposito="Apiay",
+        )
+        existencia = Existencia.objects.get(tipo=self.municion, compania=self.alcatraz)
+        self.assertEqual(existencia.cantidad, 100)
+        self.assertEqual(existencia.deposito, self.apiay)
+
+    def test_suma_a_existencia_previa_en_vez_de_reemplazar(self):
+        Existencia.objects.create(
+            tipo=self.municion, compania=self.alcatraz, deposito=self.apiay, cantidad=50
+        )
+        self._importar(
+            {"Alcatraz": [["No", "MATERIAL", "CARGOS SAP"], [1, "MUNICION CAL 5.56MM", 100]]},
+            deposito="Apiay",
+        )
+        existencia = Existencia.objects.get(
+            tipo=self.municion, compania=self.alcatraz, deposito=self.apiay
+        )
+        self.assertEqual(existencia.cantidad, 150)
+
+    def test_deposito_multiple_se_reparte_por_turnos(self):
+        self._importar(
+            {
+                "Alcatraz": [
+                    ["No", "MATERIAL", "CARGOS SAP"],
+                    [1, "MUNICION CAL 5.56MM", 10],
+                ],
+                "CP A": [
+                    ["No", "MATERIAL", "CARGOS SAP"],
+                    [1, "MUNICION CAL 5.56MM", 20],
+                ],
+            },
+            deposito="Apiay,Caruru",
+        )
+        # dos hojas resuelven a la misma compañía (Alcatraz y CP A) — cada una
+        # es una fila válida distinta, así que se reparten por turnos.
+        total = Existencia.objects.filter(tipo=self.municion, compania=self.alcatraz)
+        self.assertEqual(total.filter(deposito=self.apiay).first().cantidad, 10)
+        self.assertEqual(total.filter(deposito=self.caruru).first().cantidad, 20)
+
+    def test_material_no_reconocido_bloquea_toda_la_carga(self):
+        with self.assertRaises(CommandError):
+            self._importar(
+                {"Alcatraz": [["No", "MATERIAL", "CARGOS SAP"], [1, "MATERIAL INEXISTENTE", 5]]},
+                deposito="Apiay",
+            )
+        self.assertEqual(Existencia.objects.count(), 0)
+
+    def test_sin_deposito_bloquea_la_carga(self):
+        with self.assertRaises(CommandError):
+            self._importar(
+                {"Alcatraz": [["No", "MATERIAL", "CARGOS SAP"], [1, "MUNICION CAL 5.56MM", 5]]}
+            )
+
+    def test_dry_run_no_modifica_nada(self):
+        self._importar(
+            {"Alcatraz": [["No", "MATERIAL", "CARGOS SAP"], [1, "MUNICION CAL 5.56MM", 5]]},
+            deposito="Apiay",
+            dry_run=True,
+        )
+        self.assertEqual(Existencia.objects.count(), 0)
 
 
 @override_settings(STORAGES=_PLAIN_STATIC_STORAGE)

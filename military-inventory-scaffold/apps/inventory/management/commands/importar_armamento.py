@@ -1,29 +1,43 @@
 """Importa el inventario serializado inicial desde un Excel (RF-13, H-13).
 
 Uso:
-    python manage.py importar_armamento ruta/al/archivo.xlsx [--deposito NOMBRE] [--dry-run]
+    python manage.py importar_armamento ruta/al/archivo.xlsx \
+        [--deposito NOMBRE[,NOMBRE2]] [--dry-run]
 
-El archivo real de David (`ACTIVOS FIJOS COMPAÑIA.xlsx`) todavía no está
-disponible al escribir este comando (P-1/P-6 en docs/PRD.md siguen
-pendientes), así que este importador asume una estructura normalizada
-razonable, documentada aquí para poder adaptarlo rápido en cuanto llegue el
-archivo real:
+Estructura real observada en el Excel de David (`ACTIVOS FIJOS COMPAÑIA.xlsx`,
+carpeta `test files/` — RF-13, P-1/P-6 en docs/PRD.md):
 
-- Una hoja de cálculo (worksheet) por compañía. El NOMBRE de la hoja debe
-  coincidir (sin distinguir mayúsculas, tildes ni espacios extra) con el
-  nombre de una `Compania` ya sembrada (ver `seed_initial`). Una hoja que no
-  coincide con ninguna compañía se **omite con una advertencia**, no bloquea
-  el resto del archivo (podría ser una pestaña de notas/resumen).
-- Primera fila de cada hoja reconocida: encabezados. Columnas reconocidas
-  (por nombre, sin distinguir mayúsculas):
+- Una hoja por compañía, nombrada "CP <código>" (p. ej. "CP A", "CP ASPC") —
+  se resuelve contra `Compania.nombre` intentando primero un match directo y
+  luego quitando el prefijo "CP ".
+- Dentro de cada hoja, **varios bloques repetidos por categoría**: título de
+  categoría (una sola celda, p. ej. "FUSILES ACE"), luego una fila de
+  encabezado ("Denominación" / "Número de serie" / "Compañía"), luego las
+  filas de datos de esa categoría, y así se repite para cada categoría de la
+  hoja. El importador vuelve a detectar el encabezado cada vez que aparece
+  una fila que contiene los nombres de columna reconocidos — no asume que
+  todo el archivo tiene un único encabezado al principio.
+- Columnas reconocidas (por nombre, sin distinguir mayúsculas):
     - "Serie" / "Número de serie" (obligatoria).
     - "Denominación" / "Tipo" (obligatoria): debe coincidir, tras normalizar
       errores de tipeo conocidos del Excel real (ver TYPO_FIXES, docs/PRD.md
       §12 Riesgos), con el nombre de un `TipoArmamento` controlado por SERIE.
     - "Depósito" (opcional): si la hoja no la trae, se usa `--deposito` para
       toda la hoja.
-- Todo lo importado queda "en depósito" — RF-13 pide la "ubicación inicial
-  (depósito)"; asignar soldados es un paso posterior (RF-10), no de esta carga.
+- Filas con serie "SIN SERIE" (p. ej. los cascos) no son armamento
+  serializado — RF-14 pide llevarlos por **cantidad**. Este comando las
+  cuenta por (compañía, tipo, depósito) y crea/actualiza el `Existencia`
+  correspondiente en vez de un `Armamento`; el tipo debe existir como
+  `TipoArmamento` controlado por CANTIDAD (no por SERIE).
+- Todo lo importado (serializado o por cantidad) queda "en depósito" — RF-13
+  pide la "ubicación inicial (depósito)"; asignar soldados es un paso
+  posterior (RF-10), no de esta carga.
+- `--deposito` acepta uno o varios nombres separados por coma (p. ej.
+  `--deposito "Apiay,Caruru"`); si son varios, cada fila válida se reparte
+  entre ellos por turnos (round-robin), en el orden en que aparecen en el
+  archivo — ninguno de los dos Excel reales trae una columna de depósito, así
+  que esto es lo único disponible para repartir la carga inicial entre los
+  depósitos ya sembrados.
 
 Antes de crear nada se valida el archivo completo (series repetidas en el
 archivo o ya existentes en la base, tipos o depósitos no reconocidos, series
@@ -31,20 +45,25 @@ o denominaciones vacías) y se reportan todos los conflictos encontrados. Si
 hay alguno, no se crea NINGÚN registro — corrige el archivo y vuelve a correr
 el comando.
 """
-import unicodedata
 from collections import defaultdict
 
 import openpyxl
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
-from apps.inventory.models import Armamento, Compania, Deposito, TipoArmamento
+from apps.inventory.models import Armamento, Compania, Deposito, Existencia, TipoArmamento
 
-# Errores de tipeo conocidos en el Excel real (docs/PRD.md §12 Riesgos).
+from ._excel_import_utils import normalizar as _normalizar_base
+from ._excel_import_utils import resolver_compania, resolver_depositos
+
+# Errores de tipeo / variantes conocidas en los Excel reales (docs/PRD.md §12 Riesgos).
 TYPO_FIXES = {
     "VOSIRES": "VISORES",
     "AMETRALALDORAS": "AMETRALLADORAS",
+    "ACE -23": "ACE-23",
 }
+
+SIN_SERIE = "SIN SERIE"
 
 COLUMNAS_SERIE = {"SERIE", "NUMERO DE SERIE", "N SERIE", "N. SERIE"}
 COLUMNAS_TIPO = {"DENOMINACION", "TIPO"}
@@ -52,25 +71,28 @@ COLUMNAS_DEPOSITO = {"DEPOSITO"}
 
 
 def normalizar(texto):
-    """Mayúsculas, sin tildes y sin espacios repetidos, para comparar nombres
-    de compañía/tipo/depósito y encabezados de columna sin depender de cómo
-    se hayan escrito exactamente (RF-13, docs/PRD.md §12 Riesgos)."""
-    t = " ".join(str(texto).strip().upper().split())
-    t = "".join(c for c in unicodedata.normalize("NFKD", t) if not unicodedata.combining(c))
-    for malo, bueno in TYPO_FIXES.items():
-        t = t.replace(malo, bueno)
-    return t
+    return _normalizar_base(texto, TYPO_FIXES)
+
+
+def _es_fila_encabezado(valores_normalizados):
+    tiene_serie = bool(valores_normalizados & COLUMNAS_SERIE)
+    tiene_tipo = bool(valores_normalizados & COLUMNAS_TIPO)
+    return tiene_serie and tiene_tipo
 
 
 class Command(BaseCommand):
-    help = "Importa armamento serializado desde un Excel, una hoja por compañía (RF-13)."
+    help = "Importa armamento (por serie) y cascos SIN SERIE (por cantidad) desde un Excel (RF-13)."
 
     def add_arguments(self, parser):
         parser.add_argument("archivo", help="Ruta al archivo .xlsx a importar.")
         parser.add_argument(
             "--deposito",
             default=None,
-            help="Depósito a usar en las hojas que no traen columna Depósito.",
+            help=(
+                "Depósito(s) a usar en las hojas que no traen columna Depósito. "
+                "Uno o varios separados por coma; con varios, se reparten las "
+                "filas por turnos entre ellos."
+            ),
         )
         parser.add_argument(
             "--dry-run",
@@ -79,12 +101,7 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        deposito_global = None
-        if options["deposito"]:
-            try:
-                deposito_global = Deposito.objects.get(nombre__iexact=options["deposito"].strip())
-            except Deposito.DoesNotExist:
-                raise CommandError(f"Depósito no encontrado: {options['deposito']}") from None
+        depositos_global = resolver_depositos(options["deposito"], Deposito)
 
         ruta = options["archivo"]
         try:
@@ -93,60 +110,72 @@ class Command(BaseCommand):
             raise CommandError(f"No se encontró el archivo: {ruta}") from exc
 
         try:
-            advertencias, conflictos, filas_validas = self._leer_filas(workbook, deposito_global)
+            advertencias, conflictos, filas_validas, filas_cantidad = self._leer_filas(
+                workbook, depositos_global
+            )
         finally:
             workbook.close()  # en modo read_only, el archivo queda abierto si no se cierra.
 
-        self._procesar(advertencias, conflictos, filas_validas, options["dry_run"])
+        self._procesar(
+            advertencias, conflictos, filas_validas, filas_cantidad, options["dry_run"]
+        )
 
-    def _leer_filas(self, workbook, deposito_global):
+    def _leer_filas(self, workbook, depositos_global):
         companias_por_nombre = {normalizar(c.nombre): c for c in Compania.objects.all()}
-        tipos_por_nombre = {
+        tipos_serie_por_nombre = {
             normalizar(t.nombre): t
             for t in TipoArmamento.objects.filter(control=TipoArmamento.Control.SERIE)
+        }
+        tipos_cantidad_por_nombre = {
+            normalizar(t.nombre): t
+            for t in TipoArmamento.objects.filter(control=TipoArmamento.Control.CANTIDAD)
         }
         depositos_por_nombre = {normalizar(d.nombre): d for d in Deposito.objects.all()}
 
         advertencias = []
         conflictos = []
-        filas_validas = []  # (compania, tipo, deposito, numero_serie)
+        filas_validas = []  # (compania, tipo, deposito, numero_serie) — Armamento
+        filas_cantidad = defaultdict(int)  # (compania, tipo, deposito) -> cantidad — Existencia
         series_en_archivo = {}  # numero_serie -> "hoja X, fila Y" de la primera aparición
+        contador_reparto = 0  # para el round-robin de --deposito con varios valores
 
         for hoja in workbook.worksheets:
-            compania = companias_por_nombre.get(normalizar(hoja.title))
+            compania = resolver_compania(hoja.title, companias_por_nombre, TYPO_FIXES)
             if compania is None:
                 advertencias.append(
                     f'Hoja "{hoja.title}" omitida: no coincide con ninguna compañía sembrada.'
                 )
                 continue
 
-            filas = hoja.iter_rows(values_only=True)
-            encabezados = next(filas, None)
-            if encabezados is None:
-                advertencias.append(f'Hoja "{hoja.title}" omitida: está vacía.')
-                continue
+            columnas = None
+            for num_fila, fila in enumerate(hoja.iter_rows(values_only=True), start=1):
+                valores_no_none = [v for v in fila if v is not None]
+                if not valores_no_none:
+                    continue  # fila en blanco: separador entre bloques de categoría.
 
-            columnas = {}
-            for indice, valor in enumerate(encabezados):
-                if valor is None:
+                valores_normalizados = {normalizar(v) for v in valores_no_none}
+                if _es_fila_encabezado(valores_normalizados):
+                    columnas = {}
+                    for indice, valor in enumerate(fila):
+                        if valor is None:
+                            continue
+                        clave = normalizar(valor)
+                        if clave in COLUMNAS_SERIE:
+                            columnas["serie"] = indice
+                        elif clave in COLUMNAS_TIPO:
+                            columnas["tipo"] = indice
+                        elif clave in COLUMNAS_DEPOSITO:
+                            columnas["deposito"] = indice
                     continue
-                clave = normalizar(valor)
-                if clave in COLUMNAS_SERIE:
-                    columnas["serie"] = indice
-                elif clave in COLUMNAS_TIPO:
-                    columnas["tipo"] = indice
-                elif clave in COLUMNAS_DEPOSITO:
-                    columnas["deposito"] = indice
 
-            if "serie" not in columnas or "tipo" not in columnas:
-                conflictos.append(
-                    f'Hoja "{hoja.title}": faltan columnas obligatorias '
-                    f"(Serie y Denominación/Tipo)."
-                )
-                continue
+                if len(valores_no_none) == 1:
+                    continue  # título de categoría (p. ej. "FUSILES ACE"), no es un dato.
 
-            for num_fila, fila in enumerate(filas, start=2):
-                if fila is None or all(valor is None for valor in fila):
+                if columnas is None:
+                    conflictos.append(
+                        f'Hoja "{hoja.title}", fila {num_fila}: hay datos antes de un '
+                        f"encabezado reconocido (Serie y Denominación/Tipo)."
+                    )
                     continue
 
                 referencia = f'hoja "{hoja.title}", fila {num_fila}'
@@ -155,19 +184,23 @@ class Command(BaseCommand):
                     conflictos.append(f"{referencia}: serie vacía.")
                     continue
                 numero_serie = str(serie_raw).strip()
+                es_sin_serie = normalizar(numero_serie) == SIN_SERIE
 
                 tipo_raw = fila[columnas["tipo"]] if columnas["tipo"] < len(fila) else None
                 if tipo_raw is None or not str(tipo_raw).strip():
                     conflictos.append(f"{referencia} (serie {numero_serie}): denominación vacía.")
                     continue
-                tipo = tipos_por_nombre.get(normalizar(tipo_raw))
+                tipos_dict = tipos_cantidad_por_nombre if es_sin_serie else tipos_serie_por_nombre
+                tipo = tipos_dict.get(normalizar(tipo_raw))
                 if tipo is None:
+                    control = "por cantidad" if es_sin_serie else "por serie"
                     conflictos.append(
-                        f'{referencia} (serie {numero_serie}): tipo no reconocido: "{tipo_raw}".'
+                        f'{referencia} (serie {numero_serie}): tipo no reconocido ({control}): '
+                        f'"{tipo_raw}".'
                     )
                     continue
 
-                deposito = deposito_global
+                deposito = None
                 if "deposito" in columnas:
                     deposito_raw = (
                         fila[columnas["deposito"]] if columnas["deposito"] < len(fila) else None
@@ -181,10 +214,18 @@ class Command(BaseCommand):
                             )
                             continue
                 if deposito is None:
-                    conflictos.append(
-                        f"{referencia} (serie {numero_serie}): sin depósito "
-                        f"(agrega la columna Depósito o usa --deposito)."
-                    )
+                    if depositos_global:
+                        deposito = depositos_global[contador_reparto % len(depositos_global)]
+                        contador_reparto += 1
+                    else:
+                        conflictos.append(
+                            f"{referencia} (serie {numero_serie}): sin depósito "
+                            f"(agrega la columna Depósito o usa --deposito)."
+                        )
+                        continue
+
+                if es_sin_serie:
+                    filas_cantidad[(compania, tipo, deposito)] += 1
                     continue
 
                 if numero_serie in series_en_archivo:
@@ -197,9 +238,9 @@ class Command(BaseCommand):
 
                 filas_validas.append((compania, tipo, deposito, numero_serie))
 
-        return advertencias, conflictos, filas_validas
+        return advertencias, conflictos, filas_validas, filas_cantidad
 
-    def _procesar(self, advertencias, conflictos, filas_validas, dry_run):
+    def _procesar(self, advertencias, conflictos, filas_validas, filas_cantidad, dry_run):
         if filas_validas:
             existentes = set(
                 Armamento.objects.filter(
@@ -221,12 +262,17 @@ class Command(BaseCommand):
                 self.stdout.write(f"  - {conflicto}")
             raise CommandError("Corrige los conflictos y vuelve a correr el comando.")
 
-        self.stdout.write(f"{len(filas_validas)} elemento(s) listos para crear.")
+        total_cantidad = sum(filas_cantidad.values())
+        self.stdout.write(
+            f"{len(filas_validas)} elemento(s) serializados y {total_cantidad} "
+            f"elemento(s) sin serie (por cantidad) listos para crear."
+        )
         if dry_run:
             self.stdout.write(self.style.WARNING("--dry-run: no se creó nada."))
             return
 
-        por_compania = defaultdict(int)
+        armamento_por_compania = defaultdict(int)
+        cantidad_por_compania = defaultdict(int)
         with transaction.atomic():
             for compania, tipo, deposito, numero_serie in filas_validas:
                 arma = Armamento(
@@ -238,10 +284,27 @@ class Command(BaseCommand):
                 )
                 arma.full_clean()
                 arma.save()
-                por_compania[compania.nombre] += 1
+                armamento_por_compania[compania.nombre] += 1
 
-        for nombre, cantidad in sorted(por_compania.items()):
-            self.stdout.write(f"  {nombre}: {cantidad}")
+            for (compania, tipo, deposito), cantidad in filas_cantidad.items():
+                existencia, _creada = Existencia.objects.get_or_create(
+                    tipo=tipo, compania=compania, deposito=deposito, lote="",
+                    defaults={"cantidad": 0},
+                )
+                existencia.cantidad += cantidad
+                existencia.full_clean()
+                existencia.save()
+                cantidad_por_compania[compania.nombre] += cantidad
+
+        companias_nombres = sorted(set(armamento_por_compania) | set(cantidad_por_compania))
+        for nombre in companias_nombres:
+            self.stdout.write(
+                f"  {nombre}: {armamento_por_compania[nombre]} serializado(s), "
+                f"{cantidad_por_compania[nombre]} sin serie"
+            )
         self.stdout.write(
-            self.style.SUCCESS(f"Importación completada: {len(filas_validas)} elemento(s).")
+            self.style.SUCCESS(
+                f"Importación completada: {len(filas_validas)} serializado(s), "
+                f"{total_cantidad} sin serie (por cantidad)."
+            )
         )
