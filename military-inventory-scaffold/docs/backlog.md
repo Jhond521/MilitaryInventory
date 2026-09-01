@@ -258,7 +258,9 @@ El corazón del sistema.
 #### H-13 — Importar el inventario del Excel ✅
 
 - **Requerimiento**: RF-13
-- **Estado**: Hecho (a falta del Excel real para verificar contra él)
+- **Estado**: Hecho — verificado contra el Excel real de David
+  (`ACTIVOS FIJOS COMPAÑIA.xlsx`), cargado en Railway dev (1135 elementos
+  serializados + 664 cascos sin serie).
 - **Historia**: Como equipo, cargamos el inventario inicial (Excel por compañías) antes de operar.
 - **Criterios de aceptación**:
   - [x] Script/management command que lee el Excel entregado y crea armamento con serie, tipo, compañía y ubicación.
@@ -269,17 +271,27 @@ El corazón del sistema.
   o ya existente en la base, tipo/depósito no reconocido, serie o denominación vacía), no crea
   ningún registro y reporta todos los conflictos encontrados. Todo lo importado queda "en
   depósito" (asignar soldados es un paso posterior, RF-10).
-  - **Supuesto (a confirmar contra el Excel real, P-1/P-6 aún pendientes)**: David todavía no
-    ha entregado `ACTIVOS FIJOS COMPAÑIA.xlsx`, así que el comando asume una estructura
-    normalizada razonable (documentada en su docstring) en vez del layout real de "bloques
-    por denominación" del archivo — una hoja por compañía, fila de encabezados con columnas
-    Serie/Denominación/Depósito. Cuando llegue el archivo real, validar contra él y, si el
-    layout no calza, adaptar la detección de encabezados/bloques del comando (el núcleo de
-    validación y reporte de conflictos debería servir igual).
   - Al escribir esto se notó que el catálogo sembrado (`seed_initial`) no tenía Pistolas ni
     Visores nocturnos pese a estar en el Anexo A del PRD — se agregaron 5 tipos nuevos (todos
     por SERIE): PISTOLA PX4 STORM, PISTOLA PRIETO BERETTA, VISOR NOCTURNO AN PVS 14, VISOR
     NOCTURNO AN PVS 7B, VISOR NOCTURNO DUAL/DOBLE (24 → 29 tipos).
+  - **Actualización (Excel real recibido)**: el layout real no calzaba con lo asumido
+    arriba — una misma hoja trae varios bloques repetidos por categoría (título +
+    encabezado + datos, separados por filas en blanco), no un único encabezado al
+    principio; las hojas se llaman "CP <código>" (p. ej. "CP A"), no el nombre de
+    compañía tal cual; y los cascos vienen como serie "SIN SERIE" (van a `Existencia`
+    por cantidad, no a `Armamento`). El comando se reescribió para detectar el
+    encabezado cada vez que reaparece, resolver "CP <código>" contra el mismo mapeo
+    letra→compañía que usa el selector de compañía (issue #6: A=Alcatraz, B=Bisonte,
+    C=Córsega, D=Delta, E=Escorpión), y enrutar las filas "SIN SERIE" a `Existencia`.
+    `--deposito` ahora acepta una lista separada por comas y reparte las filas por
+    turnos entre ellos (ninguno de los dos Excel reales trae columna de depósito). El
+    catálogo de tipos se amplió otra vez (29 → 55) con las denominaciones exactas del
+    archivo real (los nombres viejos, inventados antes de tener el archivo, se dejaron
+    intactos por si representan algo real que no está en este archivo). Los dos Excel
+    reales viven en `test files/` (gitignored, nunca se suben a git — datos militares
+    reales). Cargado en Railway **dev** únicamente; producción sigue sin datos de
+    inventario reales.
 
 ## Fase 2 — Siguiente
 
@@ -305,8 +317,10 @@ El corazón del sistema.
     repo). El dominio de cada servicio debe apuntar al puerto real de gunicorn (el que
     asigna Railway vía `$PORT`, no el `8000` del `Dockerfile`) — verificar con
     `railway domain list` si un dominio nuevo devuelve 502. `seed_initial` corrido en
-    ambos vía `railway ssh -- python manage.py seed_initial`. Falta cargar el inventario
-    real (H-13) y la lista completa de usuarios autorizados (P-1).
+    ambos vía `railway ssh -- python manage.py seed_initial`. Inventario real (H-13) y
+    existencias (H-15) ya cargados en **dev**; producción sigue sin datos de inventario.
+    Falta la lista completa de usuarios autorizados (P-1) y cargar producción cuando
+    se decida arrancar la operación ahí.
 - [x] T-03 — CI (tests + ruff en cada push)
   - **Notas técnicas**: `.github/workflows/ci.yml` — un solo job en Ubuntu con Python 3.12
     (fijo por `requires-python` en `pyproject.toml`), corre en cada push y pull request.
@@ -335,8 +349,18 @@ historias H-14…H-17 siguen pendientes en su parte de interfaz/UI.
 
 - H-14 — Pelotones: 4 por compañía; pelotón como dato del soldado (editable), mostrado en inventario/detalle/entrega; el arma deriva su pelotón del soldado (RF-16)
   - **Estado**: modelo listo (T-07) — `Peloton`, `Soldado.peloton` (validado contra su compañía) y `Armamento.peloton_actual` (derivado, `None` en depósito). Falta mostrarlo en pantallas propias (H-08…H-11).
-- H-15 — Existencias por cantidad: munición y cascos por cantidad; carga desde "CARGOS SAP" (RF-14)
-  - **Estado**: modelo listo (T-07) — `Existencia` (tipo + compañía + depósito + lote opcional + cantidad), gestionable desde el admin. Falta el importador desde "CARGOS SAP" (fase siguiente) y una pantalla de ajuste guiado.
+- H-15 — Existencias por cantidad: munición y cascos por cantidad; carga desde "CARGOS SAP" (RF-14) ✅
+  - **Estado**: Hecho — modelo `Existencia` (T-07) + nuevo comando
+    `python manage.py importar_existencias archivo.xlsx --deposito NOMBRE[,NOMBRE2] [--dry-run]`
+    (`apps/inventory/management/commands/importar_existencias.py`), mismo criterio de
+    validación todo-o-nada que `importar_armamento` (material o depósito no reconocido,
+    cantidad inválida/negativa bloquea toda la carga) y mismo mapeo de hoja "CP <código>"
+    → compañía. Suma a la `Existencia` existente en vez de reemplazarla, para componer
+    bien con los cascos que carga `importar_armamento` desde el otro archivo. Lote queda
+    en blanco (P-6 sigue pendiente — David no ha entregado el número de lote). Verificado
+    contra el archivo real de David (`PROYECTO APP CONTROL MATERIAL DE CONSUMO.xlsx`) y
+    cargado en Railway **dev** (370.075 unidades en 76 existencias). Sigue pendiente una
+    pantalla de ajuste manual guiado (hoy se edita desde el CRUD genérico de Munición).
 - H-16 — Préstamo de munición entre compañías con saldos y trazabilidad (RF-15) ✅
   - **Estado**: Hecho (ADR-0004) — `inventory:prestamo_transferir` (un solo formulario,
     mismo estilo que Devolver; ambos roles pueden registrar, RF-15) construye el
