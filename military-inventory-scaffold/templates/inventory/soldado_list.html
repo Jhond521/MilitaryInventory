@@ -37,7 +37,7 @@
   <div class="siga-pick-item">
     <span class="siga-pick-item__avatar">{{ soldado.apellidos_nombres|slice:":2"|upper }}</span>
     <span style="flex-grow:1;">
-      <div class="siga-pick-item__name">{{ soldado.apellidos_nombres }}</div>
+      <div class="siga-pick-item__name">{{ soldado.nombre_con_grado }}</div>
       <div class="siga-pick-item__meta">{{ soldado.compania.nombre }} · Pelotón {{ soldado.peloton.nombre }}</div>
     </span>
     {% if user.is_admin_role %}

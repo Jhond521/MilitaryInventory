@@ -99,7 +99,48 @@ class Peloton(models.Model):
 
 
 class Soldado(models.Model):
+    class Grado(models.TextChoices):
+        # Oficial
+        TC = "TC", "TC"
+        MY = "MY", "MY"
+        CT = "CT", "CT"
+        TE = "TE", "TE"
+        ST = "ST", "ST"
+        # Suboficial
+        SM = "SM", "SM"
+        SP = "SP", "SP"
+        SV = "SV", "SV"
+        SS = "SS", "SS"
+        CP = "CP", "CP"
+        CS = "CS", "CS"
+        C3 = "C3", "C3"
+        # Soldado
+        SLP = "SLP", "SLP"
+        SL18 = "SL18", "SL18"
+
+    # Agrupación por categoría (Oficial/Suboficial/Soldado) solo para el
+    # selector de 2 niveles del formulario — RF-19. La categoría nunca se
+    # guarda ni se muestra por separado, solo la abreviatura (`grado`).
+    GRADOS_AGRUPADOS = (
+        (
+            "Oficial",
+            [
+                (Grado.TC, "TC"), (Grado.MY, "MY"), (Grado.CT, "CT"),
+                (Grado.TE, "TE"), (Grado.ST, "ST"),
+            ],
+        ),
+        (
+            "Suboficial",
+            [
+                (Grado.SM, "SM"), (Grado.SP, "SP"), (Grado.SV, "SV"), (Grado.SS, "SS"),
+                (Grado.CP, "CP"), (Grado.CS, "CS"), (Grado.C3, "C3"),
+            ],
+        ),
+        ("Soldado", [(Grado.SLP, "SLP"), (Grado.SL18, "SL18")]),
+    )
+
     apellidos_nombres = models.CharField("apellidos y nombres", max_length=200)
+    grado = models.CharField("grado", max_length=10, choices=Grado.choices, blank=True)
     compania = models.ForeignKey(Compania, on_delete=models.PROTECT, related_name="soldados")
     peloton = models.ForeignKey(Peloton, on_delete=models.PROTECT, related_name="soldados")
 
@@ -109,11 +150,20 @@ class Soldado(models.Model):
         ordering = ["apellidos_nombres"]
 
     def __str__(self):
-        return f"{self.apellidos_nombres} ({self.compania})"
+        return f"{self.nombre_con_grado} ({self.compania})"
 
     def clean(self):
         if self.peloton_id and self.compania_id and self.peloton.compania_id != self.compania_id:
             raise ValidationError("El pelotón debe pertenecer a la misma compañía del soldado.")
+
+    @property
+    def nombre_con_grado(self) -> str:
+        """Apellidos y nombres, antepuesto el grado cuando el soldado lo
+        tiene (RF-19) — ej. "CT Bolaños Gómez David". Dato opcional: sin
+        grado, se muestra el nombre solo."""
+        if self.grado:
+            return f"{self.grado} {self.apellidos_nombres}"
+        return self.apellidos_nombres
 
 
 class TipoArmamento(models.Model):

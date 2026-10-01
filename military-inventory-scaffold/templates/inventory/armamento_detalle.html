@@ -41,7 +41,7 @@
       <div>
         <div class="lbl">Responsable</div>
         <div class="val">
-          {% if arma.ubicacion == "EN_MANO" %}En mano · {{ arma.soldado.apellidos_nombres }}{% else %}En depósito · {{ arma.deposito.nombre }}{% endif %}
+          {% if arma.ubicacion == "EN_MANO" %}En mano · {{ arma.soldado.nombre_con_grado }}{% else %}En depósito · {{ arma.deposito.nombre }}{% endif %}
         </div>
       </div>
       <div><div class="lbl">Estado</div><div class="val">{{ arma.get_estado_display }}</div></div>

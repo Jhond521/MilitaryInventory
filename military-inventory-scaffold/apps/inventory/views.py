@@ -225,7 +225,7 @@ def _historial_arma(armamento):
     for mov in movimientos:
         if mov.tipo == Movimiento.Tipo.ENTREGA:
             titulo = "Entrega a soldado"
-            destino_nombre = mov.soldado.apellidos_nombres if mov.soldado else "—"
+            destino_nombre = mov.soldado.nombre_con_grado if mov.soldado else "—"
             detalle = f"A {destino_nombre}"
         elif mov.tipo == Movimiento.Tipo.DEVOLUCION:
             titulo = "Devolución a depósito"

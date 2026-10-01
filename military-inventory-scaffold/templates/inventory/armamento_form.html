@@ -10,7 +10,7 @@
   </div>
   <div class="siga-summary__row">
     <span class="label">Responsable</span>
-    <span class="value">{% if arma.soldado %}{{ arma.soldado.apellidos_nombres }}{% else %}{{ arma.deposito.nombre }}{% endif %}</span>
+    <span class="value">{% if arma.soldado %}{{ arma.soldado.nombre_con_grado }}{% else %}{{ arma.deposito.nombre }}{% endif %}</span>
   </div>
 </div>
 <p class="siga-help-text" style="margin-bottom:16px;">La ubicación solo cambia con Entregar/Devolver — no se edita aquí.</p>

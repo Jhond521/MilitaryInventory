@@ -85,9 +85,18 @@ def aplicar_campos_personalizados(armamento, cleaned_data):
 
 
 class SoldadoForm(forms.ModelForm):
+    # Selector agrupado de 2 niveles (categoría → abreviatura) — RF-19. Un
+    # <select> con <optgroup> nativo (sin JS), igual criterio que el resto
+    # de formularios desde que se retiró el admin (ADR-0004).
+    grado = forms.ChoiceField(
+        required=False,
+        label="Grado",
+        choices=[("", "— Sin grado —")] + list(Soldado.GRADOS_AGRUPADOS),
+    )
+
     class Meta:
         model = Soldado
-        fields = ["apellidos_nombres", "compania", "peloton"]
+        fields = ["apellidos_nombres", "grado", "compania", "peloton"]
         labels = {"apellidos_nombres": "Apellidos y nombres"}
 
 

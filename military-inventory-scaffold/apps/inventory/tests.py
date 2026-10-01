@@ -162,6 +162,86 @@ class PelotonRulesTests(TestCase):
             soldado.full_clean()
 
 
+class GradoSoldadoTests(TestCase):
+    """`Soldado.grado`/`nombre_con_grado` (RF-19, issue #13) — campo fijo
+    opcional, el prefijo antepuesto en todo el sistema."""
+
+    def setUp(self):
+        self.unidad = Unidad.objects.create(nombre="Batallón de Prueba")
+        self.compania = Compania.objects.create(unidad=self.unidad, nombre="A")
+        self.peloton = Peloton.objects.create(compania=self.compania, nombre="A 1")
+
+    def test_nombre_con_grado_antepone_la_abreviatura(self):
+        soldado = Soldado.objects.create(
+            apellidos_nombres="Bolaños Gómez David",
+            grado=Soldado.Grado.CT,
+            compania=self.compania,
+            peloton=self.peloton,
+        )
+        self.assertEqual(soldado.nombre_con_grado, "CT Bolaños Gómez David")
+        self.assertIn("CT Bolaños Gómez David", str(soldado))
+
+    def test_nombre_con_grado_sin_grado_muestra_solo_el_nombre(self):
+        soldado = Soldado.objects.create(
+            apellidos_nombres="Ríos Carlos", compania=self.compania, peloton=self.peloton
+        )
+        self.assertEqual(soldado.nombre_con_grado, "Ríos Carlos")
+
+    def test_grado_es_opcional(self):
+        soldado = Soldado(
+            apellidos_nombres="Ríos Carlos", compania=self.compania, peloton=self.peloton
+        )
+        soldado.full_clean()  # no debe reventar sin grado
+
+
+@override_settings(STORAGES=_PLAIN_STATIC_STORAGE)
+class SoldadoFormGradoTests(TestCase):
+    """El formulario de alta/edición de soldado guarda el grado elegido
+    (issue #13) — selector agrupado por categoría, solo se guarda la
+    abreviatura."""
+
+    def setUp(self):
+        self.unidad = Unidad.objects.create(nombre="Batallón de Prueba")
+        self.compania = Compania.objects.create(unidad=self.unidad, nombre="A")
+        self.peloton = Peloton.objects.create(compania=self.compania, nombre="A 1")
+        user_model = get_user_model()
+        self.admin_user = user_model.objects.create_user(
+            email="admin@example.com", password="x", role=user_model.Role.ADMIN
+        )
+        self.client.force_login(self.admin_user)
+        session = self.client.session
+        session[SESSION_KEY] = self.compania.pk
+        session.save()
+
+    def test_crear_soldado_con_grado(self):
+        response = self.client.post(
+            reverse("inventory:soldado_crear"),
+            {
+                "apellidos_nombres": "Bolaños Gómez David",
+                "grado": Soldado.Grado.CT,
+                "compania": self.compania.pk,
+                "peloton": self.peloton.pk,
+            },
+        )
+        self.assertRedirects(response, reverse("inventory:soldado_list"))
+        soldado = Soldado.objects.get(apellidos_nombres="Bolaños Gómez David")
+        self.assertEqual(soldado.grado, Soldado.Grado.CT)
+
+    def test_crear_soldado_sin_grado(self):
+        response = self.client.post(
+            reverse("inventory:soldado_crear"),
+            {
+                "apellidos_nombres": "Ríos Carlos",
+                "grado": "",
+                "compania": self.compania.pk,
+                "peloton": self.peloton.pk,
+            },
+        )
+        self.assertRedirects(response, reverse("inventory:soldado_list"))
+        soldado = Soldado.objects.get(apellidos_nombres="Ríos Carlos")
+        self.assertEqual(soldado.grado, "")
+
+
 class ExistenciaPrestamoTests(TestCase):
     def setUp(self):
         self.unidad = Unidad.objects.create(nombre="Batallón de Prueba")
@@ -1079,6 +1159,17 @@ class ArmamentoDetalleTests(TestCase):
         self.assertNotContains(
             response, reverse("inventory:armamento_entregar", args=[self.arma.pk])
         )
+
+    def test_historial_antepone_el_grado_del_soldado(self):
+        """RF-19, issue #13: el prefijo de grado llega hasta el historial
+        del arma, no solo a las pantallas de Soldados."""
+        self.soldado1.grado = Soldado.Grado.CT
+        self.soldado1.save()
+        self.arma.entregar(soldado=self.soldado1, usuario=self.admin_user)
+
+        response = self.client.get(reverse("inventory:armamento_detalle", args=[self.arma.pk]))
+        historial = response.context["historial"]
+        self.assertEqual(historial[0]["detalle"], "A CT Pérez A.")
 
 
 @override_settings(STORAGES=_PLAIN_STATIC_STORAGE)

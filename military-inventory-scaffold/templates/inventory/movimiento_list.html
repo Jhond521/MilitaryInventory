@@ -42,7 +42,7 @@
     </div>
     <div class="siga-card__tipo">{{ movimiento.armamento.tipo.nombre }}</div>
     <div class="siga-card__meta">
-      <span>{% if movimiento.soldado %}Soldado: <strong>{{ movimiento.soldado.apellidos_nombres }}</strong>{% elif movimiento.deposito %}Depósito: <strong>{{ movimiento.deposito.nombre }}</strong>{% endif %}</span>
+      <span>{% if movimiento.soldado %}Soldado: <strong>{{ movimiento.soldado.nombre_con_grado }}</strong>{% elif movimiento.deposito %}Depósito: <strong>{{ movimiento.deposito.nombre }}</strong>{% endif %}</span>
       <span>{{ movimiento.fecha|date:"d/m/Y H:i" }}</span>
     </div>
     <div class="siga-card__meta">
