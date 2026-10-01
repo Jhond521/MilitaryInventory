@@ -293,6 +293,17 @@ El corazón del sistema.
     reales). Cargado en Railway **dev** únicamente; producción sigue sin datos de
     inventario reales.
 
+## Actualizaciones v1.4 (feedback de David, issue #11)
+
+- H-24 — Entrega y devolución de existencias (munición) a un soldado, espejo de H-09 (RF-18)
+  - **Estado**: Pendiente. Requiere decisión de modelado previa (candidato: generalizar
+    `Existencia` con `ubicacion` EN_MANO/DEPOSITO y `soldado` opcional, permitiendo varias
+    filas "en mano" por tipo/lote — documentar como ADR-0005 antes de codificar). Ver issue
+    de GitHub dedicado para el detalle completo.
+- H-25 — Grado del soldado: campo fijo opcional con selector agrupado, mostrado como prefijo del nombre (RF-19)
+  - **Estado**: Pendiente. Ver issue de GitHub dedicado para el detalle completo (valores
+    exactos por categoría, alcance de la visualización).
+
 ## Fase 2 — Siguiente
 
 - H-20 — Módulo de importación de Excel autoservicio (que David suba y cargue) (RF-13)

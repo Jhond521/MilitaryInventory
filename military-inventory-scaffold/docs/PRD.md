@@ -2,11 +2,19 @@
 
 | | |
 |---|---|
-| **Estado** | En revisión (v1.3 — móvil e instalable) |
+| **Estado** | En revisión (v1.4 — entrega de munición y grado del soldado) |
 | **Autor** | John Cuervo (para David Bolaños — Batallón de Selva No. 52) |
-| **Última actualización** | 2026-08-27 |
-| **Versión** | v1.3 |
+| **Última actualización** | 2026-09-30 |
+| **Versión** | v1.4 |
 
+> **Cambios v1.4** (feedback de David, issue #11 "Fixes Generales", 2026-09-16):
+> se agrega **RF-18** (entrega/devolución de munición y demás existencias a un
+> soldado, espejo del flujo de Armamento) y **RF-19** (grado del soldado, campo
+> fijo opcional con selector agrupado por categoría, mostrado como prefijo del
+> nombre en todo el sistema). Separado en issues de GitHub propios (uno por
+> requerimiento) más un bug de visualización de observaciones sin relación con
+> el PRD.
+>
 > **Cambios v1.3**: la aplicación debe **funcionar bien desde el celular** y ser
 > **instalable** (PWA — se agrega a la pantalla de inicio y se abre como una app),
 > con navegación adaptada a móvil (ver RF-17 y RNF-04).
@@ -270,6 +278,40 @@ app, para operar en terreno sin depender del computador.
   las acciones cumplen tamaños táctiles adecuados (mínimo 44 px).
 - [ ] No requiere publicarse en tiendas de aplicaciones (se instala desde el navegador).
 
+### RF-18 — Entrega y devolución de existencias (munición) a un soldado
+**Prioridad**: Alta
+**Descripción**: Como administrador o enlace, quiero entregar una cantidad de
+munición (u otro tipo CANTIDAD) a un soldado y poder devolverla al depósito,
+igual que con el material serializado (RF-10).
+**Criterios de aceptación**:
+
+- [ ] Entregar mueve una cantidad de una existencia "en depósito" a "en mano"
+  de un soldado **de la misma compañía** dueña de la existencia.
+- [ ] Devolver mueve una cantidad (total o parcial) de "en mano" de un
+  soldado a "en depósito".
+- [ ] No se puede entregar más cantidad de la disponible en la existencia de
+  origen.
+- [ ] Cada entrega/devolución queda registrada con tipo, cantidad, soldado,
+  usuario y fecha/hora (RNF-03).
+- [ ] Administrador y enlace pueden registrar estos movimientos.
+
+### RF-19 — Grado del soldado
+**Prioridad**: Media
+**Descripción**: Como administrador, quiero registrar el grado militar de
+cada soldado, para identificarlo correctamente en todo el sistema.
+**Criterios de aceptación**:
+
+- [ ] El soldado tiene un campo **Grado** opcional, elegido con un selector
+  de 2 niveles: categoría (Oficial / Suboficial / Soldado) y, dentro de
+  ella, la abreviatura. Solo se guarda la abreviatura.
+- [ ] Valores — Oficial: TC, MY, CT, TE, ST · Suboficial: SM, SP, SV, SS, CP,
+  CS, C3 · Soldado: SLP, SL18.
+- [ ] Dondequiera que el sistema muestre el nombre de un soldado, si tiene
+  grado, se antepone como "GRADO Apellidos Nombres" (ej. "CT Bolaños Gómez
+  David"); sin grado, se muestra el nombre solo.
+- [ ] No es un campo personalizado (NO-2 sigue aplicando solo a
+  `CampoPersonalizado`): es un campo fijo del modelo, igual que Pelotón.
+
 ## 7. Requerimientos no funcionales
 
 | ID | Categoría | Requerimiento | Cómo se verifica |
@@ -325,7 +367,7 @@ información se respalda. Los elementos dados de baja se conservan (no se elimin
 
 | Fase | Contenido | Requerimientos |
 |---|---|---|
-| v1 (MVP) | Acceso + roles, selección de compañía, CRUD de datos maestros, pelotones, material serializado (alta/ubicación/estado/movimientos/baja), existencias por cantidad y préstamo de munición, búsqueda, campos personalizados, carga inicial serializada, y app **móvil responsive e instalable (PWA)**. | RF-01 a RF-17 |
+| v1 (MVP) | Acceso + roles, selección de compañía, CRUD de datos maestros, pelotones, material serializado (alta/ubicación/estado/movimientos/baja), existencias por cantidad y préstamo de munición, entrega/devolución de existencias a un soldado, grado del soldado, búsqueda, campos personalizados, carga inicial serializada, y app **móvil responsive e instalable (PWA)**. | RF-01 a RF-19 |
 | Siguiente | Importador de Excel autoservicio, carga de munición inicial, reportes/exportes, tablero de resumen por compañía, acuse de entrega. | — |
 | Algún día | Multi-unidad con configurador, app móvil, escaneo de serie. | — |
 
