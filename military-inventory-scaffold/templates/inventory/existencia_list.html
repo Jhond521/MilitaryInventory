@@ -9,6 +9,7 @@
 </div>
 <div class="siga-page-subtitle">
   <a href="{% url 'inventory:prestamo_list' %}">Ver préstamos</a> ·
+  <a href="{% url 'inventory:existencia_asignada_list' %}">Ver munición asignada</a> ·
   {% if ver_todas %}Todas las compañías{% else %}Compañía {{ compania_actual|default:"—" }}{% endif %}
   · {{ existencias|length }} registro{{ existencias|length|pluralize }}
   {% if not ver_todas %}· <a href="?todas=1{% if q %}&q={{ q|urlencode }}{% endif %}">ver todas</a>{% endif %}
@@ -44,12 +45,13 @@
       <span>Depósito: <strong>{{ existencia.deposito.nombre }}</strong></span>
       {% if existencia.lote %}<span>Lote: <strong>{{ existencia.lote }}</strong></span>{% endif %}
     </div>
-    {% if user.is_admin_role %}
     <div class="siga-card__meta" style="margin-top:8px;">
+      <a href="{% url 'inventory:existencia_entregar' existencia.pk %}">Entregar</a>
+      {% if user.is_admin_role %}
       <a href="{% url 'inventory:existencia_editar' existencia.pk %}">Editar</a>
       <a href="{% url 'inventory:existencia_borrar' existencia.pk %}" style="color:var(--siga-red-dark);">Borrar</a>
+      {% endif %}
     </div>
-    {% endif %}
   </div>
   {% empty %}
   <p class="siga-empty">No hay existencias que coincidan con la búsqueda.</p>

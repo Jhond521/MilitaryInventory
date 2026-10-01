@@ -1,0 +1,92 @@
+{% extends "inventory/base_mobile.html" %}
+{% block title %}Entregar munición{% endblock %}
+{% block content %}
+<h1 class="siga-page-title">Entregar munición</h1>
+
+<div class="siga-stepper">
+  <div class="siga-stepper__step">
+    <span class="siga-stepper__circle">1</span> Existencia
+  </div>
+  <div class="siga-stepper__line"></div>
+  <div class="siga-stepper__step{% if paso == "soldado" %} siga-stepper__step--active{% endif %}">
+    <span class="siga-stepper__circle">2</span> Soldado
+  </div>
+  <div class="siga-stepper__line"></div>
+  <div class="siga-stepper__step{% if paso == "confirmar" %} siga-stepper__step--active{% endif %}">
+    <span class="siga-stepper__circle">3</span> Confirmar
+  </div>
+</div>
+
+<div class="siga-field">
+  <label>Existencia</label>
+  <div class="siga-summary">
+    <div class="siga-summary__row">
+      <span class="label">Tipo</span>
+      <span class="value">{{ existencia.tipo.nombre }}</span>
+    </div>
+    {% if existencia.lote %}
+    <div class="siga-summary__row">
+      <span class="label">Lote</span>
+      <span class="value">{{ existencia.lote }}</span>
+    </div>
+    {% endif %}
+    <div class="siga-summary__row">
+      <span class="label">Disponible en {{ existencia.deposito.nombre }}</span>
+      <span class="value">{{ existencia.cantidad }}</span>
+    </div>
+  </div>
+</div>
+
+{% if paso == "confirmar" %}
+<div class="siga-field">
+  <label>Soldado receptor — Compañía {{ existencia.compania.nombre }}</label>
+  <div class="siga-summary">
+    <div class="siga-summary__row">
+      <span class="label">Nombre</span>
+      <span class="value">{{ soldado.apellidos_nombres }}</span>
+    </div>
+    <div class="siga-summary__row">
+      <span class="label">Pelotón</span>
+      <span class="value">{{ soldado.peloton.nombre }}</span>
+    </div>
+  </div>
+</div>
+<form method="post">
+  {% csrf_token %}
+  <input type="hidden" name="soldado" value="{{ soldado.pk }}">
+  <div class="siga-field">
+    <label for="cantidad">Cantidad a entregar</label>
+    <input type="number" id="cantidad" name="cantidad" min="1" max="{{ existencia.cantidad }}" value="1" required>
+  </div>
+  <div class="siga-field">
+    <label for="observacion">Observación (opcional)</label>
+    <textarea id="observacion" name="observacion" rows="2"></textarea>
+  </div>
+  <button type="submit" class="siga-btn-primary">Confirmar entrega</button>
+</form>
+<p style="text-align:center; margin-top:10px;">
+  <a href="{% url 'inventory:existencia_entregar' existencia.pk %}">Elegir otro soldado</a>
+</p>
+{% else %}
+<div class="siga-field">
+  <label for="q">Soldado receptor</label>
+  <form method="get" class="siga-search">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b6f76" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+    <input type="text" id="q" name="q" value="{{ q }}" placeholder="Buscar por nombre…">
+  </form>
+</div>
+<div class="siga-pick-list">
+  {% for candidato in soldados %}
+  <a class="siga-pick-item" href="?soldado={{ candidato.pk }}{% if q %}&q={{ q|urlencode }}{% endif %}">
+    <span class="siga-pick-item__avatar">{{ candidato.apellidos_nombres|slice:":2"|upper }}</span>
+    <span>
+      <div class="siga-pick-item__name">{{ candidato.apellidos_nombres }}</div>
+      <div class="siga-pick-item__meta">Pelotón {{ candidato.peloton.nombre }}</div>
+    </span>
+  </a>
+  {% empty %}
+  <p class="siga-empty">No hay soldados que coincidan en esta compañía.</p>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

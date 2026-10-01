@@ -18,8 +18,12 @@ Conceptos (ver docs/PRD.md):
                 depósito y lote opcional (RF-14).
 - Prestamo    : traslado de cantidad de un tipo CANTIDAD entre compañías,
                 ajustando las existencias de origen y destino (RF-15).
+- ExistenciaAsignada: cantidad de una `Existencia` que tiene en mano un
+                soldado — contraparte de la cantidad en depósito (RF-18).
 - Movimiento  : historial de entregas/devoluciones de armamento serializado
                 (trazabilidad, RNF-03).
+- MovimientoExistencia: historial de entregas/devoluciones de existencias a
+                un soldado (trazabilidad, RNF-03, RF-18).
 """
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -366,6 +370,134 @@ class Existencia(models.Model):
     def clean(self):
         if self.tipo_id and self.tipo.control != TipoArmamento.Control.CANTIDAD:
             raise ValidationError("Solo los tipos controlados por cantidad llevan existencias.")
+
+    def entregar(self, *, soldado, cantidad, usuario, observacion=""):
+        """Entrega una cantidad de esta existencia (en depósito) a un soldado
+        de la misma compañía dueña, dejando rastro — espejo de
+        `Armamento.entregar()` para material por cantidad (RF-18)."""
+        if cantidad <= 0:
+            raise ValidationError("La cantidad a entregar debe ser mayor a cero.")
+        if soldado.compania_id != self.compania_id:
+            raise ValidationError(
+                "El soldado debe pertenecer a la misma compañía de la existencia."
+            )
+        if cantidad > self.cantidad:
+            raise ValidationError(
+                f"No hay suficiente cantidad disponible ({self.cantidad} disponible, "
+                f"se solicitan {cantidad})."
+            )
+        with transaction.atomic():
+            self.cantidad -= cantidad
+            self.save(update_fields=["cantidad"])
+            asignada, _ = ExistenciaAsignada.objects.select_for_update().get_or_create(
+                existencia=self, soldado=soldado, defaults={"cantidad": 0}
+            )
+            asignada.cantidad += cantidad
+            asignada.save(update_fields=["cantidad"])
+            return MovimientoExistencia.objects.create(
+                existencia=self,
+                tipo=MovimientoExistencia.Tipo.ENTREGA,
+                soldado=soldado,
+                cantidad=cantidad,
+                usuario=usuario,
+                observacion=observacion,
+            )
+
+
+class ExistenciaAsignada(models.Model):
+    """Cantidad de una `Existencia` que tiene actualmente en mano un
+    soldado — contraparte de la cantidad en depósito (RF-18). A diferencia
+    de `Armamento` (una sola fila, un soldado a la vez), la cantidad es
+    fraccionable: puede haber varias filas "en mano" para la misma
+    `Existencia`, una por soldado."""
+
+    existencia = models.ForeignKey(
+        Existencia, on_delete=models.PROTECT, related_name="asignaciones"
+    )
+    soldado = models.ForeignKey(
+        Soldado, on_delete=models.PROTECT, related_name="existencias_asignadas"
+    )
+    cantidad = models.PositiveIntegerField("cantidad", default=0)
+
+    class Meta:
+        verbose_name = "existencia asignada"
+        verbose_name_plural = "existencias asignadas"
+        ordering = ["existencia__tipo__nombre", "soldado__apellidos_nombres"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["existencia", "soldado"],
+                name="uq_existencia_asignada_existencia_soldado",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.existencia.tipo} — {self.soldado}: {self.cantidad}"
+
+    def devolver(self, *, cantidad, usuario, observacion=""):
+        """Devuelve al depósito una cantidad (total o parcial) asignada a
+        este soldado, dejando rastro — espejo de `Armamento.devolver()`
+        (RF-18). Si la cantidad devuelta agota el saldo asignado, la fila
+        se borra (no tiene sentido conservar un saldo de 0 en mano)."""
+        if cantidad <= 0:
+            raise ValidationError("La cantidad a devolver debe ser mayor a cero.")
+        if cantidad > self.cantidad:
+            raise ValidationError(
+                f"El soldado no tiene suficiente cantidad asignada ({self.cantidad} en mano, "
+                f"se intentan devolver {cantidad})."
+            )
+        with transaction.atomic():
+            existencia = Existencia.objects.select_for_update().get(pk=self.existencia_id)
+            existencia.cantidad += cantidad
+            existencia.save(update_fields=["cantidad"])
+            self.cantidad -= cantidad
+            if self.cantidad == 0:
+                self.delete()
+            else:
+                self.save(update_fields=["cantidad"])
+            return MovimientoExistencia.objects.create(
+                existencia=existencia,
+                tipo=MovimientoExistencia.Tipo.DEVOLUCION,
+                soldado=self.soldado,
+                cantidad=cantidad,
+                usuario=usuario,
+                observacion=observacion,
+            )
+
+
+class MovimientoExistencia(models.Model):
+    """Historial de entregas y devoluciones de existencias a un soldado
+    (RF-18, RNF-03) — contraparte de `Movimiento` para material por
+    cantidad; no reusa `Movimiento` porque su FK a `armamento` es
+    obligatoria (mismo motivo por el que `Prestamo` tampoco lo reusa)."""
+
+    class Tipo(models.TextChoices):
+        ENTREGA = "ENTREGA", "Entrega (a soldado)"
+        DEVOLUCION = "DEVOLUCION", "Devolución (a depósito)"
+
+    existencia = models.ForeignKey(
+        Existencia, on_delete=models.PROTECT, related_name="movimientos"
+    )
+    tipo = models.CharField("tipo de movimiento", max_length=12, choices=Tipo.choices)
+    soldado = models.ForeignKey(
+        Soldado, on_delete=models.PROTECT, related_name="movimientos_existencia"
+    )
+    cantidad = models.PositiveIntegerField("cantidad")
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="movimientos_existencia"
+    )
+    observacion = models.CharField("observación", max_length=300, blank=True)
+    fecha = models.DateTimeField("fecha y hora", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "movimiento de existencia"
+        verbose_name_plural = "movimientos de existencia"
+        ordering = ["-fecha"]
+
+    def __str__(self):
+        return (
+            f"{self.get_tipo_display()} — {self.existencia.tipo} x{self.cantidad} — "
+            f"{self.soldado} — {self.fecha:%Y-%m-%d %H:%M}"
+        )
 
 
 class Prestamo(models.Model):

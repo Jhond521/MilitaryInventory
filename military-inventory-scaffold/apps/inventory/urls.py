@@ -47,6 +47,13 @@ urlpatterns = [
     path("municion/nuevo/", views.existencia_crear, name="existencia_crear"),
     path("municion/<int:pk>/editar/", views.existencia_editar, name="existencia_editar"),
     path("municion/<int:pk>/borrar/", views.existencia_borrar, name="existencia_borrar"),
+    path("municion/<int:pk>/entregar/", views.existencia_entregar, name="existencia_entregar"),
+    path("municion/asignadas/", views.existencia_asignada_list, name="existencia_asignada_list"),
+    path(
+        "municion/asignadas/<int:pk>/devolver/",
+        views.existencia_devolver,
+        name="existencia_devolver",
+    ),
     path("prestamos/", views.prestamo_list, name="prestamo_list"),
     path("prestamos/nuevo/", views.prestamo_transferir, name="prestamo_transferir"),
     path("compania/", views.elegir_compania, name="elegir_compania"),

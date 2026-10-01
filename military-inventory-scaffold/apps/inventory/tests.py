@@ -16,7 +16,9 @@ from .models import (
     Compania,
     Deposito,
     Existencia,
+    ExistenciaAsignada,
     Movimiento,
+    MovimientoExistencia,
     Peloton,
     Prestamo,
     Soldado,
@@ -228,6 +230,111 @@ class ExistenciaPrestamoTests(TestCase):
             prestamo.full_clean()
 
 
+class EntregaDevolucionExistenciaTests(TestCase):
+    """`Existencia.entregar()`/`ExistenciaAsignada.devolver()` — espejo de
+    `Armamento.entregar()`/`.devolver()` para material por cantidad
+    (RF-18, issue #12)."""
+
+    def setUp(self):
+        self.unidad = Unidad.objects.create(nombre="Batallón de Prueba")
+        self.comp_a = Compania.objects.create(unidad=self.unidad, nombre="A")
+        self.comp_b = Compania.objects.create(unidad=self.unidad, nombre="B")
+        self.deposito = Deposito.objects.create(nombre="Apiay")
+        self.municion = TipoArmamento.objects.create(
+            nombre="MUNICION CAL 5.56MM", control=TipoArmamento.Control.CANTIDAD
+        )
+        self.peloton_a1 = Peloton.objects.create(compania=self.comp_a, nombre="A 1")
+        self.peloton_b1 = Peloton.objects.create(compania=self.comp_b, nombre="B 1")
+        self.soldado_a = Soldado.objects.create(
+            apellidos_nombres="Pérez Juan", compania=self.comp_a, peloton=self.peloton_a1
+        )
+        self.soldado_b = Soldado.objects.create(
+            apellidos_nombres="Gómez Ana", compania=self.comp_b, peloton=self.peloton_b1
+        )
+        self.usuario = get_user_model().objects.create_user(
+            email="enlace@example.com", password="x"
+        )
+        self.existencia = Existencia.objects.create(
+            tipo=self.municion, compania=self.comp_a, deposito=self.deposito,
+            lote="L-001", cantidad=100,
+        )
+
+    def test_entregar_descuenta_existencia_y_crea_asignada(self):
+        movimiento = self.existencia.entregar(
+            soldado=self.soldado_a, cantidad=30, usuario=self.usuario, observacion="ok"
+        )
+        self.existencia.refresh_from_db()
+        self.assertEqual(self.existencia.cantidad, 70)
+
+        asignada = ExistenciaAsignada.objects.get(
+            existencia=self.existencia, soldado=self.soldado_a
+        )
+        self.assertEqual(asignada.cantidad, 30)
+        self.assertEqual(movimiento.tipo, MovimientoExistencia.Tipo.ENTREGA)
+        self.assertEqual(movimiento.cantidad, 30)
+        self.assertEqual(movimiento.observacion, "ok")
+
+    def test_entregar_acumula_sobre_asignacion_existente(self):
+        self.existencia.entregar(soldado=self.soldado_a, cantidad=30, usuario=self.usuario)
+        self.existencia.refresh_from_db()
+        self.existencia.entregar(soldado=self.soldado_a, cantidad=20, usuario=self.usuario)
+        asignada = ExistenciaAsignada.objects.get(
+            existencia=self.existencia, soldado=self.soldado_a
+        )
+        self.assertEqual(asignada.cantidad, 50)
+        self.assertEqual(
+            ExistenciaAsignada.objects.filter(
+                existencia=self.existencia, soldado=self.soldado_a
+            ).count(),
+            1,
+        )
+
+    def test_entregar_rechaza_soldado_de_otra_compania(self):
+        with self.assertRaises(ValidationError):
+            self.existencia.entregar(soldado=self.soldado_b, cantidad=10, usuario=self.usuario)
+
+    def test_entregar_rechaza_cantidad_insuficiente(self):
+        with self.assertRaises(ValidationError):
+            self.existencia.entregar(soldado=self.soldado_a, cantidad=999, usuario=self.usuario)
+
+    def test_entregar_rechaza_cantidad_no_positiva(self):
+        with self.assertRaises(ValidationError):
+            self.existencia.entregar(soldado=self.soldado_a, cantidad=0, usuario=self.usuario)
+
+    def test_devolver_total_repone_existencia_y_borra_asignada(self):
+        self.existencia.entregar(soldado=self.soldado_a, cantidad=30, usuario=self.usuario)
+        self.existencia.refresh_from_db()
+        asignada = ExistenciaAsignada.objects.get(
+            existencia=self.existencia, soldado=self.soldado_a
+        )
+        movimiento = asignada.devolver(cantidad=30, usuario=self.usuario, observacion="listo")
+        self.existencia.refresh_from_db()
+        self.assertEqual(self.existencia.cantidad, 100)
+        self.assertFalse(ExistenciaAsignada.objects.filter(pk=asignada.pk).exists())
+        self.assertEqual(movimiento.tipo, MovimientoExistencia.Tipo.DEVOLUCION)
+        self.assertEqual(movimiento.observacion, "listo")
+
+    def test_devolver_parcial_deja_saldo_en_mano(self):
+        self.existencia.entregar(soldado=self.soldado_a, cantidad=30, usuario=self.usuario)
+        self.existencia.refresh_from_db()
+        asignada = ExistenciaAsignada.objects.get(
+            existencia=self.existencia, soldado=self.soldado_a
+        )
+        asignada.devolver(cantidad=10, usuario=self.usuario)
+        self.existencia.refresh_from_db()
+        asignada.refresh_from_db()
+        self.assertEqual(self.existencia.cantidad, 80)
+        self.assertEqual(asignada.cantidad, 20)
+
+    def test_devolver_rechaza_cantidad_mayor_a_la_asignada(self):
+        self.existencia.entregar(soldado=self.soldado_a, cantidad=30, usuario=self.usuario)
+        asignada = ExistenciaAsignada.objects.get(
+            existencia=self.existencia, soldado=self.soldado_a
+        )
+        with self.assertRaises(ValidationError):
+            asignada.devolver(cantidad=31, usuario=self.usuario)
+
+
 class PWATests(TestCase):
     def test_manifest_is_served_at_root_with_correct_content_type(self):
         response = self.client.get("/manifest.json")
@@ -435,6 +542,102 @@ class ArmamentoMovimientoViewTests(TestCase):
         self.assertEqual(response.status_code, 403)
         self.arma.refresh_from_db()
         self.assertEqual(self.arma.estado, Armamento.Estado.ACTIVO)
+
+
+@override_settings(STORAGES=_PLAIN_STATIC_STORAGE)
+class ExistenciaMovimientoViewTests(TestCase):
+    """Pantallas propias de entrega/devolución de existencias (RF-18,
+    issue #12) — simétricas a `ArmamentoMovimientoViewTests`."""
+
+    def setUp(self):
+        self.unidad = Unidad.objects.create(nombre="Batallón de Prueba")
+        self.comp_a = Compania.objects.create(unidad=self.unidad, nombre="A")
+        self.deposito = Deposito.objects.create(nombre="Apiay")
+        self.municion = TipoArmamento.objects.create(
+            nombre="MUNICION CAL 5.56MM", control=TipoArmamento.Control.CANTIDAD
+        )
+        self.peloton_a1 = Peloton.objects.create(compania=self.comp_a, nombre="A 1")
+        self.soldado_a = Soldado.objects.create(
+            apellidos_nombres="Pérez Juan", compania=self.comp_a, peloton=self.peloton_a1
+        )
+        self.existencia = Existencia.objects.create(
+            tipo=self.municion, compania=self.comp_a, deposito=self.deposito,
+            lote="L-001", cantidad=100,
+        )
+        user_model = get_user_model()
+        self.admin_user = user_model.objects.create_user(
+            email="admin@example.com", password="x", role=user_model.Role.ADMIN
+        )
+        self.client.force_login(self.admin_user)
+        session = self.client.session
+        session[SESSION_KEY] = self.comp_a.pk
+        session.save()
+
+    def test_entregar_view_confirms_and_creates_movimiento(self):
+        url = reverse("inventory:existencia_entregar", args=[self.existencia.pk])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+
+        response = self.client.post(
+            url, {"soldado": self.soldado_a.pk, "cantidad": 30, "observacion": ""}
+        )
+        self.assertRedirects(response, reverse("inventory:existencia_list"))
+        self.existencia.refresh_from_db()
+        self.assertEqual(self.existencia.cantidad, 70)
+        asignada = ExistenciaAsignada.objects.get(
+            existencia=self.existencia, soldado=self.soldado_a
+        )
+        self.assertEqual(asignada.cantidad, 30)
+        self.assertTrue(
+            MovimientoExistencia.objects.filter(
+                existencia=self.existencia, tipo=MovimientoExistencia.Tipo.ENTREGA
+            ).exists()
+        )
+
+    def test_entregar_view_rechaza_cantidad_excesiva(self):
+        url = reverse("inventory:existencia_entregar", args=[self.existencia.pk])
+        response = self.client.post(
+            url, {"soldado": self.soldado_a.pk, "cantidad": 999, "observacion": ""}
+        )
+        self.assertRedirects(response, url)
+        self.existencia.refresh_from_db()
+        self.assertEqual(self.existencia.cantidad, 100)
+
+    def test_devolver_view_confirms_and_creates_movimiento(self):
+        self.existencia.entregar(soldado=self.soldado_a, cantidad=30, usuario=self.admin_user)
+        self.existencia.refresh_from_db()
+        asignada = ExistenciaAsignada.objects.get(
+            existencia=self.existencia, soldado=self.soldado_a
+        )
+        url = reverse("inventory:existencia_devolver", args=[asignada.pk])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+
+        response = self.client.post(url, {"cantidad": 30, "observacion": ""})
+        self.assertRedirects(response, reverse("inventory:existencia_asignada_list"))
+        self.existencia.refresh_from_db()
+        self.assertEqual(self.existencia.cantidad, 100)
+        self.assertFalse(ExistenciaAsignada.objects.filter(pk=asignada.pk).exists())
+        self.assertTrue(
+            MovimientoExistencia.objects.filter(
+                existencia=self.existencia, tipo=MovimientoExistencia.Tipo.DEVOLUCION
+            ).exists()
+        )
+
+    def test_enlace_puede_entregar_y_devolver(self):
+        """RF-18, igual que RF-10: ambos roles registran movimientos."""
+        enlace = get_user_model().objects.create_user(email="enlace3@example.com", password="x")
+        self.client.force_login(enlace)
+        session = self.client.session
+        session[SESSION_KEY] = self.comp_a.pk
+        session.save()
+
+        url = reverse("inventory:existencia_entregar", args=[self.existencia.pk])
+        response = self.client.post(
+            url, {"soldado": self.soldado_a.pk, "cantidad": 10, "observacion": ""}
+        )
+        self.assertRedirects(response, reverse("inventory:existencia_list"))
+        self.assertEqual(response.status_code, 302)
 
 
 @override_settings(STORAGES=_PLAIN_STATIC_STORAGE)

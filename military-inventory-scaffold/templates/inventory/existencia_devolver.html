@@ -1,0 +1,51 @@
+{% extends "inventory/base_mobile.html" %}
+{% block title %}Devolver munición{% endblock %}
+{% block content %}
+<h1 class="siga-page-title">Devolver munición</h1>
+<div class="siga-page-subtitle">De vuelta a depósito, dejando rastro del movimiento.</div>
+
+<div class="siga-field">
+  <label>Existencia asignada</label>
+  <div class="siga-summary">
+    <div class="siga-summary__row">
+      <span class="label">Tipo</span>
+      <span class="value">{{ asignada.existencia.tipo.nombre }}</span>
+    </div>
+    {% if asignada.existencia.lote %}
+    <div class="siga-summary__row">
+      <span class="label">Lote</span>
+      <span class="value">{{ asignada.existencia.lote }}</span>
+    </div>
+    {% endif %}
+    <div class="siga-summary__row">
+      <span class="label">Responsable actual</span>
+      <span class="value">{{ asignada.soldado.apellidos_nombres }}</span>
+    </div>
+    <div class="siga-summary__row">
+      <span class="label">Pelotón</span>
+      <span class="value">{{ asignada.soldado.peloton.nombre }}</span>
+    </div>
+    <div class="siga-summary__row">
+      <span class="label">En mano</span>
+      <span class="value">{{ asignada.cantidad }}</span>
+    </div>
+    <div class="siga-summary__row">
+      <span class="label">Depósito receptor</span>
+      <span class="value">{{ asignada.existencia.deposito.nombre }}</span>
+    </div>
+  </div>
+</div>
+
+<form method="post">
+  {% csrf_token %}
+  <div class="siga-field">
+    <label for="cantidad">Cantidad a devolver</label>
+    <input type="number" id="cantidad" name="cantidad" min="1" max="{{ asignada.cantidad }}" value="{{ asignada.cantidad }}" required>
+  </div>
+  <div class="siga-field">
+    <label for="observacion">Observación (opcional)</label>
+    <textarea id="observacion" name="observacion" rows="2"></textarea>
+  </div>
+  <button type="submit" class="siga-btn-primary">Confirmar devolución</button>
+</form>
+{% endblock %}

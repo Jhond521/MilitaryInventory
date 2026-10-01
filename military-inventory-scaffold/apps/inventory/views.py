@@ -27,7 +27,9 @@ from .models import (
     Compania,
     Deposito,
     Existencia,
+    ExistenciaAsignada,
     Movimiento,
+    MovimientoExistencia,
     Peloton,
     Prestamo,
     Soldado,
@@ -534,6 +536,102 @@ def existencia_borrar(request, pk):
         return _borrar_protegido(request, existencia, "inventory:existencia_list")
     context = {"object": existencia, "cancelar_url": "inventory:existencia_list"}
     return render(request, "inventory/master_confirm_delete.html", context)
+
+
+@requiere_autorizado
+def existencia_entregar(request, pk):
+    """Flujo guiado (Soldado → Confirmar) sobre `Existencia.entregar()`
+    (RF-18) — visualmente simétrico a `armamento_entregar`."""
+    existencia = get_object_or_404(
+        Existencia.objects.select_related("tipo", "compania", "deposito"), pk=pk
+    )
+
+    if request.method == "POST":
+        soldado = get_object_or_404(
+            Soldado, pk=request.POST.get("soldado"), compania_id=existencia.compania_id
+        )
+        try:
+            cantidad = int(request.POST.get("cantidad", ""))
+        except ValueError:
+            cantidad = 0
+        observacion = request.POST.get("observacion", "")
+        try:
+            existencia.entregar(
+                soldado=soldado, cantidad=cantidad, usuario=request.user, observacion=observacion
+            )
+        except ValidationError as exc:
+            messages.error(request, " ".join(exc.messages))
+            return redirect("inventory:existencia_entregar", pk=existencia.pk)
+        messages.success(request, f"{cantidad} de {existencia.tipo.nombre} entregadas a {soldado}.")
+        return redirect("inventory:existencia_list")
+
+    soldado_id = request.GET.get("soldado")
+    if soldado_id:
+        soldado = get_object_or_404(Soldado, pk=soldado_id, compania_id=existencia.compania_id)
+        context = {"existencia": existencia, "soldado": soldado, "paso": "confirmar"}
+        return render(request, "inventory/existencia_entregar.html", context)
+
+    q = request.GET.get("q", "").strip()
+    soldados = Soldado.objects.filter(compania_id=existencia.compania_id).select_related("peloton")
+    if q:
+        soldados = soldados.filter(apellidos_nombres__icontains=q)
+
+    context = {"existencia": existencia, "q": q, "soldados": soldados[:30], "paso": "soldado"}
+    return render(request, "inventory/existencia_entregar.html", context)
+
+
+@requiere_autorizado
+def existencia_devolver(request, pk):
+    """Un solo paso sobre `ExistenciaAsignada.devolver()` (RF-18) —
+    simétrico a `armamento_devolver`; el depósito de retorno es siempre el
+    mismo del que salió, así que no hay nada que elegir."""
+    asignada = get_object_or_404(
+        ExistenciaAsignada.objects.select_related(
+            "existencia__tipo", "existencia__compania", "existencia__deposito",
+            "soldado", "soldado__peloton",
+        ),
+        pk=pk,
+    )
+
+    if request.method == "POST":
+        try:
+            cantidad = int(request.POST.get("cantidad", ""))
+        except ValueError:
+            cantidad = 0
+        observacion = request.POST.get("observacion", "")
+        try:
+            asignada.devolver(cantidad=cantidad, usuario=request.user, observacion=observacion)
+        except ValidationError as exc:
+            messages.error(request, " ".join(exc.messages))
+            return redirect("inventory:existencia_devolver", pk=asignada.pk)
+        messages.success(
+            request, f"{cantidad} de {asignada.existencia.tipo.nombre} devueltas a depósito."
+        )
+        return redirect("inventory:existencia_asignada_list")
+
+    return render(request, "inventory/existencia_devolver.html", {"asignada": asignada})
+
+
+@requiere_autorizado
+def existencia_asignada_list(request):
+    """Lo que cada soldado tiene en mano (RF-18) + historial reciente de
+    entregas/devoluciones de existencias (RNF-03)."""
+    compania_id, ver_todas = _companias_scope(request)
+    asignadas = ExistenciaAsignada.objects.select_related(
+        "existencia__tipo", "existencia__compania", "existencia__deposito", "soldado"
+    )
+    movimientos = MovimientoExistencia.objects.select_related(
+        "existencia__tipo", "existencia__compania", "soldado", "usuario"
+    )
+    if compania_id and not ver_todas:
+        asignadas = asignadas.filter(existencia__compania_id=compania_id)
+        movimientos = movimientos.filter(existencia__compania_id=compania_id)
+    context = {
+        "asignadas": asignadas,
+        "movimientos": movimientos[:50],
+        "ver_todas": ver_todas,
+    }
+    return render(request, "inventory/existencia_asignada_list.html", context)
 
 
 @requiere_autorizado

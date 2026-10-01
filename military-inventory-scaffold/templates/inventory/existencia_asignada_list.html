@@ -1,0 +1,63 @@
+{% extends "inventory/base_mobile.html" %}
+{% block title %}Munición asignada{% endblock %}
+{% block content %}
+<div class="siga-card__top" style="margin-bottom:10px;">
+  <h1 class="siga-page-title" style="margin:0;">Munición asignada</h1>
+</div>
+<div class="siga-page-subtitle">
+  {% if ver_todas %}Todas las compañías{% else %}Compañía {{ compania_actual|default:"—" }}{% endif %}
+  · {{ asignadas|length }} soldado{{ asignadas|length|pluralize }} con material en mano
+  {% if not ver_todas %}· <a href="?todas=1">ver todas</a>{% endif %}
+</div>
+
+<div class="siga-card-list">
+  {% for asignada in asignadas %}
+  <div class="siga-card">
+    <div class="siga-card__top">
+      <span class="siga-card__tipo" style="font-weight:600;">{{ asignada.existencia.tipo.nombre }}</span>
+      <span class="siga-card__serie">{{ asignada.cantidad }}</span>
+    </div>
+    <div class="siga-card__meta">
+      <span>Soldado: <strong>{{ asignada.soldado.apellidos_nombres }}</strong></span>
+      {% if asignada.existencia.lote %}<span>Lote: <strong>{{ asignada.existencia.lote }}</strong></span>{% endif %}
+    </div>
+    <div class="siga-card__meta" style="margin-top:8px;">
+      <a href="{% url 'inventory:existencia_devolver' asignada.pk %}">Devolver</a>
+    </div>
+  </div>
+  {% empty %}
+  <p class="siga-empty">Nadie tiene munición asignada en este momento.</p>
+  {% endfor %}
+</div>
+
+<h2 class="siga-page-title" style="font-size:18px; margin-top:24px;">Historial reciente</h2>
+<div class="siga-card-list">
+  {% for movimiento in movimientos %}
+  <div class="siga-card">
+    <div class="siga-card__top">
+      <span class="siga-card__serie">{{ movimiento.existencia.tipo.nombre }}</span>
+      {% if movimiento.tipo == "ENTREGA" %}
+      <span class="siga-badge siga-badge--entrega">Entrega</span>
+      {% else %}
+      <span class="siga-badge siga-badge--devolucion">Devolución</span>
+      {% endif %}
+    </div>
+    <div class="siga-card__meta">
+      <span>Soldado: <strong>{{ movimiento.soldado.apellidos_nombres }}</strong></span>
+      <span>Cantidad: <strong>{{ movimiento.cantidad }}</strong></span>
+    </div>
+    <div class="siga-card__meta">
+      <span>Por: <strong>{{ movimiento.usuario }}</strong></span>
+      <span>{{ movimiento.fecha|date:"d/m/Y H:i" }}</span>
+    </div>
+    {% if movimiento.observacion %}
+    <div class="siga-card__meta">
+      <span>Observación: {{ movimiento.observacion }}</span>
+    </div>
+    {% endif %}
+  </div>
+  {% empty %}
+  <p class="siga-empty">Sin movimientos de munición todavía.</p>
+  {% endfor %}
+</div>
+{% endblock %}
