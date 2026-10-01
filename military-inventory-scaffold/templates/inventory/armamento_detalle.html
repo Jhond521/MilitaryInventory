@@ -77,6 +77,9 @@
         <div class="siga-timeline__content">
           <div class="siga-timeline__titulo">{{ item.titulo }}</div>
           <div class="siga-timeline__detalle">{{ item.detalle }}</div>
+          {% if item.observacion %}
+          <div class="siga-timeline__observacion">Observación: {{ item.observacion }}</div>
+          {% endif %}
           <div class="siga-timeline__meta">
             {{ item.fecha|date:"Y-m-d · H:i" }}{% if item.usuario %} · por {{ item.usuario.email }}{% endif %}
           </div>

@@ -216,7 +216,11 @@ def _historial_arma(armamento):
     confiable (no se registra un evento al crear/cargar el arma), así que
     se muestra sin esa cláusula; en su lugar se agrega al final una fila
     sintética de "Alta en inventario" con `Armamento.creado`, sin usuario
-    inventado (la carga inicial es un script sin usuario asociado, RF-13)."""
+    inventado (la carga inicial es un script sin usuario asociado, RF-13).
+
+    `detalle` (destino/origen) y `observacion` (texto libre capturado en el
+    formulario) son campos separados — antes se mezclaban para BAJA y se
+    perdían por completo para ENTREGA/DEVOLUCION (issue #14)."""
     movimientos = armamento.movimientos.select_related("soldado", "deposito", "usuario").order_by(
         "fecha"
     )
@@ -234,11 +238,17 @@ def _historial_arma(armamento):
         else:
             titulo = "Baja"
             destino_nombre = None
-            detalle = mov.observacion or "Dada de baja"
+            detalle = "Dada de baja"
         if origen:
             detalle = f"{detalle} · desde {origen}"
         historial.append(
-            {"titulo": titulo, "detalle": detalle, "fecha": mov.fecha, "usuario": mov.usuario}
+            {
+                "titulo": titulo,
+                "detalle": detalle,
+                "observacion": mov.observacion,
+                "fecha": mov.fecha,
+                "usuario": mov.usuario,
+            }
         )
         origen = destino_nombre
     historial.reverse()
@@ -246,6 +256,7 @@ def _historial_arma(armamento):
         {
             "titulo": "Alta en inventario",
             "detalle": "Carga inicial",
+            "observacion": "",
             "fecha": armamento.creado,
             "usuario": None,
         }

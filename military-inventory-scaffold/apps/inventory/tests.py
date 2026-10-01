@@ -1171,6 +1171,86 @@ class ArmamentoDetalleTests(TestCase):
         historial = response.context["historial"]
         self.assertEqual(historial[0]["detalle"], "A CT Pérez A.")
 
+    def test_historial_muestra_la_observacion_de_entrega_y_devolucion(self):
+        """Issue #14: `observacion` ya no se pierde — queda separada de
+        `detalle` y se renderiza en la página."""
+        self.arma.entregar(
+            soldado=self.soldado1, usuario=self.admin_user, observacion="Arma inspeccionada"
+        )
+        self.arma.devolver(
+            deposito=self.apiay, usuario=self.admin_user, observacion="Culata reemplazada"
+        )
+
+        response = self.client.get(reverse("inventory:armamento_detalle", args=[self.arma.pk]))
+        historial = response.context["historial"]
+        # [0] = devolución (más reciente), [1] = entrega.
+        self.assertEqual(historial[0]["detalle"], "A Apiay · desde Pérez A.")
+        self.assertEqual(historial[0]["observacion"], "Culata reemplazada")
+        self.assertEqual(historial[1]["detalle"], "A Pérez A.")
+        self.assertEqual(historial[1]["observacion"], "Arma inspeccionada")
+        self.assertContains(response, "Culata reemplazada")
+        self.assertContains(response, "Arma inspeccionada")
+
+    def test_historial_muestra_la_observacion_de_baja_separada_del_detalle(self):
+        self.arma.dar_de_baja(
+            motivo=Armamento.MotivoBaja.DANO,
+            fecha=date.today(),
+            usuario=self.admin_user,
+            observacion="Culata partida en entrenamiento",
+        )
+        response = self.client.get(reverse("inventory:armamento_detalle", args=[self.arma.pk]))
+        historial = response.context["historial"]
+        self.assertEqual(historial[0]["detalle"], "Dada de baja")
+        self.assertEqual(historial[0]["observacion"], "Culata partida en entrenamiento")
+        self.assertContains(response, "Culata partida en entrenamiento")
+
+    def test_historial_no_muestra_observacion_vacia(self):
+        self.arma.entregar(soldado=self.soldado1, usuario=self.admin_user, observacion="")
+        response = self.client.get(reverse("inventory:armamento_detalle", args=[self.arma.pk]))
+        self.assertNotContains(response, "Observación:")
+
+
+@override_settings(STORAGES=_PLAIN_STATIC_STORAGE)
+class MovimientoListObservacionTests(TestCase):
+    """Issue #14: la lista de Movimientos también muestra la observación,
+    no solo el historial del arma."""
+
+    def setUp(self):
+        self.unidad = Unidad.objects.create(nombre="Batallón de Prueba")
+        self.compania = Compania.objects.create(unidad=self.unidad, nombre="Alcatraz")
+        self.deposito = Deposito.objects.create(nombre="Apiay")
+        self.peloton = Peloton.objects.create(compania=self.compania, nombre="Alcatraz 1")
+        self.soldado = Soldado.objects.create(
+            apellidos_nombres="Pérez A.", compania=self.compania, peloton=self.peloton
+        )
+        self.tipo = TipoArmamento.objects.create(
+            nombre="ACE-23", control=TipoArmamento.Control.SERIE
+        )
+        self.arma = Armamento.objects.create(
+            numero_serie="MOV-1", tipo=self.tipo, compania=self.compania,
+            ubicacion=Armamento.Ubicacion.DEPOSITO, deposito=self.deposito,
+        )
+        user_model = get_user_model()
+        self.admin_user = user_model.objects.create_user(
+            email="admin@example.com", password="x", role=user_model.Role.ADMIN
+        )
+        self.client.force_login(self.admin_user)
+        session = self.client.session
+        session[SESSION_KEY] = self.compania.pk
+        session.save()
+
+    def test_lista_muestra_observacion_no_vacia(self):
+        self.arma.entregar(
+            soldado=self.soldado, usuario=self.admin_user, observacion="Revisar mira"
+        )
+        response = self.client.get(reverse("inventory:movimiento_list"))
+        self.assertContains(response, "Revisar mira")
+
+    def test_lista_no_muestra_nada_cuando_la_observacion_esta_vacia(self):
+        self.arma.entregar(soldado=self.soldado, usuario=self.admin_user, observacion="")
+        response = self.client.get(reverse("inventory:movimiento_list"))
+        self.assertNotContains(response, "Observación:")
+
 
 @override_settings(STORAGES=_PLAIN_STATIC_STORAGE)
 class BusquedaGlobalArmamentoTests(TestCase):

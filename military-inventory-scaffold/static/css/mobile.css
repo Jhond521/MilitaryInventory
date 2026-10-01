@@ -753,6 +753,13 @@ body.siga-app {
   margin-top: 2px;
 }
 
+.siga-timeline__observacion {
+  color: #55595f;
+  font-size: 13px;
+  font-style: italic;
+  margin-top: 4px;
+}
+
 .siga-timeline__meta {
   color: #9a9fa6;
   font-size: 12px;

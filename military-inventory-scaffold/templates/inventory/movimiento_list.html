@@ -48,6 +48,11 @@
     <div class="siga-card__meta">
       <span>Por: <strong>{{ movimiento.usuario }}</strong></span>
     </div>
+    {% if movimiento.observacion %}
+    <div class="siga-card__meta">
+      <span>Observación: {{ movimiento.observacion }}</span>
+    </div>
+    {% endif %}
   </div>
   {% empty %}
   <p class="siga-empty">No hay movimientos que coincidan con la búsqueda.</p>
