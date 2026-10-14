@@ -28,6 +28,7 @@
 
 <form method="post">
   {% csrf_token %}
+  {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
   <div class="siga-field">
     <label for="deposito">Depósito receptor</label>
     <select id="deposito" name="deposito">

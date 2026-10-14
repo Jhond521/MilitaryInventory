@@ -82,7 +82,7 @@ apps/inventory/    # domain: Unidad, Compania, Deposito, Peloton, Soldado, TipoA
                    #   CampoPersonalizado) — ADMIN-only to add/edit/delete, everyone views
   templatetags/inventory_extras.py # valor_campo filter (renders a field or its get_*_display())
   views.py         # everything else: armamento_list/_crear/_editar/_entregar/_devolver/_baja,
-                   #   movimiento_list, soldado_list/_crear/_editar, existencia_list/_crear/_editar,
+                   #   movimiento_list, soldado_list/_detalle/_crear/_editar, existencia_list/_crear/_editar,
                    #   prestamo_list/_transferir, elegir_compania, ajustes — mounted at "/"
   middleware.py, urls.py, context_processors.py   # compañía de trabajo (RF-02)
   management/commands/seed_initial.py       # idempotent master-data seed
@@ -136,6 +136,10 @@ docs/              # PRD (Spanish), backlog (Spanish), ADRs
   through `_mezclar_por_fecha()` in `apps/inventory/views.py`, tagging each row with
   `.clase` for the template. A new kind of movement model must be added there as well
   (and to its `clase` filter), or it will be invisible in Movimientos again (ADR-0005).
+- `Armamento.devolver()` logs the `Movimiento` with `soldado=None` (only the destination
+  `deposito`), so `soldado.movimientos` does **not** include a weapon's returns. To attribute
+  a devolución/baja to a soldier, chain from the previous ENTREGA of that weapon, as
+  `_historial_arma()` and `_movimientos_armas_del_soldado()` (soldier ficha, RF-20) do.
 - Baja (decommission) keeps the row; it never deletes the weapon (RF-11). Use
   `Armamento.dar_de_baja(motivo, fecha, usuario, observacion="")` — sets `estado=BAJA`,
   logs a `Movimiento` (type `BAJA`), and works from either ubicación (unlike

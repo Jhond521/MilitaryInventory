@@ -1,0 +1,110 @@
+{% extends "inventory/base_mobile.html" %}
+{% block title %}{{ soldado.nombre_con_grado }}{% endblock %}
+{% block content %}
+<div class="siga-detail-header">
+  <div class="siga-detail-header__id">
+    <span class="siga-pick-item__avatar siga-ficha__avatar">{{ soldado.apellidos_nombres|slice:":2"|upper }}</span>
+    <div>
+      <h1 class="siga-page-title siga-ficha__nombre">{{ soldado.nombre_con_grado }}</h1>
+      <div class="siga-detail-header__sub">Compañía {{ soldado.compania.nombre }} · Pelotón {{ soldado.peloton.nombre }}</div>
+    </div>
+  </div>
+  {% if user.is_admin_role %}
+  <div class="siga-detail-header__actions">
+    <a class="siga-btn-secondary" style="width:auto; height:auto; padding:0 18px; line-height:42px; text-decoration:none;" href="{% url 'inventory:soldado_editar' soldado.pk %}">Editar</a>
+  </div>
+  {% endif %}
+</div>
+
+<section class="siga-detail-panel siga-ficha__resumen" aria-labelledby="resumen-titulo">
+  <div class="siga-detail-panel__title" id="resumen-titulo">A cargo actualmente</div>
+  {% if resumen %}
+  <ul class="siga-resumen">
+    {% for item in resumen %}
+    <li class="siga-resumen__row">
+      <span class="siga-resumen__nombre">{{ item.nombre }}</span>
+      <span class="siga-resumen__cantidad">{{ item.cantidad }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="siga-empty" style="padding:8px 0;">No tiene material a cargo.</p>
+  {% endif %}
+</section>
+
+<div class="siga-detail-grid">
+  <section class="siga-detail-panel" aria-labelledby="armas-titulo">
+    <div class="siga-detail-panel__title" id="armas-titulo">Armamento en mano</div>
+    <div class="siga-card-list">
+      {% for arma in armas %}
+      <div class="siga-card">
+        <div class="siga-card__top">
+          <a class="siga-card__serie" href="{% url 'inventory:armamento_detalle' arma.pk %}">{{ arma.numero_serie }}</a>
+          <span class="siga-badge siga-badge--en-mano">En mano</span>
+        </div>
+        <div class="siga-card__tipo">{{ arma.tipo.nombre }}</div>
+        <div class="siga-card__meta" style="margin-top:8px;">
+          <a href="{% url 'inventory:armamento_devolver' arma.pk %}?next={{ ficha_url|urlencode }}">Devolver</a>
+        </div>
+      </div>
+      {% empty %}
+      <p class="siga-empty" style="padding:8px 0;">No tiene armamento a cargo.</p>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="siga-detail-panel" aria-labelledby="municion-titulo">
+    <div class="siga-detail-panel__title" id="municion-titulo">Munición y elementos en mano</div>
+    <div class="siga-card-list">
+      {% for asignada in asignadas %}
+      <div class="siga-card">
+        <div class="siga-card__top">
+          <span class="siga-card__tipo" style="font-weight:600;">{{ asignada.existencia.tipo.nombre }}</span>
+          <span class="siga-card__serie">{{ asignada.cantidad }}</span>
+        </div>
+        <div class="siga-card__meta">
+          <span>Depósito: <strong>{{ asignada.existencia.deposito.nombre }}</strong></span>
+          {% if asignada.existencia.lote %}<span>Lote: <strong>{{ asignada.existencia.lote }}</strong></span>{% endif %}
+        </div>
+        <div class="siga-card__meta" style="margin-top:8px;">
+          <a href="{% url 'inventory:existencia_devolver' asignada.pk %}?next={{ ficha_url|urlencode }}">Devolver</a>
+        </div>
+      </div>
+      {% empty %}
+      <p class="siga-empty" style="padding:8px 0;">No tiene munición a cargo.</p>
+      {% endfor %}
+    </div>
+  </section>
+</div>
+
+<section class="siga-detail-panel siga-ficha__historial" aria-labelledby="historial-titulo">
+  <div class="siga-detail-panel__title" id="historial-titulo">Últimos movimientos</div>
+  {% if historial %}
+  <div class="siga-timeline">
+    {% for mov in historial %}
+    <div class="siga-timeline__row">
+      <div class="siga-timeline__rail">
+        <span class="siga-timeline__dot{% if mov.tipo == 'DEVOLUCION' %} siga-timeline__dot--devolucion-a-deposito{% elif mov.tipo == 'BAJA' %} siga-timeline__dot--baja{% endif %}"></span>
+        {% if not forloop.last %}<span class="siga-timeline__line"></span>{% endif %}
+      </div>
+      <div class="siga-timeline__content">
+        {% if mov.clase == "MUNICION" %}
+        <div class="siga-timeline__titulo">{% if mov.tipo == "ENTREGA" %}Entrega de munición{% else %}Devolución de munición{% endif %}</div>
+        <div class="siga-timeline__detalle">{{ mov.cantidad }} · {{ mov.existencia.tipo.nombre }}{% if mov.existencia.lote %} · Lote {{ mov.existencia.lote }}{% endif %}</div>
+        {% else %}
+        <div class="siga-timeline__titulo">{% if mov.tipo == "ENTREGA" %}Entrega de armamento{% elif mov.tipo == "DEVOLUCION" %}Devolución de armamento{% else %}Baja de armamento{% endif %}</div>
+        <div class="siga-timeline__detalle">{{ mov.armamento.numero_serie }} · {{ mov.armamento.tipo.nombre }}{% if mov.tipo == "DEVOLUCION" and mov.deposito %} · a {{ mov.deposito.nombre }}{% endif %}</div>
+        {% endif %}
+        {% if mov.observacion %}
+        <div class="siga-timeline__observacion">Observación: {{ mov.observacion }}</div>
+        {% endif %}
+        <div class="siga-timeline__meta">{{ mov.fecha|date:"Y-m-d · H:i" }} · por {{ mov.usuario.email }}</div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="siga-empty" style="padding:8px 0;">Sin movimientos todavía.</p>
+  {% endif %}
+</section>
+{% endblock %}

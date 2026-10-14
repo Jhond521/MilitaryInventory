@@ -4,6 +4,7 @@ munición/préstamos/datos maestros (T-06, H-17) — el admin de Django ya no
 existe (ADR-0004); esto es la única UI de la aplicación.
 """
 from operator import attrgetter
+from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.core.exceptions import ValidationError
@@ -111,6 +112,22 @@ def _borrar_protegido(request, obj, redirect_url_name):
     else:
         messages.success(request, f'"{obj}" borrado.')
     return redirect(redirect_url_name)
+
+
+def _next_seguro(request):
+    """`next` (GET o POST) solo si apunta a este mismo sitio; si no, "".
+    Lo usan las pantallas de devolver para volver a la ficha del soldado
+    cuando se llegó desde ella (issue #17)."""
+    next_url = request.POST.get("next") or request.GET.get("next") or ""
+    if next_url and url_has_allowed_host_and_scheme(
+        next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+    ):
+        return next_url
+    return ""
+
+
+def _con_next(url, next_url):
+    return f"{url}?{urlencode({'next': next_url})}" if next_url else url
 
 
 def _companias_scope(request):
@@ -371,6 +388,7 @@ def armamento_devolver(request, pk):
         ubicacion=Armamento.Ubicacion.EN_MANO,
     )
 
+    next_url = _next_seguro(request)
     if request.method == "POST":
         deposito = get_object_or_404(Deposito, pk=request.POST.get("deposito"))
         observacion = request.POST.get("observacion", "")
@@ -378,11 +396,17 @@ def armamento_devolver(request, pk):
             arma.devolver(deposito=deposito, usuario=request.user, observacion=observacion)
         except ValidationError as exc:
             messages.error(request, " ".join(exc.messages))
-            return redirect("inventory:armamento_devolver", pk=arma.pk)
+            return redirect(
+                _con_next(reverse("inventory:armamento_devolver", args=[arma.pk]), next_url)
+            )
         messages.success(request, f"{arma.numero_serie} devuelta a {deposito}.")
-        return redirect("inventory:armamento_list")
+        return redirect(next_url or "inventory:armamento_list")
 
-    context = {"arma": arma, "depositos": Deposito.objects.order_by("nombre")}
+    context = {
+        "arma": arma,
+        "depositos": Deposito.objects.order_by("nombre"),
+        "next": next_url,
+    }
     return render(request, "inventory/armamento_devolver.html", context)
 
 
@@ -402,10 +426,13 @@ def _mezclar_por_fecha(grupos, limite):
     más reciente primero (issue #16). `grupos` es una lista de
     `(clase, queryset)`; cada registro queda marcado con `.clase` para que
     la plantilla sepa qué tarjeta dibujar. Cada queryset se recorta a
-    `limite` antes de mezclar, así ninguno se trae entero a memoria."""
+    `limite` antes de mezclar, así ninguno se trae entero a memoria. Un
+    grupo también puede ser una lista ya armada (ficha del soldado, #17)."""
     registros = []
     for clase, qs in grupos:
-        for registro in qs.order_by("-fecha")[:limite]:
+        if hasattr(qs, "order_by"):
+            qs = qs.order_by("-fecha")[:limite]
+        for registro in qs:
             registro.clase = clase
             registros.append(registro)
     registros.sort(key=attrgetter("fecha"), reverse=True)
@@ -520,6 +547,108 @@ def soldado_list(request):
         "ver_todas": ver_todas,
     }
     return render(request, "inventory/soldado_list.html", context)
+
+
+FICHA_HISTORIAL_LIMITE = 50
+
+
+def _movimientos_armas_del_soldado(soldado):
+    """Entregas, devoluciones y bajas de armamento que involucran al
+    soldado, más reciente primero (issue #17).
+
+    `Armamento.devolver()` no guarda el soldado en el `Movimiento` (solo el
+    depósito de destino), así que `soldado.movimientos` no trae las
+    devoluciones. Igual que `_historial_arma`, se encadena: una devolución
+    o baja es de este soldado si la entrega anterior de esa arma fue a él."""
+    armas = Movimiento.objects.filter(
+        soldado=soldado, tipo=Movimiento.Tipo.ENTREGA
+    ).values_list("armamento_id", flat=True)
+    movimientos = (
+        Movimiento.objects.filter(armamento_id__in=armas)
+        .select_related("armamento__tipo", "deposito", "usuario")
+        .order_by("armamento_id", "fecha", "pk")
+    )
+    propios = []
+    tenedor = {}
+    for mov in movimientos:
+        if mov.tipo == Movimiento.Tipo.ENTREGA:
+            tenedor[mov.armamento_id] = mov.soldado_id
+            if mov.soldado_id == soldado.pk:
+                propios.append(mov)
+            continue
+        if tenedor.get(mov.armamento_id) == soldado.pk:
+            propios.append(mov)
+        if mov.tipo == Movimiento.Tipo.DEVOLUCION:
+            tenedor[mov.armamento_id] = None
+    propios.sort(key=attrgetter("fecha"), reverse=True)
+    return propios
+
+
+def _resumen_a_cargo(armas, asignadas):
+    """Total por tipo de material de lo que el soldado tiene hoy (issue #17,
+    "tanta munición, tantas granadas, tanto casco"): armas contadas por
+    tipo y existencias sumadas por tipo a través de lotes y depósitos.
+    Armas primero, luego existencias, alfabético dentro de cada grupo."""
+    por_arma = {}
+    for arma in armas:
+        por_arma[arma.tipo.nombre] = por_arma.get(arma.tipo.nombre, 0) + 1
+    por_existencia = {}
+    for asignada in asignadas:
+        nombre = asignada.existencia.tipo.nombre
+        por_existencia[nombre] = por_existencia.get(nombre, 0) + asignada.cantidad
+    return [
+        {"nombre": nombre, "cantidad": cantidad, "clase": CLASE_ARMAMENTO}
+        for nombre, cantidad in sorted(por_arma.items())
+    ] + [
+        {"nombre": nombre, "cantidad": cantidad, "clase": CLASE_MUNICION}
+        for nombre, cantidad in sorted(por_existencia.items())
+    ]
+
+
+@requiere_autorizado
+def soldado_detalle(request, pk):
+    """Ficha del soldado (RF-20, issue #17): lo que tiene a cargo ahora
+    (resumen por tipo + detalle de armas y existencias, con acceso a
+    devolver) y sus últimos movimientos. Visible para ambos roles y para
+    soldados de cualquier compañía (la compañía de trabajo es un filtro,
+    no un permiso — PRD S-2). No mueve material: devolver usa las
+    pantallas existentes y vuelve aquí vía `?next=`."""
+    soldado = get_object_or_404(
+        Soldado.objects.select_related("compania", "peloton"), pk=pk
+    )
+    # `dar_de_baja()` cambia solo `estado` y deja `ubicacion`/`soldado`: un
+    # arma de baja no está "a cargo" aunque siga apuntando al soldado.
+    armas = list(
+        soldado.armamentos.filter(
+            ubicacion=Armamento.Ubicacion.EN_MANO, estado=Armamento.Estado.ACTIVO
+        )
+        .select_related("tipo")
+        .order_by("tipo__nombre", "numero_serie")
+    )
+    asignadas = list(
+        soldado.existencias_asignadas.select_related(
+            "existencia__tipo", "existencia__deposito"
+        ).order_by("existencia__tipo__nombre", "existencia__lote")
+    )
+    historial = _mezclar_por_fecha(
+        [
+            (CLASE_ARMAMENTO, _movimientos_armas_del_soldado(soldado)[:FICHA_HISTORIAL_LIMITE]),
+            (
+                CLASE_MUNICION,
+                soldado.movimientos_existencia.select_related("existencia__tipo", "usuario"),
+            ),
+        ],
+        FICHA_HISTORIAL_LIMITE,
+    )
+    context = {
+        "soldado": soldado,
+        "resumen": _resumen_a_cargo(armas, asignadas),
+        "armas": armas,
+        "asignadas": asignadas,
+        "historial": historial,
+        "ficha_url": reverse("inventory:soldado_detalle", args=[soldado.pk]),
+    }
+    return render(request, "inventory/soldado_detalle.html", context)
 
 
 @requiere_admin
@@ -689,6 +818,7 @@ def existencia_devolver(request, pk):
         pk=pk,
     )
 
+    next_url = _next_seguro(request)
     if request.method == "POST":
         try:
             cantidad = int(request.POST.get("cantidad", ""))
@@ -699,13 +829,16 @@ def existencia_devolver(request, pk):
             asignada.devolver(cantidad=cantidad, usuario=request.user, observacion=observacion)
         except ValidationError as exc:
             messages.error(request, " ".join(exc.messages))
-            return redirect("inventory:existencia_devolver", pk=asignada.pk)
+            return redirect(
+                _con_next(reverse("inventory:existencia_devolver", args=[asignada.pk]), next_url)
+            )
         messages.success(
             request, f"{cantidad} de {asignada.existencia.tipo.nombre} devueltas a depósito."
         )
-        return redirect("inventory:existencia_asignada_list")
+        return redirect(next_url or "inventory:existencia_asignada_list")
 
-    return render(request, "inventory/existencia_devolver.html", {"asignada": asignada})
+    context = {"asignada": asignada, "next": next_url}
+    return render(request, "inventory/existencia_devolver.html", context)
 
 
 @requiere_autorizado

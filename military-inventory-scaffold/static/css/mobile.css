@@ -487,6 +487,67 @@ body.siga-app {
   color: var(--siga-text-muted);
 }
 
+/* Fila de Soldados enlazada a la ficha (issue #17): toda la zona del nombre es táctil */
+.siga-pick-item__link {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 44px;
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Ficha del soldado (RF-20, issue #17) */
+.siga-ficha__avatar {
+  width: 48px;
+  height: 48px;
+  font-size: 16px;
+}
+
+.siga-ficha__nombre {
+  margin: 0;
+}
+
+.siga-ficha__resumen {
+  margin-bottom: 16px;
+}
+
+.siga-ficha__historial {
+  margin-top: 16px;
+}
+
+.siga-resumen {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.siga-resumen__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  border-bottom: 1px solid #f0ebdd;
+}
+
+.siga-resumen__row:last-child {
+  border-bottom: none;
+}
+
+.siga-resumen__nombre {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.siga-resumen__cantidad {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--siga-red-dark);
+}
+
 /* Summary card (confirm steps) */
 .siga-summary {
   background: #fff;

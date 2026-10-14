@@ -41,6 +41,7 @@ urlpatterns = [
     path("movimientos/", views.movimiento_list, name="movimiento_list"),
     path("soldados/", views.soldado_list, name="soldado_list"),
     path("soldados/nuevo/", views.soldado_crear, name="soldado_crear"),
+    path("soldados/<int:pk>/", views.soldado_detalle, name="soldado_detalle"),
     path("soldados/<int:pk>/editar/", views.soldado_editar, name="soldado_editar"),
     path("soldados/<int:pk>/borrar/", views.soldado_borrar, name="soldado_borrar"),
     path("municion/", views.existencia_list, name="existencia_list"),

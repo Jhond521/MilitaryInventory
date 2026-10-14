@@ -306,9 +306,12 @@ El corazón del sistema.
 
 ## Actualizaciones v1.5 (feedback de David, issue #15)
 
-- H-26 — Ficha del soldado: armas y munición en mano, más su historial de entregas/devoluciones (RF-20)
-  - **Estado**: Pendiente. Ver issue #17 para el detalle completo. El bug relacionado
-    (munición ausente en Movimientos, #16) no lleva historia, por convención.
+- H-26 — Ficha del soldado: armas y munición en mano, más su historial de entregas/devoluciones (RF-20) ✅
+  - **Estado**: Hecho (issue #17). Ruta `inventory:soldado_detalle` (`/soldados/<pk>/`), a la
+    que se llega desde cada fila de Soldados. Muestra primero el resumen "A cargo actualmente"
+    por tipo, luego el detalle de armas y existencias en mano (con Devolver, que vuelve a la
+    ficha vía `?next=`) y los últimos 50 movimientos. El bug relacionado (munición ausente en
+    Movimientos, #16) no lleva historia, por convención.
 
 ## Fase 2 — Siguiente
 
