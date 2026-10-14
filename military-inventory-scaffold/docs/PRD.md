@@ -327,11 +327,15 @@ en un solo lugar qué le fue entregado.
 
 - [ ] Desde Soldados, al tocar un soldado se abre su ficha con grado, nombre,
   compañía y pelotón.
-- [ ] La ficha lista el armamento activo que tiene en mano (RF-10) y las
-  existencias que tiene en mano con su cantidad (RF-18), cada uno con acceso a
-  devolver.
-- [ ] La ficha muestra el historial de entregas y devoluciones del soldado
-  (armas y existencias), con usuario y fecha/hora (RNF-03).
+- [ ] Lo primero que muestra la ficha es un resumen de lo que el soldado tiene
+  **a cargo actualmente**, con el total por tipo de material (ej. "Fusil Galil
+  · 1", "Cartucho 5.56 · 120", "Granada de mano · 15", "Casco · 1"),
+  incluidos todos los tipos por cantidad, no solo munición.
+- [ ] Debajo del resumen, la ficha lista el armamento activo que tiene en mano
+  (RF-10) y las existencias que tiene en mano con su cantidad (RF-18), cada
+  uno con acceso a devolver. Las entregas no se inician desde la ficha.
+- [ ] La ficha muestra los últimos 50 movimientos de entrega y devolución del
+  soldado (armas y existencias), con usuario y fecha/hora (RNF-03).
 - [ ] Administrador y enlace pueden ver la ficha. Los soldados siguen sin
   campos personalizados (NO-2).
 
