@@ -304,6 +304,12 @@ El corazón del sistema.
   - **Estado**: Pendiente. Ver issue de GitHub dedicado para el detalle completo (valores
     exactos por categoría, alcance de la visualización).
 
+## Actualizaciones v1.5 (feedback de David, issue #15)
+
+- H-26 — Ficha del soldado: armas y munición en mano, más su historial de entregas/devoluciones (RF-20)
+  - **Estado**: Pendiente. Ver issue #17 para el detalle completo. El bug relacionado
+    (munición ausente en Movimientos, #16) no lleva historia, por convención.
+
 ## Fase 2 — Siguiente
 
 - H-20 — Módulo de importación de Excel autoservicio (que David suba y cargue) (RF-13)

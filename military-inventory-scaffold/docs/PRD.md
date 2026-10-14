@@ -2,11 +2,17 @@
 
 | | |
 |---|---|
-| **Estado** | En revisión (v1.4 — entrega de munición y grado del soldado) |
+| **Estado** | En revisión (v1.5 — ficha del soldado) |
 | **Autor** | John Cuervo (para David Bolaños — Batallón de Selva No. 52) |
-| **Última actualización** | 2026-09-30 |
-| **Versión** | v1.4 |
+| **Última actualización** | 2026-10-13 |
+| **Versión** | v1.5 |
 
+> **Cambios v1.5** (feedback de David, issue #15 "Correcciones Nuevas", 2026-10-06):
+> se agrega **RF-20** (ficha del soldado: todo el material que tiene a cargo,
+> armas y munición, más su historial). Además, un bug sobre RF-18/RNF-03: las
+> entregas y devoluciones de munición no aparecían en Movimientos (issue #16).
+> La ficha va en el issue #17.
+>
 > **Cambios v1.4** (feedback de David, issue #11 "Fixes Generales", 2026-09-16):
 > se agrega **RF-18** (entrega/devolución de munición y demás existencias a un
 > soldado, espejo del flujo de Armamento) y **RF-19** (grado del soldado, campo
@@ -312,6 +318,23 @@ cada soldado, para identificarlo correctamente en todo el sistema.
 - [ ] No es un campo personalizado (NO-2 sigue aplicando solo a
   `CampoPersonalizado`): es un campo fijo del modelo, igual que Pelotón.
 
+### RF-20 — Ficha del soldado
+**Prioridad**: Alta
+**Descripción**: Como administrador o enlace, quiero abrir un soldado y ver
+todo el material que tiene a cargo (armas y munición/existencias), para saber
+en un solo lugar qué le fue entregado.
+**Criterios de aceptación**:
+
+- [ ] Desde Soldados, al tocar un soldado se abre su ficha con grado, nombre,
+  compañía y pelotón.
+- [ ] La ficha lista el armamento activo que tiene en mano (RF-10) y las
+  existencias que tiene en mano con su cantidad (RF-18), cada uno con acceso a
+  devolver.
+- [ ] La ficha muestra el historial de entregas y devoluciones del soldado
+  (armas y existencias), con usuario y fecha/hora (RNF-03).
+- [ ] Administrador y enlace pueden ver la ficha. Los soldados siguen sin
+  campos personalizados (NO-2).
+
 ## 7. Requerimientos no funcionales
 
 | ID | Categoría | Requerimiento | Cómo se verifica |
@@ -367,7 +390,7 @@ información se respalda. Los elementos dados de baja se conservan (no se elimin
 
 | Fase | Contenido | Requerimientos |
 |---|---|---|
-| v1 (MVP) | Acceso + roles, selección de compañía, CRUD de datos maestros, pelotones, material serializado (alta/ubicación/estado/movimientos/baja), existencias por cantidad y préstamo de munición, entrega/devolución de existencias a un soldado, grado del soldado, búsqueda, campos personalizados, carga inicial serializada, y app **móvil responsive e instalable (PWA)**. | RF-01 a RF-19 |
+| v1 (MVP) | Acceso + roles, selección de compañía, CRUD de datos maestros, pelotones, material serializado (alta/ubicación/estado/movimientos/baja), existencias por cantidad y préstamo de munición, entrega/devolución de existencias a un soldado, grado del soldado, búsqueda, campos personalizados, carga inicial serializada, ficha del soldado, y app **móvil responsive e instalable (PWA)**. | RF-01 a RF-20 |
 | Siguiente | Importador de Excel autoservicio, carga de munición inicial, reportes/exportes, tablero de resumen por compañía, acuse de entrega. | — |
 | Algún día | Multi-unidad con configurador, app móvil, escaneo de serie. | — |
 
