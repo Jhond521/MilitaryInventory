@@ -7,9 +7,11 @@
   <a class="siga-btn-secondary" style="width:auto; height:auto; padding:8px 14px; line-height:1; text-decoration:none;" href="{% url 'inventory:existencia_crear' %}">+ Añadir</a>
   {% endif %}
 </div>
+<nav class="siga-quicklinks" aria-label="Accesos de munición">
+  <a href="{% url 'inventory:existencia_asignada_list' %}{% if ver_todas %}?todas=1{% endif %}">Munición asignada</a>
+  <a href="{% url 'inventory:prestamo_list' %}{% if ver_todas %}?todas=1{% endif %}">Préstamos</a>
+</nav>
 <div class="siga-page-subtitle">
-  <a href="{% url 'inventory:prestamo_list' %}">Ver préstamos</a> ·
-  <a href="{% url 'inventory:existencia_asignada_list' %}">Ver munición asignada</a> ·
   {% if ver_todas %}Todas las compañías{% else %}Compañía {{ compania_actual|default:"—" }}{% endif %}
   · {{ existencias|length }} registro{{ existencias|length|pluralize }}
   {% if not ver_todas %}· <a href="?todas=1{% if q %}&q={{ q|urlencode }}{% endif %}">ver todas</a>{% endif %}
@@ -45,6 +47,12 @@
       <span>Depósito: <strong>{{ existencia.deposito.nombre }}</strong></span>
       {% if existencia.lote %}<span>Lote: <strong>{{ existencia.lote }}</strong></span>{% endif %}
     </div>
+    {% if existencia.en_mano %}
+    <div class="siga-card__meta">
+      <span>En mano: <strong>{{ existencia.en_mano }}</strong></span>
+      <a href="{% url 'inventory:existencia_asignada_list' %}?existencia={{ existencia.pk }}">Ver quién la tiene</a>
+    </div>
+    {% endif %}
     <div class="siga-card__meta" style="margin-top:8px;">
       <a href="{% url 'inventory:existencia_entregar' existencia.pk %}">Entregar</a>
       {% if user.is_admin_role %}

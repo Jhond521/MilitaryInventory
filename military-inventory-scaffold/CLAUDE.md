@@ -131,6 +131,11 @@ docs/              # PRD (Spanish), backlog (Spanish), ADRs
   traceability (RNF-03). Never mutate a weapon's location without logging it —
   use `Armamento.entregar()`/`.devolver()` (transactional, validate company match
   and current ubicación) instead of setting `ubicacion`/`soldado`/`deposito` by hand.
+- `movimiento_list` (Movimientos screen) is the **unified history** (issue #16):
+  it merges `Movimiento` (armas), `MovimientoExistencia` (RF-18) and `Prestamo` (RF-15)
+  through `_mezclar_por_fecha()` in `apps/inventory/views.py`, tagging each row with
+  `.clase` for the template. A new kind of movement model must be added there as well
+  (and to its `clase` filter), or it will be invisible in Movimientos again (ADR-0005).
 - Baja (decommission) keeps the row; it never deletes the weapon (RF-11). Use
   `Armamento.dar_de_baja(motivo, fecha, usuario, observacion="")` — sets `estado=BAJA`,
   logs a `Movimiento` (type `BAJA`), and works from either ubicación (unlike

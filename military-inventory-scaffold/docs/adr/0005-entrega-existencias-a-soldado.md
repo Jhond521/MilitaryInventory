@@ -60,3 +60,19 @@ responsabilidad clara, igual que `Prestamo` ya separado de `Existencia`.
 "historial unificado" de todos los movimientos (armamento + existencias) en
 una sola vista, convendría evaluar entonces una interfaz común en vez de
 dos modelos de movimiento paralelos.
+
+## Actualización (2026-10-13, issue #16)
+
+Se pidió el "historial unificado" que esta ADR anticipaba: David no
+encontraba las entregas de munición en Movimientos. Se resolvió **en la
+vista**, sin interfaz ni modelo común: `movimiento_list` consulta
+`Movimiento`, `MovimientoExistencia` y `Prestamo` por separado, con los
+mismos filtros. Recorta cada uno al límite, los mezcla por `fecha`
+(`_mezclar_por_fecha()` en `apps/inventory/views.py`) y marca cada fila con
+su clase para la plantilla.
+
+La decisión de mantener modelos separados sigue en pie. Con el volumen
+esperado (~1.800 armas, 6 usuarios), mezclar en Python es suficiente y no
+toca el esquema. Habría que volver a evaluar una tabla común solo si se
+necesita paginar o exportar el historial completo, donde el corte por
+modelo deja de servir.

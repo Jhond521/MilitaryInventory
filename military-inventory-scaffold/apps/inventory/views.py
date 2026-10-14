@@ -3,9 +3,11 @@ todas las pantallas de inventario/entrega/devolución/movimientos/soldados/
 munición/préstamos/datos maestros (T-06, H-17) — el admin de Django ya no
 existe (ADR-0004); esto es la única UI de la aplicación.
 """
+from operator import attrgetter
+
 from django.contrib import messages
 from django.core.exceptions import ValidationError
-from django.db.models import ProtectedError, Q
+from django.db.models import ProtectedError, Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -384,28 +386,107 @@ def armamento_devolver(request, pk):
     return render(request, "inventory/armamento_devolver.html", context)
 
 
+MOVIMIENTOS_LIMITE = 200
+CLASE_ARMAMENTO = "ARMAMENTO"
+CLASE_MUNICION = "MUNICION"
+CLASE_PRESTAMO = "PRESTAMO"
+CLASE_CHOICES = [
+    (CLASE_ARMAMENTO, "Armamento"),
+    (CLASE_MUNICION, "Munición"),
+    (CLASE_PRESTAMO, "Préstamos"),
+]
+
+
+def _mezclar_por_fecha(grupos, limite):
+    """Mezcla registros de varios modelos de historial en una sola lista,
+    más reciente primero (issue #16). `grupos` es una lista de
+    `(clase, queryset)`; cada registro queda marcado con `.clase` para que
+    la plantilla sepa qué tarjeta dibujar. Cada queryset se recorta a
+    `limite` antes de mezclar, así ninguno se trae entero a memoria."""
+    registros = []
+    for clase, qs in grupos:
+        for registro in qs.order_by("-fecha")[:limite]:
+            registro.clase = clase
+            registros.append(registro)
+    registros.sort(key=attrgetter("fecha"), reverse=True)
+    return registros[:limite]
+
+
 @requiere_autorizado
 def movimiento_list(request):
+    """Historial unificado (RNF-03, issue #16): entregas/devoluciones/bajas
+    de armamento (`Movimiento`), entregas/devoluciones de existencias
+    (`MovimientoExistencia`, RF-18) y préstamos entre compañías
+    (`Prestamo`, RF-15). Son tres modelos separados (ADR-0005); se mezclan
+    aquí, en la vista, sin un modelo común."""
     compania_id, ver_todas = _companias_scope(request)
-    qs = Movimiento.objects.select_related("armamento", "soldado", "deposito", "usuario")
-    if compania_id and not ver_todas:
-        qs = qs.filter(armamento__compania_id=compania_id)
-
     q = request.GET.get("q", "").strip()
-    if q:
-        qs = qs.filter(
-            Q(armamento__numero_serie__icontains=q) | Q(soldado__apellidos_nombres__icontains=q)
-        )
-
     tipo = request.GET.get("tipo", "")
-    if tipo in Movimiento.Tipo.values:
-        qs = qs.filter(tipo=tipo)
+    if tipo not in Movimiento.Tipo.values:
+        tipo = ""
+    clase = request.GET.get("clase", "")
+    if clase not in dict(CLASE_CHOICES):
+        clase = ""
+    filtra_compania = bool(compania_id and not ver_todas)
+
+    grupos = []
+    if clase in ("", CLASE_ARMAMENTO):
+        qs = Movimiento.objects.select_related(
+            "armamento__tipo", "soldado", "deposito", "usuario"
+        )
+        if filtra_compania:
+            qs = qs.filter(armamento__compania_id=compania_id)
+        if q:
+            qs = qs.filter(
+                Q(armamento__numero_serie__icontains=q)
+                | Q(soldado__apellidos_nombres__icontains=q)
+            )
+        if tipo:
+            qs = qs.filter(tipo=tipo)
+        grupos.append((CLASE_ARMAMENTO, qs))
+
+    # Las existencias no tienen baja: con Tipo = Baja no aportan nada.
+    if clase in ("", CLASE_MUNICION) and tipo != Movimiento.Tipo.BAJA:
+        qs = MovimientoExistencia.objects.select_related(
+            "existencia__tipo", "existencia__compania", "soldado", "usuario"
+        )
+        if filtra_compania:
+            qs = qs.filter(existencia__compania_id=compania_id)
+        if q:
+            qs = qs.filter(
+                Q(existencia__tipo__nombre__icontains=q)
+                | Q(existencia__lote__icontains=q)
+                | Q(soldado__apellidos_nombres__icontains=q)
+            )
+        if tipo:
+            qs = qs.filter(tipo=tipo)
+        grupos.append((CLASE_MUNICION, qs))
+
+    # Un préstamo no es entrega/devolución/baja: solo aparece sin filtro de tipo.
+    if clase in ("", CLASE_PRESTAMO) and not tipo:
+        qs = Prestamo.objects.select_related(
+            "tipo", "deposito", "compania_origen", "compania_destino", "usuario"
+        )
+        if filtra_compania:
+            qs = qs.filter(
+                Q(compania_origen_id=compania_id) | Q(compania_destino_id=compania_id)
+            )
+        if q:
+            qs = qs.filter(
+                Q(tipo__nombre__icontains=q)
+                | Q(lote__icontains=q)
+                | Q(compania_origen__nombre__icontains=q)
+                | Q(compania_destino__nombre__icontains=q)
+            )
+        grupos.append((CLASE_PRESTAMO, qs))
 
     context = {
-        "movimientos": qs[:200],
+        "movimientos": _mezclar_por_fecha(grupos, MOVIMIENTOS_LIMITE),
         "q": q,
         "tipo": tipo,
         "tipo_choices": Movimiento.Tipo.choices,
+        "clase": clase,
+        "clase_choices": CLASE_CHOICES,
         "ver_todas": ver_todas,
     }
     return render(request, "inventory/movimiento_list.html", context)
@@ -484,7 +565,11 @@ def soldado_borrar(request, pk):
 @requiere_autorizado
 def existencia_list(request):
     compania_id, ver_todas = _companias_scope(request)
-    qs = Existencia.objects.select_related("tipo", "compania", "deposito")
+    # `en_mano`: cuánto de cada existencia tienen hoy los soldados (RF-18),
+    # para que se vea desde Munición a dónde se fue lo entregado (issue #16).
+    qs = Existencia.objects.select_related("tipo", "compania", "deposito").annotate(
+        en_mano=Sum("asignaciones__cantidad")
+    )
     if compania_id and not ver_todas:
         qs = qs.filter(compania_id=compania_id)
 
@@ -626,7 +711,12 @@ def existencia_devolver(request, pk):
 @requiere_autorizado
 def existencia_asignada_list(request):
     """Lo que cada soldado tiene en mano (RF-18) + historial reciente de
-    entregas/devoluciones de existencias (RNF-03)."""
+    entregas/devoluciones de existencias (RNF-03).
+
+    `?existencia=<pk>` (enlace "ver quién" de cada tarjeta de Munición,
+    issue #16) restringe todo a esa existencia. En ese caso la compañía de
+    trabajo no se aplica: la existencia ya define su compañía, y el enlace
+    también se usa desde "ver todas"."""
     compania_id, ver_todas = _companias_scope(request)
     asignadas = ExistenciaAsignada.objects.select_related(
         "existencia__tipo", "existencia__compania", "existencia__deposito", "soldado"
@@ -634,12 +724,21 @@ def existencia_asignada_list(request):
     movimientos = MovimientoExistencia.objects.select_related(
         "existencia__tipo", "existencia__compania", "soldado", "usuario"
     )
-    if compania_id and not ver_todas:
+    existencia = None
+    existencia_id = request.GET.get("existencia", "")
+    if existencia_id.isdigit():
+        existencia = get_object_or_404(
+            Existencia.objects.select_related("tipo", "deposito"), pk=existencia_id
+        )
+        asignadas = asignadas.filter(existencia=existencia)
+        movimientos = movimientos.filter(existencia=existencia)
+    elif compania_id and not ver_todas:
         asignadas = asignadas.filter(existencia__compania_id=compania_id)
         movimientos = movimientos.filter(existencia__compania_id=compania_id)
     context = {
         "asignadas": asignadas,
         "movimientos": movimientos[:50],
+        "existencia": existencia,
         "ver_todas": ver_todas,
     }
     return render(request, "inventory/existencia_asignada_list.html", context)

@@ -285,6 +285,35 @@ body.siga-app {
   color: #55595f;
 }
 
+/* Préstamo entre compañías (RF-15) en la lista unificada de Movimientos — issue #16 */
+.siga-badge--prestamo {
+  background: #f6edd6;
+  color: #7a5a17;
+}
+
+/* Accesos directos de una pantalla (ej. Munición → Préstamos / Munición asignada).
+   Pastillas táctiles de 44px, en vez de enlaces pequeños en el subtítulo. */
+.siga-quicklinks {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.siga-quicklinks a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--siga-header-rule);
+  border-radius: 22px;
+  background: #fff;
+  color: var(--siga-text);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
 /* Buttons */
 .siga-btn-primary {
   display: block;

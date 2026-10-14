@@ -5,18 +5,28 @@
 <div class="siga-page-subtitle">
   {% if ver_todas %}Todas las compañías{% else %}Compañía {{ compania_actual|default:"—" }}{% endif %}
   · {{ movimientos|length }} registro{{ movimientos|length|pluralize }}
-  {% if not ver_todas %}· <a href="?todas=1{% if q %}&q={{ q|urlencode }}{% endif %}">ver todas</a>{% endif %}
+  {% if not ver_todas %}· <a href="?todas=1{% if q %}&q={{ q|urlencode }}{% endif %}{% if clase %}&clase={{ clase }}{% endif %}{% if tipo %}&tipo={{ tipo }}{% endif %}">ver todas</a>{% endif %}
 </div>
 
 <form method="get" class="siga-search">
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b6f76" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-  <input type="text" name="q" value="{{ q }}" placeholder="Buscar por serie o soldado…">
+  <input type="text" name="q" value="{{ q }}" placeholder="Buscar por serie, soldado, material o compañía…">
   {% if ver_todas %}<input type="hidden" name="todas" value="1">{% endif %}
+  {% if clase %}<input type="hidden" name="clase" value="{{ clase }}">{% endif %}
+  {% if tipo %}<input type="hidden" name="tipo" value="{{ tipo }}">{% endif %}
 </form>
 
 <form method="get" class="siga-chips">
   {% if ver_todas %}<input type="hidden" name="todas" value="1">{% endif %}
   {% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
+  <label class="siga-chip">Clase
+    <select name="clase" onchange="this.form.submit()">
+      <option value="">Todos</option>
+      {% for value, label in clase_choices %}
+      <option value="{{ value }}" {% if clase == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </label>
   <label class="siga-chip">Tipo
     <select name="tipo" onchange="this.form.submit()">
       <option value="">Todos</option>
@@ -30,8 +40,27 @@
 <div class="siga-card-list">
   {% for movimiento in movimientos %}
   <div class="siga-card">
+    {% if movimiento.clase == "PRESTAMO" %}
     <div class="siga-card__top">
+      <span class="siga-card__serie">{{ movimiento.cantidad }}</span>
+      <span class="siga-badge siga-badge--prestamo">Préstamo</span>
+    </div>
+    <div class="siga-card__tipo">{{ movimiento.tipo.nombre }}{% if movimiento.lote %} · Lote {{ movimiento.lote }}{% endif %}</div>
+    <div class="siga-card__meta">
+      <span><strong>{{ movimiento.compania_origen.nombre }}</strong> → <strong>{{ movimiento.compania_destino.nombre }}</strong></span>
+      <span>{{ movimiento.fecha|date:"d/m/Y H:i" }}</span>
+    </div>
+    <div class="siga-card__meta">
+      <span>Depósito: <strong>{{ movimiento.deposito.nombre }}</strong></span>
+      <span>Por: <strong>{{ movimiento.usuario }}</strong></span>
+    </div>
+    {% else %}
+    <div class="siga-card__top">
+      {% if movimiento.clase == "MUNICION" %}
+      <span class="siga-card__serie">{{ movimiento.cantidad }}</span>
+      {% else %}
       <span class="siga-card__serie">{{ movimiento.armamento.numero_serie }}</span>
+      {% endif %}
       {% if movimiento.tipo == "ENTREGA" %}
       <span class="siga-badge siga-badge--entrega">Entrega</span>
       {% elif movimiento.tipo == "DEVOLUCION" %}
@@ -40,7 +69,11 @@
       <span class="siga-badge siga-badge--baja">Baja</span>
       {% endif %}
     </div>
+    {% if movimiento.clase == "MUNICION" %}
+    <div class="siga-card__tipo">{{ movimiento.existencia.tipo.nombre }}{% if movimiento.existencia.lote %} · Lote {{ movimiento.existencia.lote }}{% endif %}</div>
+    {% else %}
     <div class="siga-card__tipo">{{ movimiento.armamento.tipo.nombre }}</div>
+    {% endif %}
     <div class="siga-card__meta">
       <span>{% if movimiento.soldado %}Soldado: <strong>{{ movimiento.soldado.nombre_con_grado }}</strong>{% elif movimiento.deposito %}Depósito: <strong>{{ movimiento.deposito.nombre }}</strong>{% endif %}</span>
       <span>{{ movimiento.fecha|date:"d/m/Y H:i" }}</span>
@@ -48,6 +81,7 @@
     <div class="siga-card__meta">
       <span>Por: <strong>{{ movimiento.usuario }}</strong></span>
     </div>
+    {% endif %}
     {% if movimiento.observacion %}
     <div class="siga-card__meta">
       <span>Observación: {{ movimiento.observacion }}</span>

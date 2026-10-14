@@ -1,7 +1,7 @@
 import json
 import os
 import tempfile
-from datetime import date
+from datetime import date, timedelta
 
 import openpyxl
 from django.contrib.auth import get_user_model
@@ -9,6 +9,7 @@ from django.core.exceptions import ValidationError
 from django.core.management import CommandError, call_command
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from .models import (
     Armamento,
@@ -1250,6 +1251,261 @@ class MovimientoListObservacionTests(TestCase):
         self.arma.entregar(soldado=self.soldado, usuario=self.admin_user, observacion="")
         response = self.client.get(reverse("inventory:movimiento_list"))
         self.assertNotContains(response, "Observación:")
+
+
+@override_settings(STORAGES=_PLAIN_STATIC_STORAGE)
+class MovimientoListUnificadaTests(TestCase):
+    """Issue #16: Movimientos muestra armas, entregas/devoluciones de
+    existencias (RF-18) y préstamos entre compañías (RF-15), mezclados por
+    fecha, y Munición indica cuánto está en mano y de quién."""
+
+    def setUp(self):
+        self.unidad = Unidad.objects.create(nombre="Batallón de Prueba")
+        self.comp_a = Compania.objects.create(unidad=self.unidad, nombre="Alcatraz")
+        self.comp_b = Compania.objects.create(unidad=self.unidad, nombre="Bisonte")
+        self.comp_c = Compania.objects.create(unidad=self.unidad, nombre="Córsega")
+        self.deposito = Deposito.objects.create(nombre="Apiay")
+        peloton_a = Peloton.objects.create(compania=self.comp_a, nombre="Alcatraz 1")
+        peloton_c = Peloton.objects.create(compania=self.comp_c, nombre="Córsega 1")
+        self.soldado_a = Soldado.objects.create(
+            apellidos_nombres="Rada Pedro", compania=self.comp_a, peloton=peloton_a,
+            grado="TE",
+        )
+        self.soldado_c = Soldado.objects.create(
+            apellidos_nombres="Gómez Luis", compania=self.comp_c, peloton=peloton_c
+        )
+        self.fusil = TipoArmamento.objects.create(
+            nombre="FUSIL GALIL", control=TipoArmamento.Control.SERIE
+        )
+        self.granada = TipoArmamento.objects.create(
+            nombre="GRANADA DE MANO", control=TipoArmamento.Control.CANTIDAD
+        )
+        self.cartucho = TipoArmamento.objects.create(
+            nombre="CARTUCHO 5.56", control=TipoArmamento.Control.CANTIDAD
+        )
+        self.arma = Armamento.objects.create(
+            numero_serie="GAL-001", tipo=self.fusil, compania=self.comp_a,
+            ubicacion=Armamento.Ubicacion.DEPOSITO, deposito=self.deposito,
+        )
+        self.granadas_a = Existencia.objects.create(
+            tipo=self.granada, compania=self.comp_a, deposito=self.deposito,
+            lote="LG-7", cantidad=40,
+        )
+        self.granadas_c = Existencia.objects.create(
+            tipo=self.granada, compania=self.comp_c, deposito=self.deposito, cantidad=10
+        )
+        self.cartuchos_a = Existencia.objects.create(
+            tipo=self.cartucho, compania=self.comp_a, deposito=self.deposito,
+            lote="L-1", cantidad=500,
+        )
+        user_model = get_user_model()
+        self.admin_user = user_model.objects.create_user(
+            email="admin@example.com", password="x", role=user_model.Role.ADMIN
+        )
+        self.client.force_login(self.admin_user)
+        session = self.client.session
+        session[SESSION_KEY] = self.comp_a.pk
+        session.save()
+
+    def _prestar(self, cantidad, origen, destino):
+        prestamo = Prestamo(
+            tipo=self.cartucho, deposito=self.deposito, lote="L-1", cantidad=cantidad,
+            compania_origen=origen, compania_destino=destino, usuario=self.admin_user,
+        )
+        prestamo.full_clean()
+        prestamo.save()
+        return prestamo
+
+    def _clases(self, response):
+        return [m.clase for m in response.context["movimientos"]]
+
+    def _escalonar_fechas(self):
+        """`auto_now_add` puede repetir la misma marca de tiempo entre filas
+        creadas seguidas; aquí se fijan fechas distintas en el orden en que
+        cada test crea los registros (armas, luego munición, luego préstamos;
+        dentro de cada modelo, por pk)."""
+        base = timezone.now() - timedelta(days=1)
+        paso = 0
+        for modelo in (Movimiento, MovimientoExistencia, Prestamo):
+            for pk in modelo.objects.order_by("pk").values_list("pk", flat=True):
+                modelo.objects.filter(pk=pk).update(fecha=base + timedelta(minutes=paso))
+                paso += 1
+
+    def _get(self, url):
+        self._escalonar_fechas()
+        return self.client.get(url)
+
+    def test_entrega_de_municion_aparece_con_cantidad_y_soldado(self):
+        self.granadas_a.entregar(
+            soldado=self.soldado_a, cantidad=15, usuario=self.admin_user,
+            observacion="Para el ejercicio",
+        )
+        response = self._get(reverse("inventory:movimiento_list"))
+        self.assertContains(response, "GRANADA DE MANO")
+        self.assertContains(response, "Lote LG-7")
+        self.assertContains(response, "TE Rada Pedro")
+        self.assertContains(response, '<span class="siga-card__serie">15</span>', html=True)
+        self.assertContains(response, "Para el ejercicio")
+
+    def test_devolucion_parcial_de_municion_aparece_con_la_cantidad_devuelta(self):
+        self.granadas_a.entregar(soldado=self.soldado_a, cantidad=15, usuario=self.admin_user)
+        asignada = ExistenciaAsignada.objects.get(existencia=self.granadas_a)
+        asignada.devolver(cantidad=5, usuario=self.admin_user)
+        response = self._get(reverse("inventory:movimiento_list"))
+        movimientos = response.context["movimientos"]
+        self.assertEqual([m.cantidad for m in movimientos], [5, 15])
+        self.assertEqual(
+            [m.tipo for m in movimientos],
+            [MovimientoExistencia.Tipo.DEVOLUCION, MovimientoExistencia.Tipo.ENTREGA],
+        )
+
+    def test_mezcla_las_tres_clases_ordenadas_por_fecha(self):
+        self.arma.entregar(soldado=self.soldado_a, usuario=self.admin_user)
+        self.granadas_a.entregar(soldado=self.soldado_a, cantidad=15, usuario=self.admin_user)
+        self._prestar(200, self.comp_a, self.comp_b)
+        response = self._get(reverse("inventory:movimiento_list"))
+        self.assertEqual(self._clases(response), ["PRESTAMO", "MUNICION", "ARMAMENTO"])
+        fechas = [m.fecha for m in response.context["movimientos"]]
+        self.assertEqual(fechas, sorted(fechas, reverse=True))
+
+    def test_prestamo_muestra_origen_y_destino(self):
+        self._prestar(200, self.comp_a, self.comp_b)
+        response = self._get(reverse("inventory:movimiento_list"))
+        self.assertContains(response, "Préstamo")
+        self.assertContains(response, "<strong>Alcatraz</strong> → <strong>Bisonte</strong>")
+
+    def test_prestamo_aparece_en_la_compania_origen_y_en_la_destino(self):
+        self._prestar(200, self.comp_a, self.comp_b)
+        response = self._get(reverse("inventory:movimiento_list"))
+        self.assertEqual(self._clases(response), ["PRESTAMO"])
+
+        session = self.client.session
+        session[SESSION_KEY] = self.comp_b.pk
+        session.save()
+        response = self._get(reverse("inventory:movimiento_list"))
+        self.assertEqual(self._clases(response), ["PRESTAMO"])
+
+        session = self.client.session
+        session[SESSION_KEY] = self.comp_c.pk
+        session.save()
+        response = self._get(reverse("inventory:movimiento_list"))
+        self.assertEqual(self._clases(response), [])
+
+    def test_compania_de_trabajo_filtra_municion_y_ver_todas_la_incluye(self):
+        self.granadas_c.entregar(soldado=self.soldado_c, cantidad=3, usuario=self.admin_user)
+        response = self._get(reverse("inventory:movimiento_list"))
+        self.assertEqual(self._clases(response), [])
+        response = self._get(reverse("inventory:movimiento_list") + "?todas=1")
+        self.assertEqual(self._clases(response), ["MUNICION"])
+
+    def test_filtro_clase(self):
+        self.arma.entregar(soldado=self.soldado_a, usuario=self.admin_user)
+        self.granadas_a.entregar(soldado=self.soldado_a, cantidad=15, usuario=self.admin_user)
+        self._prestar(200, self.comp_a, self.comp_b)
+        url = reverse("inventory:movimiento_list")
+        self.assertEqual(self._clases(self._get(url + "?clase=MUNICION")), ["MUNICION"])
+        self.assertEqual(
+            self._clases(self._get(url + "?clase=ARMAMENTO")), ["ARMAMENTO"]
+        )
+        self.assertEqual(self._clases(self._get(url + "?clase=PRESTAMO")), ["PRESTAMO"])
+        # Un valor desconocido se ignora (equivale a Todos).
+        self.assertEqual(len(self._clases(self._get(url + "?clase=OTRA"))), 3)
+
+    def test_filtro_tipo_excluye_prestamos_y_baja_excluye_municion(self):
+        self.arma.entregar(soldado=self.soldado_a, usuario=self.admin_user)
+        self.granadas_a.entregar(soldado=self.soldado_a, cantidad=15, usuario=self.admin_user)
+        self._prestar(200, self.comp_a, self.comp_b)
+        url = reverse("inventory:movimiento_list")
+        response = self._get(url + "?tipo=ENTREGA")
+        self.assertEqual(self._clases(response), ["MUNICION", "ARMAMENTO"])
+
+        self.arma.dar_de_baja(
+            motivo=Armamento.MotivoBaja.DANO, fecha=date(2026, 10, 1), usuario=self.admin_user
+        )
+        response = self._get(url + "?tipo=BAJA")
+        self.assertEqual(self._clases(response), ["ARMAMENTO"])
+
+    def test_busqueda_por_soldado_trae_armas_y_municion(self):
+        self.arma.entregar(soldado=self.soldado_a, usuario=self.admin_user)
+        self.granadas_a.entregar(soldado=self.soldado_a, cantidad=15, usuario=self.admin_user)
+        self._prestar(200, self.comp_a, self.comp_b)
+        response = self._get(reverse("inventory:movimiento_list") + "?q=rada")
+        self.assertEqual(self._clases(response), ["MUNICION", "ARMAMENTO"])
+
+    def test_busqueda_por_material_y_por_compania(self):
+        self.arma.entregar(soldado=self.soldado_a, usuario=self.admin_user)
+        self.granadas_a.entregar(soldado=self.soldado_a, cantidad=15, usuario=self.admin_user)
+        self._prestar(200, self.comp_a, self.comp_b)
+        url = reverse("inventory:movimiento_list")
+        self.assertEqual(self._clases(self._get(url + "?q=granada")), ["MUNICION"])
+        self.assertEqual(self._clases(self._get(url + "?q=bisonte")), ["PRESTAMO"])
+
+    def test_limite_se_aplica_sobre_la_lista_combinada(self):
+        from . import views
+
+        self.arma.entregar(soldado=self.soldado_a, usuario=self.admin_user)
+        self.granadas_a.entregar(soldado=self.soldado_a, cantidad=1, usuario=self.admin_user)
+        self._prestar(10, self.comp_a, self.comp_b)
+        limite_original = views.MOVIMIENTOS_LIMITE
+        views.MOVIMIENTOS_LIMITE = 2
+        try:
+            response = self._get(reverse("inventory:movimiento_list"))
+        finally:
+            views.MOVIMIENTOS_LIMITE = limite_original
+        self.assertEqual(self._clases(response), ["PRESTAMO", "MUNICION"])
+
+    def test_enlace_ve_la_lista_unificada(self):
+        enlace = get_user_model().objects.create_user(email="enlace@example.com", password="x")
+        self.client.force_login(enlace)
+        session = self.client.session
+        session[SESSION_KEY] = self.comp_a.pk
+        session.save()
+        self.granadas_a.entregar(soldado=self.soldado_a, cantidad=15, usuario=self.admin_user)
+        response = self._get(reverse("inventory:movimiento_list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self._clases(response), ["MUNICION"])
+
+    def test_municion_muestra_cuanto_esta_en_mano_y_enlaza_a_quien(self):
+        self.granadas_a.entregar(soldado=self.soldado_a, cantidad=15, usuario=self.admin_user)
+        response = self.client.get(reverse("inventory:existencia_list"))
+        self.assertContains(response, "En mano: <strong>15</strong>", html=True)
+        self.assertContains(
+            response,
+            reverse("inventory:existencia_asignada_list") + f"?existencia={self.granadas_a.pk}",
+        )
+        # Sin entregas no se muestra "En mano" (los cartuchos siguen todos en depósito).
+        existencias = {e.pk: e for e in response.context["existencias"]}
+        self.assertIsNone(existencias[self.cartuchos_a.pk].en_mano)
+        self.assertContains(response, "En mano:", count=1)
+
+    def test_municion_tiene_acceso_visible_a_municion_asignada(self):
+        response = self.client.get(reverse("inventory:existencia_list"))
+        self.assertContains(response, 'class="siga-quicklinks"')
+        self.assertContains(response, ">Munición asignada</a>")
+
+    def test_asignadas_filtradas_por_existencia(self):
+        self.granadas_a.entregar(soldado=self.soldado_a, cantidad=15, usuario=self.admin_user)
+        self.cartuchos_a.entregar(soldado=self.soldado_a, cantidad=60, usuario=self.admin_user)
+        url = reverse("inventory:existencia_asignada_list")
+        response = self.client.get(url + f"?existencia={self.granadas_a.pk}")
+        self.assertEqual(
+            [a.existencia_id for a in response.context["asignadas"]], [self.granadas_a.pk]
+        )
+        self.assertEqual(
+            [m.existencia_id for m in response.context["movimientos"]], [self.granadas_a.pk]
+        )
+
+    def test_asignadas_filtradas_por_existencia_de_otra_compania(self):
+        """El enlace "ver quién" también se usa desde "ver todas": la
+        existencia manda, no la compañía de trabajo."""
+        self.granadas_c.entregar(soldado=self.soldado_c, cantidad=3, usuario=self.admin_user)
+        url = reverse("inventory:existencia_asignada_list")
+        response = self.client.get(url + f"?existencia={self.granadas_c.pk}")
+        self.assertEqual(len(response.context["asignadas"]), 1)
+
+    def test_asignadas_existencia_inexistente_da_404(self):
+        url = reverse("inventory:existencia_asignada_list")
+        self.assertEqual(self.client.get(url + "?existencia=99999").status_code, 404)
 
 
 @override_settings(STORAGES=_PLAIN_STATIC_STORAGE)
