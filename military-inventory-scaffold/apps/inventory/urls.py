@@ -38,6 +38,12 @@ urlpatterns = [
     path("armamento/<int:pk>/entregar/", views.armamento_entregar, name="armamento_entregar"),
     path("armamento/<int:pk>/devolver/", views.armamento_devolver, name="armamento_devolver"),
     path("armamento/<int:pk>/baja/", views.armamento_baja, name="armamento_baja"),
+    path("armamento/<int:pk>/prestar/", views.armamento_prestar, name="armamento_prestar"),
+    path(
+        "armamento/<int:pk>/devolver-prestamo/",
+        views.armamento_devolver_prestamo,
+        name="armamento_devolver_prestamo",
+    ),
     path("movimientos/", views.movimiento_list, name="movimiento_list"),
     path("soldados/", views.soldado_list, name="soldado_list"),
     path("soldados/nuevo/", views.soldado_crear, name="soldado_crear"),

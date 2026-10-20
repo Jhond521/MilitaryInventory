@@ -14,17 +14,23 @@
         {% else %}
         <span class="siga-badge siga-badge--en-deposito">En depósito</span>
         {% endif %}
+        {% if arma.compania_en_prestamo %}<span class="siga-badge siga-badge--prestamo">{% if la_tengo_prestada %}Prestada por {{ arma.compania.nombre }}{% else %}Prestada a {{ arma.compania_en_prestamo.nombre }}{% endif %}</span>{% endif %}
       </div>
-      <div class="siga-detail-header__sub">{{ arma.tipo.nombre }} · Compañía {{ arma.compania.nombre }}</div>
+      <div class="siga-detail-header__sub">{{ arma.tipo.nombre }} · Compañía {{ arma.compania.nombre }}{% if arma.compania_en_prestamo %} · en préstamo a {{ arma.compania_en_prestamo.nombre }}{% endif %}</div>
     </div>
   </div>
   <div class="siga-detail-header__actions">
     {% if arma.ubicacion == "DEPOSITO" %}
-    <a class="siga-btn-primary" style="width:auto; height:auto; padding:0 18px; line-height:42px; text-decoration:none;" href="{% url 'inventory:armamento_entregar' arma.pk %}">Entregar</a>
+    {% if puede_entregar %}<a class="siga-btn-primary" style="width:auto; height:auto; padding:0 18px; line-height:42px; text-decoration:none;" href="{% url 'inventory:armamento_entregar' arma.pk %}">Entregar</a>{% endif %}
+    {% if arma.compania_en_prestamo %}
+    <a class="siga-btn-secondary" style="width:auto; height:auto; padding:0 18px; line-height:42px; text-decoration:none;" href="{% url 'inventory:armamento_devolver_prestamo' arma.pk %}">Devolver préstamo</a>
+    {% elif arma.estado == "ACTIVO" %}
+    <a class="siga-btn-secondary" style="width:auto; height:auto; padding:0 18px; line-height:42px; text-decoration:none;" href="{% url 'inventory:armamento_prestar' arma.pk %}">Prestar</a>
+    {% endif %}
     {% else %}
     <a class="siga-btn-primary" style="width:auto; height:auto; padding:0 18px; line-height:42px; text-decoration:none;" href="{% url 'inventory:armamento_devolver' arma.pk %}">Devolver a depósito</a>
     {% endif %}
-    {% if user.is_admin_role %}
+    {% if user.is_admin_role and not arma.compania_en_prestamo %}
     <a class="siga-btn-secondary" style="width:auto; height:auto; padding:0 18px; line-height:42px; text-decoration:none;" href="{% url 'inventory:armamento_baja' arma.pk %}">Dar de baja</a>
     {% endif %}
   </div>
@@ -37,6 +43,9 @@
       <div><div class="lbl">Número de serie</div><div class="val mono">{{ arma.numero_serie }}</div></div>
       <div><div class="lbl">Denominación</div><div class="val">{{ arma.tipo.nombre }}</div></div>
       <div><div class="lbl">Compañía dueña</div><div class="val">{{ arma.compania.nombre }}</div></div>
+      {% if arma.compania_en_prestamo %}
+      <div><div class="lbl">Prestada a</div><div class="val">{{ arma.compania_en_prestamo.nombre }}</div></div>
+      {% endif %}
       <div><div class="lbl">Pelotón</div><div class="val">{{ arma.peloton_actual.nombre|default:"—" }}</div></div>
       <div>
         <div class="lbl">Responsable</div>

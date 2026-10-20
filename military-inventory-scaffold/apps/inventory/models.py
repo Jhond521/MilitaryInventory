@@ -12,8 +12,10 @@ Conceptos (ver docs/PRD.md):
 - TipoArmamento: catálogo creable, controlado por SERIE (individual) o CANTIDAD
                 (existencias) — RF-05.
 - Armamento   : el ítem central, siempre de un tipo por SERIE. Se identifica por
-                número de serie. Pertenece a una compañía y está EN MANO de un
-                soldado (de donde deriva su pelotón) o EN DEPÓSITO.
+                número de serie. Pertenece a una compañía dueña (que nunca
+                cambia) y está EN MANO de un soldado (de donde deriva su
+                pelotón) o EN DEPÓSITO. Puede estar prestada temporalmente a
+                otra compañía (RF-23, ADR-0007).
 - Existencia  : saldo por CANTIDAD (munición, cascos) de un tipo, compañía,
                 depósito y lote opcional (RF-14).
 - Prestamo    : traslado de cantidad de un tipo CANTIDAD entre compañías,
@@ -41,6 +43,12 @@ class UnicodeJSONEncoder(DjangoJSONEncoder):
     def __init__(self, *args, **kwargs):
         kwargs["ensure_ascii"] = False
         super().__init__(*args, **kwargs)
+
+
+_SOLDADO_DE_OTRA_COMPANIA = (
+    "El soldado debe pertenecer a la compañía que tiene el arma (la dueña, o la que la "
+    "tiene prestada)."
+)
 
 
 class Unidad(models.Model):
@@ -216,6 +224,16 @@ class Armamento(models.Model):
     numero_serie = models.CharField("número de serie", max_length=120, unique=True)
     tipo = models.ForeignKey(TipoArmamento, on_delete=models.PROTECT, related_name="armamentos")
     compania = models.ForeignKey(Compania, on_delete=models.PROTECT, related_name="armamentos")
+    # Compañía que la tiene prestada (RF-23, ADR-0007); `None` = no prestada.
+    # La dueña (`compania`) nunca cambia (NO-3).
+    compania_en_prestamo = models.ForeignKey(
+        Compania,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="armamentos_en_prestamo",
+        verbose_name="prestada a",
+    )
 
     ubicacion = models.CharField(
         "ubicación", max_length=10, choices=Ubicacion.choices, default=Ubicacion.DEPOSITO
@@ -263,10 +281,12 @@ class Armamento(models.Model):
         if self.ubicacion == self.Ubicacion.EN_MANO:
             if self.soldado is None:
                 raise ValidationError("Un arma en mano debe tener un soldado asignado.")
-            if self.soldado.compania_id != self.compania_id:
-                raise ValidationError("El soldado debe pertenecer a la misma compañía del arma.")
+            if self.soldado.compania_id != self.compania_poseedora_id:
+                raise ValidationError(_SOLDADO_DE_OTRA_COMPANIA)
         if self.ubicacion == self.Ubicacion.DEPOSITO and self.deposito is None:
             raise ValidationError("Un arma en depósito debe indicar en cuál depósito está.")
+        if self.compania_en_prestamo_id and self.compania_en_prestamo_id == self.compania_id:
+            raise ValidationError("Un arma no se presta a su propia compañía.")
         # Una baja siempre queda con motivo y fecha (RF-11).
         if self.estado == self.Estado.BAJA:
             if not self.motivo_baja:
@@ -283,6 +303,16 @@ class Armamento(models.Model):
         return self.get_ubicacion_display()
 
     @property
+    def compania_poseedora_id(self):
+        """Compañía que puede usar el arma ahora: la que la tiene prestada,
+        o la dueña si no está prestada (RF-23, ADR-0007)."""
+        return self.compania_en_prestamo_id or self.compania_id
+
+    @property
+    def compania_poseedora(self) -> "Compania":
+        return self.compania_en_prestamo or self.compania
+
+    @property
     def peloton_actual(self) -> "Peloton | None":
         """Pelotón derivado del soldado que tiene el arma en mano (RF-16)."""
         if self.ubicacion == self.Ubicacion.EN_MANO and self.soldado_id:
@@ -295,8 +325,8 @@ class Armamento(models.Model):
             raise ValidationError("Un arma dada de baja no se puede entregar.")
         if self.ubicacion != self.Ubicacion.DEPOSITO:
             raise ValidationError("El arma debe estar en depósito para poder entregarse.")
-        if soldado.compania_id != self.compania_id:
-            raise ValidationError("El soldado debe pertenecer a la misma compañía del arma.")
+        if soldado.compania_id != self.compania_poseedora_id:
+            raise ValidationError(_SOLDADO_DE_OTRA_COMPANIA)
         with transaction.atomic():
             self.ubicacion = self.Ubicacion.EN_MANO
             self.soldado = soldado
@@ -307,6 +337,7 @@ class Armamento(models.Model):
                 armamento=self,
                 tipo=Movimiento.Tipo.ENTREGA,
                 soldado=soldado,
+                compania_en_prestamo_id=self.compania_en_prestamo_id,
                 usuario=usuario,
                 observacion=observacion,
             )
@@ -325,6 +356,7 @@ class Armamento(models.Model):
                 armamento=self,
                 tipo=Movimiento.Tipo.DEVOLUCION,
                 deposito=deposito,
+                compania_en_prestamo_id=self.compania_en_prestamo_id,
                 usuario=usuario,
                 observacion=observacion,
             )
@@ -336,6 +368,10 @@ class Armamento(models.Model):
         ubicación actual."""
         if self.estado == self.Estado.BAJA:
             raise ValidationError("El arma ya está dada de baja.")
+        if self.compania_en_prestamo_id:
+            raise ValidationError(
+                "El arma está prestada: devuelve el préstamo antes de darla de baja."
+            )
         with transaction.atomic():
             ubicacion_previa, soldado_previo, deposito_previo = (
                 self.ubicacion, self.soldado, self.deposito
@@ -352,6 +388,56 @@ class Armamento(models.Model):
                 deposito=deposito_previo if ubicacion_previa == self.Ubicacion.DEPOSITO else None,
                 usuario=usuario,
                 observacion=observacion or self.get_motivo_baja_display(),
+            )
+
+    def prestar(self, *, compania, usuario, observacion=""):
+        """Presta temporalmente el arma a otra compañía, que podrá
+        entregarla a sus soldados hasta devolverla (RF-23, ADR-0007). La
+        compañía dueña no cambia (NO-3)."""
+        if self.estado != self.Estado.ACTIVO:
+            raise ValidationError("Un arma dada de baja no se puede prestar.")
+        if self.compania_en_prestamo_id:
+            raise ValidationError(
+                f"El arma ya está prestada a {self.compania_en_prestamo}; "
+                "devuelve ese préstamo antes."
+            )
+        if self.ubicacion != self.Ubicacion.DEPOSITO:
+            raise ValidationError("El arma debe estar en depósito para poder prestarse.")
+        if compania.pk == self.compania_id:
+            raise ValidationError("Un arma no se presta a su propia compañía.")
+        with transaction.atomic():
+            self.compania_en_prestamo = compania
+            self.full_clean()
+            self.save()
+            return Movimiento.objects.create(
+                armamento=self,
+                tipo=Movimiento.Tipo.PRESTAMO,
+                deposito=self.deposito,
+                compania_en_prestamo=compania,
+                usuario=usuario,
+                observacion=observacion,
+            )
+
+    def devolver_prestamo(self, *, usuario, observacion=""):
+        """Devuelve el arma prestada a su compañía dueña (RF-23). Solo con
+        el arma en depósito: si un soldado de la compañía que la recibió la
+        tiene, primero vuelve al depósito (RF-10)."""
+        if not self.compania_en_prestamo_id:
+            raise ValidationError("El arma no está prestada.")
+        if self.ubicacion != self.Ubicacion.DEPOSITO:
+            raise ValidationError("Primero devuelve el arma al depósito.")
+        with transaction.atomic():
+            compania_prestamo = self.compania_en_prestamo
+            self.compania_en_prestamo = None
+            self.full_clean()
+            self.save()
+            return Movimiento.objects.create(
+                armamento=self,
+                tipo=Movimiento.Tipo.DEV_PRESTAMO,
+                deposito=self.deposito,
+                compania_en_prestamo=compania_prestamo,
+                usuario=usuario,
+                observacion=observacion,
             )
 
 
@@ -381,6 +467,8 @@ class Movimiento(models.Model):
         ENTREGA = "ENTREGA", "Entrega (a soldado)"
         DEVOLUCION = "DEVOLUCION", "Devolución (a depósito)"
         BAJA = "BAJA", "Baja"
+        PRESTAMO = "PRESTAMO", "Préstamo (a otra compañía)"
+        DEV_PRESTAMO = "DEV_PRESTAMO", "Devolución de préstamo"
 
     armamento = models.ForeignKey(Armamento, on_delete=models.PROTECT, related_name="movimientos")
     tipo = models.CharField("tipo de movimiento", max_length=12, choices=Tipo.choices)
@@ -389,6 +477,16 @@ class Movimiento(models.Model):
     )
     deposito = models.ForeignKey(
         Deposito, on_delete=models.PROTECT, null=True, blank=True, related_name="movimientos"
+    )
+    # Compañía que tenía el arma prestada al momento del movimiento (RF-23,
+    # ADR-0007): la destino de un PRESTAMO, la que devuelve en DEV_PRESTAMO, y
+    # la que entregó/recibió el arma mientras la tenía prestada.
+    compania_en_prestamo = models.ForeignKey(
+        Compania,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="movimientos_en_prestamo",
     )
     usuario = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="movimientos"

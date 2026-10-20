@@ -1,0 +1,52 @@
+{% extends "inventory/base_mobile.html" %}
+{% block title %}Prestar armamento{% endblock %}
+{% block content %}
+<h1 class="siga-page-title">Prestar armamento</h1>
+<div class="siga-page-subtitle">Préstamo temporal a otra compañía. {{ arma.compania.nombre }} sigue siendo la dueña.</div>
+
+<div class="siga-field">
+  <label>Arma</label>
+  <div class="siga-summary">
+    <div class="siga-summary__row">
+      <span class="label">Serie</span>
+      <span class="value">{{ arma.numero_serie }}</span>
+    </div>
+    <div class="siga-summary__row">
+      <span class="label">Tipo</span>
+      <span class="value">{{ arma.tipo.nombre }}</span>
+    </div>
+    <div class="siga-summary__row">
+      <span class="label">Compañía dueña</span>
+      <span class="value">{{ arma.compania.nombre }}</span>
+    </div>
+    <div class="siga-summary__row">
+      <span class="label">Depósito</span>
+      <span class="value">{{ arma.deposito.nombre|default:"—" }}</span>
+    </div>
+  </div>
+</div>
+
+{% if arma.compania_en_prestamo %}
+<p class="siga-empty">Esta arma ya está prestada a {{ arma.compania_en_prestamo.nombre }}. Devuelve ese préstamo antes de prestarla de nuevo.</p>
+{% elif arma.ubicacion != "DEPOSITO" %}
+<p class="siga-empty">El arma está en mano de {{ arma.soldado.nombre_con_grado }}. Debe estar en depósito para poder prestarse.</p>
+{% else %}
+<form method="post">
+  {% csrf_token %}
+  <div class="siga-field">
+    <label for="compania">Prestar a</label>
+    <select id="compania" name="compania" required>
+      {% for compania in companias %}
+      <option value="{{ compania.pk }}">{{ compania.nombre }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="siga-field">
+    <label for="observacion">Observación (opcional)</label>
+    <textarea id="observacion" name="observacion" rows="2"></textarea>
+  </div>
+  <button type="submit" class="siga-btn-primary">Confirmar préstamo</button>
+</form>
+{% endif %}
+<a class="siga-btn-secondary" style="display:block; text-decoration:none; margin-top:10px;" href="{% url 'inventory:armamento_detalle' arma.pk %}">Cancelar</a>
+{% endblock %}

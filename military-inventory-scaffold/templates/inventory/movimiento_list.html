@@ -79,6 +79,10 @@
       <span class="siga-badge siga-badge--entrega">Entrega</span>
       {% elif movimiento.tipo == "DEVOLUCION" %}
       <span class="siga-badge siga-badge--devolucion">Devolución</span>
+      {% elif movimiento.tipo == "PRESTAMO" %}
+      <span class="siga-badge siga-badge--prestamo">Préstamo</span>
+      {% elif movimiento.tipo == "DEV_PRESTAMO" %}
+      <span class="siga-badge siga-badge--devolucion">Devolución de préstamo</span>
       {% else %}
       <span class="siga-badge siga-badge--baja">Baja</span>
       {% endif %}
@@ -87,6 +91,15 @@
     <div class="siga-card__tipo">{{ movimiento.existencia.tipo.nombre }}{% if movimiento.existencia.lote %} · Lote {{ movimiento.existencia.lote }}{% endif %}</div>
     {% else %}
     <div class="siga-card__tipo">{{ movimiento.armamento.tipo.nombre }}</div>
+    {% endif %}
+    {% if movimiento.tipo == "PRESTAMO" %}
+    <div class="siga-card__meta">
+      <span><strong>{{ movimiento.armamento.compania.nombre }}</strong> → <strong>{{ movimiento.compania_en_prestamo.nombre }}</strong></span>
+    </div>
+    {% elif movimiento.tipo == "DEV_PRESTAMO" %}
+    <div class="siga-card__meta">
+      <span><strong>{{ movimiento.compania_en_prestamo.nombre }}</strong> → <strong>{{ movimiento.armamento.compania.nombre }}</strong></span>
+    </div>
     {% endif %}
     <div class="siga-card__meta">
       <span>{% if movimiento.soldado %}Soldado: <strong>{{ movimiento.soldado.nombre_con_grado }}</strong>{% elif movimiento.deposito %}Depósito: <strong>{{ movimiento.deposito.nombre }}</strong>{% endif %}</span>

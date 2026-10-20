@@ -98,11 +98,15 @@ docs/              # PRD (Spanish), backlog (Spanish), ADRs
 
 ## Domain rules that matter
 
-- A weapon (`Armamento`) belongs to exactly one company and is **never** transferred
-  between companies (PRD NO-3). Every `TipoArmamento` is either `SERIE` (individual,
+- A weapon (`Armamento`) belongs to exactly one owner company (`compania`), which
+  **never** changes (PRD NO-3). It can be lent temporarily to another company
+  (`compania_en_prestamo`, RF-23, ADR-0007) via `prestar()` / `devolver_prestamo()`,
+  only from depósito, no chained loans, no baja while lent. While lent, the receiving
+  company can entregar it to its own soldiers: anything that decides who may use a
+  weapon must compare against `compania_poseedora`, not `compania`. Every `TipoArmamento` is either `SERIE` (individual,
   used by `Armamento`) or `CANTIDAD` (stock, used by `Existencia`) — `Armamento.clean()`
   rejects a `CANTIDAD` tipo, `Existencia.clean()` rejects a `SERIE` one.
-- Location is a two-state field: `EN_MANO` (needs a `soldado` of the same company)
+- Location is a two-state field: `EN_MANO` (needs a `soldado` of `compania_poseedora`)
   or `DEPOSITO` (needs a `deposito`). `Armamento.clean()` enforces both — call
   `full_clean()` before saving from views.
 - A soldier belongs to exactly one `Peloton` of their own company (`Soldado.clean()`

@@ -1,0 +1,47 @@
+{% extends "inventory/base_mobile.html" %}
+{% block title %}Devolver préstamo{% endblock %}
+{% block content %}
+<h1 class="siga-page-title">Devolver préstamo</h1>
+<div class="siga-page-subtitle">El arma vuelve a {{ arma.compania.nombre }}, su compañía dueña.</div>
+
+<div class="siga-field">
+  <label>Arma</label>
+  <div class="siga-summary">
+    <div class="siga-summary__row">
+      <span class="label">Serie</span>
+      <span class="value">{{ arma.numero_serie }}</span>
+    </div>
+    <div class="siga-summary__row">
+      <span class="label">Tipo</span>
+      <span class="value">{{ arma.tipo.nombre }}</span>
+    </div>
+    <div class="siga-summary__row">
+      <span class="label">La tiene</span>
+      <span class="value">{{ arma.compania_en_prestamo.nombre }}</span>
+    </div>
+    <div class="siga-summary__row">
+      <span class="label">Vuelve a</span>
+      <span class="value">{{ arma.compania.nombre }}</span>
+    </div>
+    <div class="siga-summary__row">
+      <span class="label">Ubicación</span>
+      <span class="value">{% if arma.ubicacion == "EN_MANO" %}En mano · {{ arma.soldado.nombre_con_grado }}{% else %}En depósito · {{ arma.deposito.nombre }}{% endif %}</span>
+    </div>
+  </div>
+</div>
+
+{% if arma.ubicacion == "DEPOSITO" %}
+<form method="post">
+  {% csrf_token %}
+  <div class="siga-field">
+    <label for="observacion">Observación (opcional)</label>
+    <textarea id="observacion" name="observacion" rows="2"></textarea>
+  </div>
+  <button type="submit" class="siga-btn-primary">Confirmar devolución</button>
+</form>
+{% else %}
+<p class="siga-empty">Primero devuelve el arma al depósito: hoy la tiene {{ arma.soldado.nombre_con_grado }}.</p>
+<a class="siga-btn-primary" style="display:block; text-decoration:none; margin-top:10px; text-align:center;" href="{% url 'inventory:armamento_devolver' arma.pk %}">Devolver a depósito</a>
+{% endif %}
+<a class="siga-btn-secondary" style="display:block; text-decoration:none; margin-top:10px;" href="{% url 'inventory:armamento_detalle' arma.pk %}">Cancelar</a>
+{% endblock %}

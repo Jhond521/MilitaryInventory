@@ -90,6 +90,7 @@
           {% else %}
           <span class="siga-badge siga-badge--en-deposito">En depósito</span>
           {% endif %}
+          {% if arma.compania_en_prestamo %}<span class="siga-badge siga-badge--prestamo">{% if not ver_todas and arma.compania_en_prestamo_id == compania_actual.pk %}Prestada por {{ arma.compania.nombre }}{% else %}Prestada a {{ arma.compania_en_prestamo.nombre }}{% endif %}</span>{% endif %}
         </td>
         <td class="siga-table__muted">
           {% if arma.ubicacion == "EN_MANO" %}{{ arma.soldado.nombre_con_grado }}{% else %}{{ arma.deposito.nombre }}{% endif %}
@@ -104,15 +105,18 @@
 
 <div class="siga-card-list siga-card-list--inventario">
   {% for arma in armamentos %}
-  <div class="siga-card">
+  <div class="siga-card{% if arma.compania_en_prestamo %} siga-card--prestamo{% endif %}">
     <a href="{% url 'inventory:armamento_detalle' arma.pk %}" style="display:block; text-decoration:none; color:inherit;">
       <div class="siga-card__top">
         <span class="siga-card__serie">{{ arma.numero_serie }}</span>
-        {% if arma.ubicacion == "EN_MANO" %}
-        <span class="siga-badge siga-badge--en-mano">En mano</span>
-        {% else %}
-        <span class="siga-badge siga-badge--en-deposito">En depósito</span>
-        {% endif %}
+        <span>
+          {% if arma.ubicacion == "EN_MANO" %}
+          <span class="siga-badge siga-badge--en-mano">En mano</span>
+          {% else %}
+          <span class="siga-badge siga-badge--en-deposito">En depósito</span>
+          {% endif %}
+          {% if arma.compania_en_prestamo %}<span class="siga-badge siga-badge--prestamo">{% if not ver_todas and arma.compania_en_prestamo_id == compania_actual.pk %}Prestada por {{ arma.compania.nombre }}{% else %}Prestada a {{ arma.compania_en_prestamo.nombre }}{% endif %}</span>{% endif %}
+        </span>
       </div>
       <div class="siga-card__tipo">{{ arma.tipo.nombre }}</div>
       <div class="siga-card__meta">

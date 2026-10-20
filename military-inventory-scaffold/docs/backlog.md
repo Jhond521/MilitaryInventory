@@ -325,9 +325,14 @@ El corazón del sistema.
     `inventory:prestamo_devolver` (`/prestamos/<pk>/devolver/`). Munición resalta cada
     existencia con préstamos pendientes ("En préstamo de X" con Devolver / "Prestado a Y"),
     Préstamos muestra el estado y Movimientos las devoluciones (clase "Préstamos").
-- H-29 — Préstamo temporal de armamento serializado entre compañías, con devolución y resaltado (RF-23)
-  - **Estado**: Pendiente (issue #23). Depende de H-28. Reescribe NO-3: la compañía dueña
-    nunca cambia. Requiere ADR antes de codificar.
+- H-29 — Préstamo temporal de armamento serializado entre compañías, con devolución y resaltado (RF-23) ✅
+  - **Estado**: Hecho (issue #23, ADR-0007). Campo `Armamento.compania_en_prestamo` (la
+    dueña nunca cambia) y `Armamento.prestar()` / `.devolver_prestamo()`, solo con el arma
+    en depósito. Movimientos de tipo `PRESTAMO` / `DEV_PRESTAMO`. Rutas
+    `inventory:armamento_prestar` y `inventory:armamento_devolver_prestamo`. La compañía
+    que la recibe la entrega a sus soldados; Inventario muestra "Prestada por X" /
+    "Prestada a Y" y la cuenta en la compañía que la tiene. Sin baja ni préstamo en cadena
+    mientras está prestada.
 - H-30 — Lista de soldados numerada 1…N y con la cédula visible (RF-06/RF-21) ✅
   - **Estado**: Hecho (issue #20). Soldados y los selectores de soldado al entregar (arma y
     munición) numeran cada fila con su posición en la lista visible y muestran la cédula.
