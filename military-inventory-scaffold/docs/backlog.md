@@ -313,6 +313,19 @@ El corazón del sistema.
     ficha vía `?next=`) y los últimos 50 movimientos. El bug relacionado (munición ausente en
     Movimientos, #16) no lleva historia, por convención.
 
+## Actualizaciones v1.6 (feedback de David, issues #18 y #20)
+
+- H-27 — Cédula del soldado: única, solo dígitos, obligatoria al crear/editar, buscable (RF-21)
+  - **Estado**: Pendiente (issue #21).
+- H-28 — Devolver préstamos de munición (total o parcial) y resaltar lo prestado/recibido en Munición (RF-22)
+  - **Estado**: Pendiente (issue #22). Requiere ADR-0006 (modelo de devolución de préstamo)
+    antes de codificar.
+- H-29 — Préstamo temporal de armamento serializado entre compañías, con devolución y resaltado (RF-23)
+  - **Estado**: Pendiente (issue #23). Depende de H-28. Reescribe NO-3: la compañía dueña
+    nunca cambia. Requiere ADR antes de codificar.
+- H-30 — Lista de soldados numerada 1…N y con la cédula visible (RF-06/RF-21)
+  - **Estado**: Pendiente (issue #20). Depende de H-27. Solo plantillas.
+
 ## Fase 2 — Siguiente
 
 - H-20 — Módulo de importación de Excel autoservicio (que David suba y cargue) (RF-13)
