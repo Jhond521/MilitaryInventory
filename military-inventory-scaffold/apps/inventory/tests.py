@@ -2814,6 +2814,7 @@ class DevolucionPrestamoTests(TestCase):
         self.assertNotContains(response, "Parcial")
 
 
+@override_settings(STORAGES=_PLAIN_STATIC_STORAGE)
 class PrestamoArmamentoTests(TestCase):
     """Préstamo temporal de armamento entre compañías (issue #23, RF-23,
     ADR-0007)."""
