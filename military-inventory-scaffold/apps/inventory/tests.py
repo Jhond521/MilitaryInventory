@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import tempfile
 from datetime import date, timedelta
 
@@ -386,6 +387,52 @@ class CedulaSoldadoTests(TestCase):
         self.assertContains(
             self.client.get(reverse("inventory:soldado_detalle", args=[sin.pk])), "Sin cédula"
         )
+
+    def _numeros(self, response):
+        return re.findall(r'siga-pick-item__num">(\d+)<', response.content.decode())
+
+    def test_listas_de_soldados_numeradas_y_con_cedula(self):
+        """Issue #20: cada fila lleva su posición 1…N en la lista que se
+        ve (no un identificador) y la cédula del soldado."""
+        for i, nombre in enumerate(("Arango", "Bermúdez", "Caro"), start=1):
+            Soldado.objects.create(
+                apellidos_nombres=nombre, cedula=f"10{i}", compania=self.compania,
+                peloton=self.peloton,
+            )
+        Soldado.objects.create(
+            apellidos_nombres="Díaz", compania=self.compania, peloton=self.peloton
+        )
+        arma = Armamento.objects.create(
+            numero_serie="S-001", compania=self.compania, deposito=self.deposito,
+            tipo=TipoArmamento.objects.create(nombre="FUSIL", control=TipoArmamento.Control.SERIE),
+        )
+        existencia = Existencia.objects.create(
+            tipo=TipoArmamento.objects.create(
+                nombre="MUNICION 5.56", control=TipoArmamento.Control.CANTIDAD
+            ),
+            compania=self.compania, deposito=self.deposito, cantidad=100,
+        )
+        for url in (
+            reverse("inventory:soldado_list"),
+            reverse("inventory:armamento_entregar", args=[arma.pk]),
+            reverse("inventory:existencia_entregar", args=[existencia.pk]),
+        ):
+            response = self.client.get(url)
+            self.assertEqual(self._numeros(response), ["1", "2", "3", "4"], url)
+            self.assertContains(response, "C.C. 102", msg_prefix=url)
+            self.assertContains(response, "Sin cédula", msg_prefix=url)
+
+    def test_numeracion_se_reinicia_al_filtrar_y_al_borrar(self):
+        for nombre in ("Arango", "Bermúdez", "Caro"):
+            Soldado.objects.create(
+                apellidos_nombres=nombre, compania=self.compania, peloton=self.peloton
+            )
+        url = reverse("inventory:soldado_list")
+        self.assertEqual(self._numeros(self.client.get(url, {"q": "Caro"})), ["1"])
+        Soldado.objects.get(apellidos_nombres="Bermúdez").delete()
+        response = self.client.get(url)
+        self.assertEqual(self._numeros(response), ["1", "2"])
+        self.assertContains(response, "2 soldados")
 
 
 class ExistenciaPrestamoTests(TestCase):

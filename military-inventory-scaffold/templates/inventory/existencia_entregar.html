@@ -78,10 +78,11 @@
 <div class="siga-pick-list">
   {% for candidato in soldados %}
   <a class="siga-pick-item" href="?soldado={{ candidato.pk }}{% if q %}&q={{ q|urlencode }}{% endif %}">
+    <span class="siga-pick-item__num">{{ forloop.counter }}</span>
     <span class="siga-pick-item__avatar">{{ candidato.apellidos_nombres|slice:":2"|upper }}</span>
     <span>
       <div class="siga-pick-item__name">{{ candidato.nombre_con_grado }}</div>
-      <div class="siga-pick-item__meta">Pelotón {{ candidato.peloton.nombre }}</div>
+      <div class="siga-pick-item__meta">{% if candidato.cedula %}C.C. {{ candidato.cedula }}{% else %}Sin cédula{% endif %} · Pelotón {{ candidato.peloton.nombre }}</div>
     </span>
   </a>
   {% empty %}

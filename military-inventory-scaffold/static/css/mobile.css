@@ -477,6 +477,17 @@ body.siga-app {
   flex-shrink: 0;
 }
 
+/* Número de fila en las listas de soldados (issue #20): solo la posición en
+   la lista que se está viendo, no un identificador del soldado. */
+.siga-pick-item__num {
+  min-width: 3ch;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--siga-text-muted);
+  flex-shrink: 0;
+}
+
 .siga-pick-item__name {
   font-size: 14px;
   font-weight: 600;

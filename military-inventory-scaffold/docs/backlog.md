@@ -325,8 +325,10 @@ El corazón del sistema.
 - H-29 — Préstamo temporal de armamento serializado entre compañías, con devolución y resaltado (RF-23)
   - **Estado**: Pendiente (issue #23). Depende de H-28. Reescribe NO-3: la compañía dueña
     nunca cambia. Requiere ADR antes de codificar.
-- H-30 — Lista de soldados numerada 1…N y con la cédula visible (RF-06/RF-21)
-  - **Estado**: Pendiente (issue #20). Depende de H-27. Solo plantillas.
+- H-30 — Lista de soldados numerada 1…N y con la cédula visible (RF-06/RF-21) ✅
+  - **Estado**: Hecho (issue #20). Soldados y los selectores de soldado al entregar (arma y
+    munición) numeran cada fila con su posición en la lista visible y muestran la cédula.
+    Solo plantillas y CSS (`.siga-pick-item__num`).
 
 ## Fase 2 — Siguiente
 
