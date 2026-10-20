@@ -28,6 +28,7 @@ Conceptos (ver docs/PRD.md):
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.serializers.json import DjangoJSONEncoder
+from django.core.validators import RegexValidator
 from django.db import models, transaction
 
 
@@ -140,6 +141,17 @@ class Soldado(models.Model):
     )
 
     apellidos_nombres = models.CharField("apellidos y nombres", max_length=200)
+    # Identificador del soldado (RF-21). Nullable para que los soldados
+    # cargados antes de la cédula no choquen entre sí en el índice único;
+    # el formulario la exige al crear y al editar.
+    cedula = models.CharField(
+        "cédula",
+        max_length=15,
+        unique=True,
+        null=True,
+        blank=True,
+        validators=[RegexValidator(r"^[0-9]+$","La cédula solo puede tener dígitos.")],
+    )
     grado = models.CharField("grado", max_length=10, choices=Grado.choices, blank=True)
     compania = models.ForeignKey(Compania, on_delete=models.PROTECT, related_name="soldados")
     peloton = models.ForeignKey(Peloton, on_delete=models.PROTECT, related_name="soldados")

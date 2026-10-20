@@ -371,8 +371,7 @@ def armamento_entregar(request, pk):
 
     q = request.GET.get("q", "").strip()
     soldados = Soldado.objects.filter(compania_id=arma.compania_id).select_related("peloton")
-    if q:
-        soldados = soldados.filter(apellidos_nombres__icontains=q)
+    soldados = _buscar_soldados(soldados, q)
 
     context = {"arma": arma, "q": q, "soldados": soldados[:30], "paso": "soldado"}
     return render(request, "inventory/armamento_entregar.html", context)
@@ -519,6 +518,18 @@ def movimiento_list(request):
     return render(request, "inventory/movimiento_list.html", context)
 
 
+def _buscar_soldados(qs, q):
+    """Filtra soldados por nombre o cédula (RF-21). La cédula se compara
+    sin puntos ni espacios, igual a como se guarda."""
+    if not q:
+        return qs
+    filtro = Q(apellidos_nombres__icontains=q)
+    cedula = q.replace(".", "").replace(" ", "")
+    if cedula.isascii() and cedula.isdigit():
+        filtro |= Q(cedula__icontains=cedula)
+    return qs.filter(filtro)
+
+
 @requiere_autorizado
 def soldado_list(request):
     compania_id, ver_todas = _companias_scope(request)
@@ -527,8 +538,7 @@ def soldado_list(request):
         qs = qs.filter(compania_id=compania_id)
 
     q = request.GET.get("q", "").strip()
-    if q:
-        qs = qs.filter(apellidos_nombres__icontains=q)
+    qs = _buscar_soldados(qs, q)
 
     peloton_id = request.GET.get("peloton", "")
     if peloton_id:
@@ -798,8 +808,7 @@ def existencia_entregar(request, pk):
 
     q = request.GET.get("q", "").strip()
     soldados = Soldado.objects.filter(compania_id=existencia.compania_id).select_related("peloton")
-    if q:
-        soldados = soldados.filter(apellidos_nombres__icontains=q)
+    soldados = _buscar_soldados(soldados, q)
 
     context = {"existencia": existencia, "q": q, "soldados": soldados[:30], "paso": "soldado"}
     return render(request, "inventory/existencia_entregar.html", context)

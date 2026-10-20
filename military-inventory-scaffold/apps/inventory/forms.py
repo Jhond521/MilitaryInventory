@@ -96,8 +96,30 @@ class SoldadoForm(forms.ModelForm):
 
     class Meta:
         model = Soldado
-        fields = ["apellidos_nombres", "grado", "compania", "peloton"]
-        labels = {"apellidos_nombres": "Apellidos y nombres"}
+        fields = ["apellidos_nombres", "cedula", "grado", "compania", "peloton"]
+        labels = {"apellidos_nombres": "Apellidos y nombres", "cedula": "Cédula"}
+        widgets = {"cedula": forms.TextInput(attrs={"inputmode": "numeric"})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Obligatoria en el formulario (RF-21) aunque el modelo la permita
+        # vacía: así un soldado cargado antes de la cédula la recibe en
+        # cuanto alguien lo edite.
+        self.fields["cedula"].required = True
+        self.fields["cedula"].error_messages["required"] = "La cédula es obligatoria."
+
+    def clean_cedula(self):
+        # Se acepta como la escriben ("1.234.567", "1 234 567") y se guarda
+        # solo con dígitos; el RegexValidator del modelo rechaza lo demás.
+        cedula = self.cleaned_data["cedula"].replace(".", "").replace(" ", "")
+        if not (cedula.isascii() and cedula.isdigit()):
+            raise forms.ValidationError("La cédula solo puede tener dígitos.")
+        otro = Soldado.objects.filter(cedula=cedula).exclude(pk=self.instance.pk).first()
+        if otro:
+            raise forms.ValidationError(
+                f"Esta cédula ya está registrada para {otro.nombre_con_grado} ({otro.compania})."
+            )
+        return cedula
 
 
 class ArmamentoCrearForm(forms.ModelForm):

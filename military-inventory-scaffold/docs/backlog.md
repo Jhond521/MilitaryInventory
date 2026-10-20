@@ -315,8 +315,10 @@ El corazón del sistema.
 
 ## Actualizaciones v1.6 (feedback de David, issues #18 y #20)
 
-- H-27 — Cédula del soldado: única, solo dígitos, obligatoria al crear/editar, buscable (RF-21)
-  - **Estado**: Pendiente (issue #21).
+- H-27 — Cédula del soldado: única, solo dígitos, obligatoria al crear/editar, buscable (RF-21) ✅
+  - **Estado**: Hecho (issue #21). Campo `Soldado.cedula` (nulo para los soldados ya cargados),
+    obligatorio en el formulario, búsqueda por nombre o cédula en Soldados y al entregar, y
+    visible en la ficha.
 - H-28 — Devolver préstamos de munición (total o parcial) y resaltar lo prestado/recibido en Munición (RF-22)
   - **Estado**: Pendiente (issue #22). Requiere ADR-0006 (modelo de devolución de préstamo)
     antes de codificar.

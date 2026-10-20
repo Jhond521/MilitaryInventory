@@ -107,6 +107,11 @@ docs/              # PRD (Spanish), backlog (Spanish), ADRs
 - A soldier belongs to exactly one `Peloton` of their own company (`Soldado.clean()`
   checks this); a weapon has no pelotón of its own — `Armamento.peloton_actual` derives
   it from the soldier currently holding it, and is `None` while in depósito (RF-16).
+- `Soldado.cedula` (RF-21) is the soldier's unique ID, digits only. It's `null=True`
+  (never `""`) so soldiers loaded before it existed don't collide in the unique index;
+  `SoldadoForm` makes it required and normalizes dots/spaces away. Search soldiers with
+  `_buscar_soldados()` in `apps/inventory/views.py` (name or cédula) — every soldier
+  search box uses it.
 - Ammunition/quantity stock (`Existencia`) **does** cross companies via `Prestamo`
   (RF-15) — the only exception to the no-transfer rule above, which applies to
   serialized weapons only. `Prestamo.save()` atomically debits the origin

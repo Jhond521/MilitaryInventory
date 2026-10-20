@@ -219,6 +219,7 @@ class SoldadoFormGradoTests(TestCase):
             reverse("inventory:soldado_crear"),
             {
                 "apellidos_nombres": "Bolaños Gómez David",
+                "cedula": "1000001",
                 "grado": Soldado.Grado.CT,
                 "compania": self.compania.pk,
                 "peloton": self.peloton.pk,
@@ -233,6 +234,7 @@ class SoldadoFormGradoTests(TestCase):
             reverse("inventory:soldado_crear"),
             {
                 "apellidos_nombres": "Ríos Carlos",
+                "cedula": "1000002",
                 "grado": "",
                 "compania": self.compania.pk,
                 "peloton": self.peloton.pk,
@@ -241,6 +243,149 @@ class SoldadoFormGradoTests(TestCase):
         self.assertRedirects(response, reverse("inventory:soldado_list"))
         soldado = Soldado.objects.get(apellidos_nombres="Ríos Carlos")
         self.assertEqual(soldado.grado, "")
+
+
+@override_settings(STORAGES=_PLAIN_STATIC_STORAGE)
+class CedulaSoldadoTests(TestCase):
+    """Cédula del soldado como identificador (issue #21, RF-21): única,
+    solo dígitos, obligatoria en el formulario y buscable."""
+
+    def setUp(self):
+        self.unidad = Unidad.objects.create(nombre="Batallón de Prueba")
+        self.compania = Compania.objects.create(unidad=self.unidad, nombre="A")
+        self.otra = Compania.objects.create(unidad=self.unidad, nombre="B")
+        self.peloton = Peloton.objects.create(compania=self.compania, nombre="A 1")
+        self.peloton_b = Peloton.objects.create(compania=self.otra, nombre="B 1")
+        self.deposito = Deposito.objects.create(nombre="Apiay")
+        user_model = get_user_model()
+        self.admin_user = user_model.objects.create_user(
+            email="admin@example.com", password="x", role=user_model.Role.ADMIN
+        )
+        self.client.force_login(self.admin_user)
+        session = self.client.session
+        session[SESSION_KEY] = self.compania.pk
+        session.save()
+
+    def _datos(self, **extra):
+        datos = {
+            "apellidos_nombres": "Ríos Carlos",
+            "cedula": "1234567",
+            "grado": "",
+            "compania": self.compania.pk,
+            "peloton": self.peloton.pk,
+        }
+        datos.update(extra)
+        return datos
+
+    def test_crear_sin_cedula_no_guarda(self):
+        response = self.client.post(reverse("inventory:soldado_crear"), self._datos(cedula=""))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "La cédula es obligatoria.")
+        self.assertFalse(Soldado.objects.exists())
+
+    def test_cedula_se_normaliza_sin_puntos_ni_espacios(self):
+        self.client.post(reverse("inventory:soldado_crear"), self._datos(cedula="1.234 567"))
+        self.assertEqual(Soldado.objects.get().cedula, "1234567")
+
+    def test_cedula_con_letras_rechazada(self):
+        response = self.client.post(
+            reverse("inventory:soldado_crear"), self._datos(cedula="12AB34")
+        )
+        self.assertContains(response, "La cédula solo puede tener dígitos.")
+        self.assertFalse(Soldado.objects.exists())
+
+    def test_cedula_repetida_en_otra_compania_rechazada(self):
+        Soldado.objects.create(
+            apellidos_nombres="Bolaños Gómez David", grado=Soldado.Grado.CT,
+            cedula="1234567", compania=self.otra, peloton=self.peloton_b,
+        )
+        response = self.client.post(reverse("inventory:soldado_crear"), self._datos())
+        self.assertContains(
+            response, "Esta cédula ya está registrada para CT Bolaños Gómez David (B)."
+        )
+        self.assertEqual(Soldado.objects.count(), 1)
+
+    def test_modelo_rechaza_cedula_no_numerica(self):
+        soldado = Soldado(
+            apellidos_nombres="Ríos Carlos", cedula="12-34",
+            compania=self.compania, peloton=self.peloton,
+        )
+        with self.assertRaises(ValidationError):
+            soldado.full_clean()
+
+    def test_soldados_existentes_sin_cedula_conviven(self):
+        for nombre in ("Uno", "Dos"):
+            Soldado.objects.create(
+                apellidos_nombres=nombre, compania=self.compania, peloton=self.peloton
+            )
+        self.assertEqual(Soldado.objects.filter(cedula__isnull=True).count(), 2)
+
+    def test_editar_soldado_sin_cedula_la_exige(self):
+        soldado = Soldado.objects.create(
+            apellidos_nombres="Ríos Carlos", compania=self.compania, peloton=self.peloton
+        )
+        url = reverse("inventory:soldado_editar", args=[soldado.pk])
+        response = self.client.post(url, self._datos(cedula=""))
+        self.assertContains(response, "La cédula es obligatoria.")
+        self.client.post(url, self._datos(cedula="7654321"))
+        soldado.refresh_from_db()
+        self.assertEqual(soldado.cedula, "7654321")
+
+    def test_editar_conserva_su_propia_cedula(self):
+        soldado = Soldado.objects.create(
+            apellidos_nombres="Ríos Carlos", cedula="1234567",
+            compania=self.compania, peloton=self.peloton,
+        )
+        response = self.client.post(
+            reverse("inventory:soldado_editar", args=[soldado.pk]),
+            self._datos(apellidos_nombres="Ríos Pérez Carlos"),
+        )
+        self.assertRedirects(response, reverse("inventory:soldado_list"))
+
+    def test_buscar_por_cedula_en_soldados_y_al_entregar(self):
+        Soldado.objects.create(
+            apellidos_nombres="Ríos Carlos", cedula="1234567",
+            compania=self.compania, peloton=self.peloton,
+        )
+        Soldado.objects.create(
+            apellidos_nombres="Pérez Juan", cedula="9999999",
+            compania=self.compania, peloton=self.peloton,
+        )
+        arma = Armamento.objects.create(
+            numero_serie="S-001", compania=self.compania, deposito=self.deposito,
+            tipo=TipoArmamento.objects.create(
+                nombre="FUSIL", control=TipoArmamento.Control.SERIE
+            ),
+        )
+        existencia = Existencia.objects.create(
+            tipo=TipoArmamento.objects.create(
+                nombre="MUNICION 5.56", control=TipoArmamento.Control.CANTIDAD
+            ),
+            compania=self.compania, deposito=self.deposito, cantidad=100,
+        )
+        for url in (
+            reverse("inventory:soldado_list"),
+            reverse("inventory:armamento_entregar", args=[arma.pk]),
+            reverse("inventory:existencia_entregar", args=[existencia.pk]),
+        ):
+            response = self.client.get(url, {"q": "1.234"})
+            self.assertContains(response, "Ríos Carlos", msg_prefix=url)
+            self.assertNotContains(response, "Pérez Juan", msg_prefix=url)
+
+    def test_ficha_muestra_cedula(self):
+        con = Soldado.objects.create(
+            apellidos_nombres="Ríos Carlos", cedula="1234567",
+            compania=self.compania, peloton=self.peloton,
+        )
+        sin = Soldado.objects.create(
+            apellidos_nombres="Pérez Juan", compania=self.compania, peloton=self.peloton
+        )
+        self.assertContains(
+            self.client.get(reverse("inventory:soldado_detalle", args=[con.pk])), "C.C. 1234567"
+        )
+        self.assertContains(
+            self.client.get(reverse("inventory:soldado_detalle", args=[sin.pk])), "Sin cédula"
+        )
 
 
 class ExistenciaPrestamoTests(TestCase):
