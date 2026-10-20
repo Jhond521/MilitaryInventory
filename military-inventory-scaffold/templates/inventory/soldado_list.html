@@ -36,10 +36,10 @@
   {% for soldado in soldados %}
   <div class="siga-pick-item">
     <span class="siga-pick-item__avatar">{{ soldado.apellidos_nombres|slice:":2"|upper }}</span>
-    <span style="flex-grow:1;">
-      <div class="siga-pick-item__name">{{ soldado.apellidos_nombres }}</div>
-      <div class="siga-pick-item__meta">{{ soldado.compania.nombre }} · Pelotón {{ soldado.peloton.nombre }}</div>
-    </span>
+    <a class="siga-pick-item__link" href="{% url 'inventory:soldado_detalle' soldado.pk %}">
+      <span class="siga-pick-item__name">{{ soldado.nombre_con_grado }}</span>
+      <span class="siga-pick-item__meta">{{ soldado.compania.nombre }} · Pelotón {{ soldado.peloton.nombre }}</span>
+    </a>
     {% if user.is_admin_role %}
     <a href="{% url 'inventory:soldado_editar' soldado.pk %}">Editar</a>
     <a href="{% url 'inventory:soldado_borrar' soldado.pk %}" style="margin-left:8px; color:var(--siga-red-dark);">Borrar</a>

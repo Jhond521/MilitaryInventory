@@ -92,7 +92,7 @@
           {% endif %}
         </td>
         <td class="siga-table__muted">
-          {% if arma.ubicacion == "EN_MANO" %}{{ arma.soldado.apellidos_nombres }}{% else %}{{ arma.deposito.nombre }}{% endif %}
+          {% if arma.ubicacion == "EN_MANO" %}{{ arma.soldado.nombre_con_grado }}{% else %}{{ arma.deposito.nombre }}{% endif %}
         </td>
       </tr>
       {% empty %}
@@ -120,7 +120,7 @@
         <span>Pelotón: <strong>{{ arma.peloton_actual.nombre|default:"—" }}</strong></span>
         <span>Responsable:
           <strong>
-            {% if arma.ubicacion == "EN_MANO" %}{{ arma.soldado.apellidos_nombres }}{% else %}{{ arma.deposito.nombre }}{% endif %}
+            {% if arma.ubicacion == "EN_MANO" %}{{ arma.soldado.nombre_con_grado }}{% else %}{{ arma.deposito.nombre }}{% endif %}
           </strong>
         </span>
       </div>

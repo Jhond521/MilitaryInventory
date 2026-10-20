@@ -293,6 +293,26 @@ El corazón del sistema.
     reales). Cargado en Railway **dev** únicamente; producción sigue sin datos de
     inventario reales.
 
+## Actualizaciones v1.4 (feedback de David, issue #11)
+
+- H-24 — Entrega y devolución de existencias (munición) a un soldado, espejo de H-09 (RF-18)
+  - **Estado**: Pendiente. Requiere decisión de modelado previa (candidato: generalizar
+    `Existencia` con `ubicacion` EN_MANO/DEPOSITO y `soldado` opcional, permitiendo varias
+    filas "en mano" por tipo/lote — documentar como ADR-0005 antes de codificar). Ver issue
+    de GitHub dedicado para el detalle completo.
+- H-25 — Grado del soldado: campo fijo opcional con selector agrupado, mostrado como prefijo del nombre (RF-19)
+  - **Estado**: Pendiente. Ver issue de GitHub dedicado para el detalle completo (valores
+    exactos por categoría, alcance de la visualización).
+
+## Actualizaciones v1.5 (feedback de David, issue #15)
+
+- H-26 — Ficha del soldado: armas y munición en mano, más su historial de entregas/devoluciones (RF-20) ✅
+  - **Estado**: Hecho (issue #17). Ruta `inventory:soldado_detalle` (`/soldados/<pk>/`), a la
+    que se llega desde cada fila de Soldados. Muestra primero el resumen "A cargo actualmente"
+    por tipo, luego el detalle de armas y existencias en mano (con Devolver, que vuelve a la
+    ficha vía `?next=`) y los últimos 50 movimientos. El bug relacionado (munición ausente en
+    Movimientos, #16) no lleva historia, por convención.
+
 ## Fase 2 — Siguiente
 
 - H-20 — Módulo de importación de Excel autoservicio (que David suba y cargue) (RF-13)

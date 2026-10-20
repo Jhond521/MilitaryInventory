@@ -41,7 +41,7 @@
   <div class="siga-summary">
     <div class="siga-summary__row">
       <span class="label">Nombre</span>
-      <span class="value">{{ soldado.apellidos_nombres }}</span>
+      <span class="value">{{ soldado.nombre_con_grado }}</span>
     </div>
     <div class="siga-summary__row">
       <span class="label">Pelotón</span>
@@ -74,7 +74,7 @@
   <a class="siga-pick-item" href="?soldado={{ candidato.pk }}{% if q %}&q={{ q|urlencode }}{% endif %}">
     <span class="siga-pick-item__avatar">{{ candidato.apellidos_nombres|slice:":2"|upper }}</span>
     <span>
-      <div class="siga-pick-item__name">{{ candidato.apellidos_nombres }}</div>
+      <div class="siga-pick-item__name">{{ candidato.nombre_con_grado }}</div>
       <div class="siga-pick-item__meta">Pelotón {{ candidato.peloton.nombre }}</div>
     </span>
   </a>

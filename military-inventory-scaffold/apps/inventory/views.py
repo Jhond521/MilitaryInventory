@@ -3,9 +3,12 @@ todas las pantallas de inventario/entrega/devolución/movimientos/soldados/
 munición/préstamos/datos maestros (T-06, H-17) — el admin de Django ya no
 existe (ADR-0004); esto es la única UI de la aplicación.
 """
+from operator import attrgetter
+from urllib.parse import urlencode
+
 from django.contrib import messages
 from django.core.exceptions import ValidationError
-from django.db.models import ProtectedError, Q
+from django.db.models import ProtectedError, Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -27,7 +30,9 @@ from .models import (
     Compania,
     Deposito,
     Existencia,
+    ExistenciaAsignada,
     Movimiento,
+    MovimientoExistencia,
     Peloton,
     Prestamo,
     Soldado,
@@ -107,6 +112,22 @@ def _borrar_protegido(request, obj, redirect_url_name):
     else:
         messages.success(request, f'"{obj}" borrado.')
     return redirect(redirect_url_name)
+
+
+def _next_seguro(request):
+    """`next` (GET o POST) solo si apunta a este mismo sitio; si no, "".
+    Lo usan las pantallas de devolver para volver a la ficha del soldado
+    cuando se llegó desde ella (issue #17)."""
+    next_url = request.POST.get("next") or request.GET.get("next") or ""
+    if next_url and url_has_allowed_host_and_scheme(
+        next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+    ):
+        return next_url
+    return ""
+
+
+def _con_next(url, next_url):
+    return f"{url}?{urlencode({'next': next_url})}" if next_url else url
 
 
 def _companias_scope(request):
@@ -214,7 +235,11 @@ def _historial_arma(armamento):
     confiable (no se registra un evento al crear/cargar el arma), así que
     se muestra sin esa cláusula; en su lugar se agrega al final una fila
     sintética de "Alta en inventario" con `Armamento.creado`, sin usuario
-    inventado (la carga inicial es un script sin usuario asociado, RF-13)."""
+    inventado (la carga inicial es un script sin usuario asociado, RF-13).
+
+    `detalle` (destino/origen) y `observacion` (texto libre capturado en el
+    formulario) son campos separados — antes se mezclaban para BAJA y se
+    perdían por completo para ENTREGA/DEVOLUCION (issue #14)."""
     movimientos = armamento.movimientos.select_related("soldado", "deposito", "usuario").order_by(
         "fecha"
     )
@@ -223,7 +248,7 @@ def _historial_arma(armamento):
     for mov in movimientos:
         if mov.tipo == Movimiento.Tipo.ENTREGA:
             titulo = "Entrega a soldado"
-            destino_nombre = mov.soldado.apellidos_nombres if mov.soldado else "—"
+            destino_nombre = mov.soldado.nombre_con_grado if mov.soldado else "—"
             detalle = f"A {destino_nombre}"
         elif mov.tipo == Movimiento.Tipo.DEVOLUCION:
             titulo = "Devolución a depósito"
@@ -232,11 +257,17 @@ def _historial_arma(armamento):
         else:
             titulo = "Baja"
             destino_nombre = None
-            detalle = mov.observacion or "Dada de baja"
+            detalle = "Dada de baja"
         if origen:
             detalle = f"{detalle} · desde {origen}"
         historial.append(
-            {"titulo": titulo, "detalle": detalle, "fecha": mov.fecha, "usuario": mov.usuario}
+            {
+                "titulo": titulo,
+                "detalle": detalle,
+                "observacion": mov.observacion,
+                "fecha": mov.fecha,
+                "usuario": mov.usuario,
+            }
         )
         origen = destino_nombre
     historial.reverse()
@@ -244,6 +275,7 @@ def _historial_arma(armamento):
         {
             "titulo": "Alta en inventario",
             "detalle": "Carga inicial",
+            "observacion": "",
             "fecha": armamento.creado,
             "usuario": None,
         }
@@ -356,6 +388,7 @@ def armamento_devolver(request, pk):
         ubicacion=Armamento.Ubicacion.EN_MANO,
     )
 
+    next_url = _next_seguro(request)
     if request.method == "POST":
         deposito = get_object_or_404(Deposito, pk=request.POST.get("deposito"))
         observacion = request.POST.get("observacion", "")
@@ -363,36 +396,124 @@ def armamento_devolver(request, pk):
             arma.devolver(deposito=deposito, usuario=request.user, observacion=observacion)
         except ValidationError as exc:
             messages.error(request, " ".join(exc.messages))
-            return redirect("inventory:armamento_devolver", pk=arma.pk)
+            return redirect(
+                _con_next(reverse("inventory:armamento_devolver", args=[arma.pk]), next_url)
+            )
         messages.success(request, f"{arma.numero_serie} devuelta a {deposito}.")
-        return redirect("inventory:armamento_list")
+        return redirect(next_url or "inventory:armamento_list")
 
-    context = {"arma": arma, "depositos": Deposito.objects.order_by("nombre")}
+    context = {
+        "arma": arma,
+        "depositos": Deposito.objects.order_by("nombre"),
+        "next": next_url,
+    }
     return render(request, "inventory/armamento_devolver.html", context)
+
+
+MOVIMIENTOS_LIMITE = 200
+CLASE_ARMAMENTO = "ARMAMENTO"
+CLASE_MUNICION = "MUNICION"
+CLASE_PRESTAMO = "PRESTAMO"
+CLASE_CHOICES = [
+    (CLASE_ARMAMENTO, "Armamento"),
+    (CLASE_MUNICION, "Munición"),
+    (CLASE_PRESTAMO, "Préstamos"),
+]
+
+
+def _mezclar_por_fecha(grupos, limite):
+    """Mezcla registros de varios modelos de historial en una sola lista,
+    más reciente primero (issue #16). `grupos` es una lista de
+    `(clase, queryset)`; cada registro queda marcado con `.clase` para que
+    la plantilla sepa qué tarjeta dibujar. Cada queryset se recorta a
+    `limite` antes de mezclar, así ninguno se trae entero a memoria. Un
+    grupo también puede ser una lista ya armada (ficha del soldado, #17)."""
+    registros = []
+    for clase, qs in grupos:
+        if hasattr(qs, "order_by"):
+            qs = qs.order_by("-fecha")[:limite]
+        for registro in qs:
+            registro.clase = clase
+            registros.append(registro)
+    registros.sort(key=attrgetter("fecha"), reverse=True)
+    return registros[:limite]
 
 
 @requiere_autorizado
 def movimiento_list(request):
+    """Historial unificado (RNF-03, issue #16): entregas/devoluciones/bajas
+    de armamento (`Movimiento`), entregas/devoluciones de existencias
+    (`MovimientoExistencia`, RF-18) y préstamos entre compañías
+    (`Prestamo`, RF-15). Son tres modelos separados (ADR-0005); se mezclan
+    aquí, en la vista, sin un modelo común."""
     compania_id, ver_todas = _companias_scope(request)
-    qs = Movimiento.objects.select_related("armamento", "soldado", "deposito", "usuario")
-    if compania_id and not ver_todas:
-        qs = qs.filter(armamento__compania_id=compania_id)
-
     q = request.GET.get("q", "").strip()
-    if q:
-        qs = qs.filter(
-            Q(armamento__numero_serie__icontains=q) | Q(soldado__apellidos_nombres__icontains=q)
-        )
-
     tipo = request.GET.get("tipo", "")
-    if tipo in Movimiento.Tipo.values:
-        qs = qs.filter(tipo=tipo)
+    if tipo not in Movimiento.Tipo.values:
+        tipo = ""
+    clase = request.GET.get("clase", "")
+    if clase not in dict(CLASE_CHOICES):
+        clase = ""
+    filtra_compania = bool(compania_id and not ver_todas)
+
+    grupos = []
+    if clase in ("", CLASE_ARMAMENTO):
+        qs = Movimiento.objects.select_related(
+            "armamento__tipo", "soldado", "deposito", "usuario"
+        )
+        if filtra_compania:
+            qs = qs.filter(armamento__compania_id=compania_id)
+        if q:
+            qs = qs.filter(
+                Q(armamento__numero_serie__icontains=q)
+                | Q(soldado__apellidos_nombres__icontains=q)
+            )
+        if tipo:
+            qs = qs.filter(tipo=tipo)
+        grupos.append((CLASE_ARMAMENTO, qs))
+
+    # Las existencias no tienen baja: con Tipo = Baja no aportan nada.
+    if clase in ("", CLASE_MUNICION) and tipo != Movimiento.Tipo.BAJA:
+        qs = MovimientoExistencia.objects.select_related(
+            "existencia__tipo", "existencia__compania", "soldado", "usuario"
+        )
+        if filtra_compania:
+            qs = qs.filter(existencia__compania_id=compania_id)
+        if q:
+            qs = qs.filter(
+                Q(existencia__tipo__nombre__icontains=q)
+                | Q(existencia__lote__icontains=q)
+                | Q(soldado__apellidos_nombres__icontains=q)
+            )
+        if tipo:
+            qs = qs.filter(tipo=tipo)
+        grupos.append((CLASE_MUNICION, qs))
+
+    # Un préstamo no es entrega/devolución/baja: solo aparece sin filtro de tipo.
+    if clase in ("", CLASE_PRESTAMO) and not tipo:
+        qs = Prestamo.objects.select_related(
+            "tipo", "deposito", "compania_origen", "compania_destino", "usuario"
+        )
+        if filtra_compania:
+            qs = qs.filter(
+                Q(compania_origen_id=compania_id) | Q(compania_destino_id=compania_id)
+            )
+        if q:
+            qs = qs.filter(
+                Q(tipo__nombre__icontains=q)
+                | Q(lote__icontains=q)
+                | Q(compania_origen__nombre__icontains=q)
+                | Q(compania_destino__nombre__icontains=q)
+            )
+        grupos.append((CLASE_PRESTAMO, qs))
 
     context = {
-        "movimientos": qs[:200],
+        "movimientos": _mezclar_por_fecha(grupos, MOVIMIENTOS_LIMITE),
         "q": q,
         "tipo": tipo,
         "tipo_choices": Movimiento.Tipo.choices,
+        "clase": clase,
+        "clase_choices": CLASE_CHOICES,
         "ver_todas": ver_todas,
     }
     return render(request, "inventory/movimiento_list.html", context)
@@ -426,6 +547,108 @@ def soldado_list(request):
         "ver_todas": ver_todas,
     }
     return render(request, "inventory/soldado_list.html", context)
+
+
+FICHA_HISTORIAL_LIMITE = 50
+
+
+def _movimientos_armas_del_soldado(soldado):
+    """Entregas, devoluciones y bajas de armamento que involucran al
+    soldado, más reciente primero (issue #17).
+
+    `Armamento.devolver()` no guarda el soldado en el `Movimiento` (solo el
+    depósito de destino), así que `soldado.movimientos` no trae las
+    devoluciones. Igual que `_historial_arma`, se encadena: una devolución
+    o baja es de este soldado si la entrega anterior de esa arma fue a él."""
+    armas = Movimiento.objects.filter(
+        soldado=soldado, tipo=Movimiento.Tipo.ENTREGA
+    ).values_list("armamento_id", flat=True)
+    movimientos = (
+        Movimiento.objects.filter(armamento_id__in=armas)
+        .select_related("armamento__tipo", "deposito", "usuario")
+        .order_by("armamento_id", "fecha", "pk")
+    )
+    propios = []
+    tenedor = {}
+    for mov in movimientos:
+        if mov.tipo == Movimiento.Tipo.ENTREGA:
+            tenedor[mov.armamento_id] = mov.soldado_id
+            if mov.soldado_id == soldado.pk:
+                propios.append(mov)
+            continue
+        if tenedor.get(mov.armamento_id) == soldado.pk:
+            propios.append(mov)
+        if mov.tipo == Movimiento.Tipo.DEVOLUCION:
+            tenedor[mov.armamento_id] = None
+    propios.sort(key=attrgetter("fecha"), reverse=True)
+    return propios
+
+
+def _resumen_a_cargo(armas, asignadas):
+    """Total por tipo de material de lo que el soldado tiene hoy (issue #17,
+    "tanta munición, tantas granadas, tanto casco"): armas contadas por
+    tipo y existencias sumadas por tipo a través de lotes y depósitos.
+    Armas primero, luego existencias, alfabético dentro de cada grupo."""
+    por_arma = {}
+    for arma in armas:
+        por_arma[arma.tipo.nombre] = por_arma.get(arma.tipo.nombre, 0) + 1
+    por_existencia = {}
+    for asignada in asignadas:
+        nombre = asignada.existencia.tipo.nombre
+        por_existencia[nombre] = por_existencia.get(nombre, 0) + asignada.cantidad
+    return [
+        {"nombre": nombre, "cantidad": cantidad, "clase": CLASE_ARMAMENTO}
+        for nombre, cantidad in sorted(por_arma.items())
+    ] + [
+        {"nombre": nombre, "cantidad": cantidad, "clase": CLASE_MUNICION}
+        for nombre, cantidad in sorted(por_existencia.items())
+    ]
+
+
+@requiere_autorizado
+def soldado_detalle(request, pk):
+    """Ficha del soldado (RF-20, issue #17): lo que tiene a cargo ahora
+    (resumen por tipo + detalle de armas y existencias, con acceso a
+    devolver) y sus últimos movimientos. Visible para ambos roles y para
+    soldados de cualquier compañía (la compañía de trabajo es un filtro,
+    no un permiso — PRD S-2). No mueve material: devolver usa las
+    pantallas existentes y vuelve aquí vía `?next=`."""
+    soldado = get_object_or_404(
+        Soldado.objects.select_related("compania", "peloton"), pk=pk
+    )
+    # `dar_de_baja()` cambia solo `estado` y deja `ubicacion`/`soldado`: un
+    # arma de baja no está "a cargo" aunque siga apuntando al soldado.
+    armas = list(
+        soldado.armamentos.filter(
+            ubicacion=Armamento.Ubicacion.EN_MANO, estado=Armamento.Estado.ACTIVO
+        )
+        .select_related("tipo")
+        .order_by("tipo__nombre", "numero_serie")
+    )
+    asignadas = list(
+        soldado.existencias_asignadas.select_related(
+            "existencia__tipo", "existencia__deposito"
+        ).order_by("existencia__tipo__nombre", "existencia__lote")
+    )
+    historial = _mezclar_por_fecha(
+        [
+            (CLASE_ARMAMENTO, _movimientos_armas_del_soldado(soldado)[:FICHA_HISTORIAL_LIMITE]),
+            (
+                CLASE_MUNICION,
+                soldado.movimientos_existencia.select_related("existencia__tipo", "usuario"),
+            ),
+        ],
+        FICHA_HISTORIAL_LIMITE,
+    )
+    context = {
+        "soldado": soldado,
+        "resumen": _resumen_a_cargo(armas, asignadas),
+        "armas": armas,
+        "asignadas": asignadas,
+        "historial": historial,
+        "ficha_url": reverse("inventory:soldado_detalle", args=[soldado.pk]),
+    }
+    return render(request, "inventory/soldado_detalle.html", context)
 
 
 @requiere_admin
@@ -471,7 +694,11 @@ def soldado_borrar(request, pk):
 @requiere_autorizado
 def existencia_list(request):
     compania_id, ver_todas = _companias_scope(request)
-    qs = Existencia.objects.select_related("tipo", "compania", "deposito")
+    # `en_mano`: cuánto de cada existencia tienen hoy los soldados (RF-18),
+    # para que se vea desde Munición a dónde se fue lo entregado (issue #16).
+    qs = Existencia.objects.select_related("tipo", "compania", "deposito").annotate(
+        en_mano=Sum("asignaciones__cantidad")
+    )
     if compania_id and not ver_todas:
         qs = qs.filter(compania_id=compania_id)
 
@@ -534,6 +761,120 @@ def existencia_borrar(request, pk):
         return _borrar_protegido(request, existencia, "inventory:existencia_list")
     context = {"object": existencia, "cancelar_url": "inventory:existencia_list"}
     return render(request, "inventory/master_confirm_delete.html", context)
+
+
+@requiere_autorizado
+def existencia_entregar(request, pk):
+    """Flujo guiado (Soldado → Confirmar) sobre `Existencia.entregar()`
+    (RF-18) — visualmente simétrico a `armamento_entregar`."""
+    existencia = get_object_or_404(
+        Existencia.objects.select_related("tipo", "compania", "deposito"), pk=pk
+    )
+
+    if request.method == "POST":
+        soldado = get_object_or_404(
+            Soldado, pk=request.POST.get("soldado"), compania_id=existencia.compania_id
+        )
+        try:
+            cantidad = int(request.POST.get("cantidad", ""))
+        except ValueError:
+            cantidad = 0
+        observacion = request.POST.get("observacion", "")
+        try:
+            existencia.entregar(
+                soldado=soldado, cantidad=cantidad, usuario=request.user, observacion=observacion
+            )
+        except ValidationError as exc:
+            messages.error(request, " ".join(exc.messages))
+            return redirect("inventory:existencia_entregar", pk=existencia.pk)
+        messages.success(request, f"{cantidad} de {existencia.tipo.nombre} entregadas a {soldado}.")
+        return redirect("inventory:existencia_list")
+
+    soldado_id = request.GET.get("soldado")
+    if soldado_id:
+        soldado = get_object_or_404(Soldado, pk=soldado_id, compania_id=existencia.compania_id)
+        context = {"existencia": existencia, "soldado": soldado, "paso": "confirmar"}
+        return render(request, "inventory/existencia_entregar.html", context)
+
+    q = request.GET.get("q", "").strip()
+    soldados = Soldado.objects.filter(compania_id=existencia.compania_id).select_related("peloton")
+    if q:
+        soldados = soldados.filter(apellidos_nombres__icontains=q)
+
+    context = {"existencia": existencia, "q": q, "soldados": soldados[:30], "paso": "soldado"}
+    return render(request, "inventory/existencia_entregar.html", context)
+
+
+@requiere_autorizado
+def existencia_devolver(request, pk):
+    """Un solo paso sobre `ExistenciaAsignada.devolver()` (RF-18) —
+    simétrico a `armamento_devolver`; el depósito de retorno es siempre el
+    mismo del que salió, así que no hay nada que elegir."""
+    asignada = get_object_or_404(
+        ExistenciaAsignada.objects.select_related(
+            "existencia__tipo", "existencia__compania", "existencia__deposito",
+            "soldado", "soldado__peloton",
+        ),
+        pk=pk,
+    )
+
+    next_url = _next_seguro(request)
+    if request.method == "POST":
+        try:
+            cantidad = int(request.POST.get("cantidad", ""))
+        except ValueError:
+            cantidad = 0
+        observacion = request.POST.get("observacion", "")
+        try:
+            asignada.devolver(cantidad=cantidad, usuario=request.user, observacion=observacion)
+        except ValidationError as exc:
+            messages.error(request, " ".join(exc.messages))
+            return redirect(
+                _con_next(reverse("inventory:existencia_devolver", args=[asignada.pk]), next_url)
+            )
+        messages.success(
+            request, f"{cantidad} de {asignada.existencia.tipo.nombre} devueltas a depósito."
+        )
+        return redirect(next_url or "inventory:existencia_asignada_list")
+
+    context = {"asignada": asignada, "next": next_url}
+    return render(request, "inventory/existencia_devolver.html", context)
+
+
+@requiere_autorizado
+def existencia_asignada_list(request):
+    """Lo que cada soldado tiene en mano (RF-18) + historial reciente de
+    entregas/devoluciones de existencias (RNF-03).
+
+    `?existencia=<pk>` (enlace "ver quién" de cada tarjeta de Munición,
+    issue #16) restringe todo a esa existencia. En ese caso la compañía de
+    trabajo no se aplica: la existencia ya define su compañía, y el enlace
+    también se usa desde "ver todas"."""
+    compania_id, ver_todas = _companias_scope(request)
+    asignadas = ExistenciaAsignada.objects.select_related(
+        "existencia__tipo", "existencia__compania", "existencia__deposito", "soldado"
+    )
+    movimientos = MovimientoExistencia.objects.select_related(
+        "existencia__tipo", "existencia__compania", "soldado", "usuario"
+    )
+    existencia = None
+    existencia_id = request.GET.get("existencia", "")
+    if existencia_id.isdigit():
+        existencia = get_object_or_404(
+            Existencia.objects.select_related("tipo", "deposito"), pk=existencia_id
+        )
+        asignadas = asignadas.filter(existencia=existencia)
+        movimientos = movimientos.filter(existencia=existencia)
+    elif compania_id and not ver_todas:
+        asignadas = asignadas.filter(existencia__compania_id=compania_id)
+        movimientos = movimientos.filter(existencia__compania_id=compania_id)
+    context = {
+        "asignadas": asignadas,
+        "movimientos": movimientos[:50],
+        "existencia": existencia,
+        "ver_todas": ver_todas,
+    }
+    return render(request, "inventory/existencia_asignada_list.html", context)
 
 
 @requiere_autorizado

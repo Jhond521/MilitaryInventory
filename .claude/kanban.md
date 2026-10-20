@@ -4,7 +4,12 @@ Este archivo lo incluyen los comandos de `/enriquecer-todo`, `/desarrollar`, `/p
 `/desplegar-prod`. Contiene todo lo necesario para leer y mover tarjetas del GitHub Project vía `gh`.
 
 Repo: `Jhond521/MilitaryInventory` · Ramas: `develop` (dev) / `main` (prod).
-Estados del tablero (en orden): **ToDo → Ready → In Progress → In QA → QA Done → Done**.
+Estados del tablero (en orden): **Backlog → Ready → In progress → In review → Done** (Project #3,
+"Military Kanban"). Los comandos se escribieron con otros nombres. Equivalencias: **ToDo = Backlog**,
+**In Progress = In progress**, **In QA = In review**. **QA Done no existe**: lo validado en QA pasa
+directo a Done.
+
+> No hay `jq` en esta máquina. Usa el flag `--jq` de `gh` en lugar de `| jq ...`.
 
 ## 0. Verificar setup (correr una vez; si algo falla, detente y muéstraselo al usuario)
 
@@ -46,8 +51,12 @@ OPT_INQA=xxxx ; OPT_QADONE=xxxx ; OPT_DONE=xxxx
 > Los IDs son estables; si prefieres no descubrirlos cada vez, pégalos aquí abajo una sola vez y los
 > comandos los reutilizan. **Rellenar tras el primer descubrimiento:**
 >
-> - PNUM=`` · PID=`` · STATUS_FIELD_ID=``
-> - OPT_TODO=`` · OPT_READY=`` · OPT_INPROGRESS=`` · OPT_INQA=`` · OPT_QADONE=`` · OPT_DONE=``
+> - PNUM=`3` · PID=`PVT_kwHODFNBpc4BhlXW` · STATUS_FIELD_ID=`PVTSSF_lAHODFNBpc4BhlXWzhggk3U`
+> - OPT_TODO=`f75ad846` (Backlog) · OPT_READY=`61e4505c` · OPT_INPROGRESS=`47fc9ee4`
+>   · OPT_INQA=`df73e18b` (In review) · OPT_QADONE=*(no existe)* · OPT_DONE=`98236657`
+> - Descubiertos el 2026-10-13.
+> - Para agregar un issue nuevo al tablero:
+>   `gh project item-add 3 --owner Jhond521 --url <url-del-issue> --format json --jq .id`
 
 ## 2. Listar tarjetas por estado
 

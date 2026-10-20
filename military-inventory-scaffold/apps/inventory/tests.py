@@ -1,7 +1,7 @@
 import json
 import os
 import tempfile
-from datetime import date
+from datetime import date, timedelta
 
 import openpyxl
 from django.contrib.auth import get_user_model
@@ -9,6 +9,7 @@ from django.core.exceptions import ValidationError
 from django.core.management import CommandError, call_command
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from .models import (
     Armamento,
@@ -16,7 +17,9 @@ from .models import (
     Compania,
     Deposito,
     Existencia,
+    ExistenciaAsignada,
     Movimiento,
+    MovimientoExistencia,
     Peloton,
     Prestamo,
     Soldado,
@@ -160,6 +163,86 @@ class PelotonRulesTests(TestCase):
             soldado.full_clean()
 
 
+class GradoSoldadoTests(TestCase):
+    """`Soldado.grado`/`nombre_con_grado` (RF-19, issue #13) — campo fijo
+    opcional, el prefijo antepuesto en todo el sistema."""
+
+    def setUp(self):
+        self.unidad = Unidad.objects.create(nombre="Batallón de Prueba")
+        self.compania = Compania.objects.create(unidad=self.unidad, nombre="A")
+        self.peloton = Peloton.objects.create(compania=self.compania, nombre="A 1")
+
+    def test_nombre_con_grado_antepone_la_abreviatura(self):
+        soldado = Soldado.objects.create(
+            apellidos_nombres="Bolaños Gómez David",
+            grado=Soldado.Grado.CT,
+            compania=self.compania,
+            peloton=self.peloton,
+        )
+        self.assertEqual(soldado.nombre_con_grado, "CT Bolaños Gómez David")
+        self.assertIn("CT Bolaños Gómez David", str(soldado))
+
+    def test_nombre_con_grado_sin_grado_muestra_solo_el_nombre(self):
+        soldado = Soldado.objects.create(
+            apellidos_nombres="Ríos Carlos", compania=self.compania, peloton=self.peloton
+        )
+        self.assertEqual(soldado.nombre_con_grado, "Ríos Carlos")
+
+    def test_grado_es_opcional(self):
+        soldado = Soldado(
+            apellidos_nombres="Ríos Carlos", compania=self.compania, peloton=self.peloton
+        )
+        soldado.full_clean()  # no debe reventar sin grado
+
+
+@override_settings(STORAGES=_PLAIN_STATIC_STORAGE)
+class SoldadoFormGradoTests(TestCase):
+    """El formulario de alta/edición de soldado guarda el grado elegido
+    (issue #13) — selector agrupado por categoría, solo se guarda la
+    abreviatura."""
+
+    def setUp(self):
+        self.unidad = Unidad.objects.create(nombre="Batallón de Prueba")
+        self.compania = Compania.objects.create(unidad=self.unidad, nombre="A")
+        self.peloton = Peloton.objects.create(compania=self.compania, nombre="A 1")
+        user_model = get_user_model()
+        self.admin_user = user_model.objects.create_user(
+            email="admin@example.com", password="x", role=user_model.Role.ADMIN
+        )
+        self.client.force_login(self.admin_user)
+        session = self.client.session
+        session[SESSION_KEY] = self.compania.pk
+        session.save()
+
+    def test_crear_soldado_con_grado(self):
+        response = self.client.post(
+            reverse("inventory:soldado_crear"),
+            {
+                "apellidos_nombres": "Bolaños Gómez David",
+                "grado": Soldado.Grado.CT,
+                "compania": self.compania.pk,
+                "peloton": self.peloton.pk,
+            },
+        )
+        self.assertRedirects(response, reverse("inventory:soldado_list"))
+        soldado = Soldado.objects.get(apellidos_nombres="Bolaños Gómez David")
+        self.assertEqual(soldado.grado, Soldado.Grado.CT)
+
+    def test_crear_soldado_sin_grado(self):
+        response = self.client.post(
+            reverse("inventory:soldado_crear"),
+            {
+                "apellidos_nombres": "Ríos Carlos",
+                "grado": "",
+                "compania": self.compania.pk,
+                "peloton": self.peloton.pk,
+            },
+        )
+        self.assertRedirects(response, reverse("inventory:soldado_list"))
+        soldado = Soldado.objects.get(apellidos_nombres="Ríos Carlos")
+        self.assertEqual(soldado.grado, "")
+
+
 class ExistenciaPrestamoTests(TestCase):
     def setUp(self):
         self.unidad = Unidad.objects.create(nombre="Batallón de Prueba")
@@ -226,6 +309,111 @@ class ExistenciaPrestamoTests(TestCase):
         )
         with self.assertRaises(ValidationError):
             prestamo.full_clean()
+
+
+class EntregaDevolucionExistenciaTests(TestCase):
+    """`Existencia.entregar()`/`ExistenciaAsignada.devolver()` — espejo de
+    `Armamento.entregar()`/`.devolver()` para material por cantidad
+    (RF-18, issue #12)."""
+
+    def setUp(self):
+        self.unidad = Unidad.objects.create(nombre="Batallón de Prueba")
+        self.comp_a = Compania.objects.create(unidad=self.unidad, nombre="A")
+        self.comp_b = Compania.objects.create(unidad=self.unidad, nombre="B")
+        self.deposito = Deposito.objects.create(nombre="Apiay")
+        self.municion = TipoArmamento.objects.create(
+            nombre="MUNICION CAL 5.56MM", control=TipoArmamento.Control.CANTIDAD
+        )
+        self.peloton_a1 = Peloton.objects.create(compania=self.comp_a, nombre="A 1")
+        self.peloton_b1 = Peloton.objects.create(compania=self.comp_b, nombre="B 1")
+        self.soldado_a = Soldado.objects.create(
+            apellidos_nombres="Pérez Juan", compania=self.comp_a, peloton=self.peloton_a1
+        )
+        self.soldado_b = Soldado.objects.create(
+            apellidos_nombres="Gómez Ana", compania=self.comp_b, peloton=self.peloton_b1
+        )
+        self.usuario = get_user_model().objects.create_user(
+            email="enlace@example.com", password="x"
+        )
+        self.existencia = Existencia.objects.create(
+            tipo=self.municion, compania=self.comp_a, deposito=self.deposito,
+            lote="L-001", cantidad=100,
+        )
+
+    def test_entregar_descuenta_existencia_y_crea_asignada(self):
+        movimiento = self.existencia.entregar(
+            soldado=self.soldado_a, cantidad=30, usuario=self.usuario, observacion="ok"
+        )
+        self.existencia.refresh_from_db()
+        self.assertEqual(self.existencia.cantidad, 70)
+
+        asignada = ExistenciaAsignada.objects.get(
+            existencia=self.existencia, soldado=self.soldado_a
+        )
+        self.assertEqual(asignada.cantidad, 30)
+        self.assertEqual(movimiento.tipo, MovimientoExistencia.Tipo.ENTREGA)
+        self.assertEqual(movimiento.cantidad, 30)
+        self.assertEqual(movimiento.observacion, "ok")
+
+    def test_entregar_acumula_sobre_asignacion_existente(self):
+        self.existencia.entregar(soldado=self.soldado_a, cantidad=30, usuario=self.usuario)
+        self.existencia.refresh_from_db()
+        self.existencia.entregar(soldado=self.soldado_a, cantidad=20, usuario=self.usuario)
+        asignada = ExistenciaAsignada.objects.get(
+            existencia=self.existencia, soldado=self.soldado_a
+        )
+        self.assertEqual(asignada.cantidad, 50)
+        self.assertEqual(
+            ExistenciaAsignada.objects.filter(
+                existencia=self.existencia, soldado=self.soldado_a
+            ).count(),
+            1,
+        )
+
+    def test_entregar_rechaza_soldado_de_otra_compania(self):
+        with self.assertRaises(ValidationError):
+            self.existencia.entregar(soldado=self.soldado_b, cantidad=10, usuario=self.usuario)
+
+    def test_entregar_rechaza_cantidad_insuficiente(self):
+        with self.assertRaises(ValidationError):
+            self.existencia.entregar(soldado=self.soldado_a, cantidad=999, usuario=self.usuario)
+
+    def test_entregar_rechaza_cantidad_no_positiva(self):
+        with self.assertRaises(ValidationError):
+            self.existencia.entregar(soldado=self.soldado_a, cantidad=0, usuario=self.usuario)
+
+    def test_devolver_total_repone_existencia_y_borra_asignada(self):
+        self.existencia.entregar(soldado=self.soldado_a, cantidad=30, usuario=self.usuario)
+        self.existencia.refresh_from_db()
+        asignada = ExistenciaAsignada.objects.get(
+            existencia=self.existencia, soldado=self.soldado_a
+        )
+        movimiento = asignada.devolver(cantidad=30, usuario=self.usuario, observacion="listo")
+        self.existencia.refresh_from_db()
+        self.assertEqual(self.existencia.cantidad, 100)
+        self.assertFalse(ExistenciaAsignada.objects.filter(pk=asignada.pk).exists())
+        self.assertEqual(movimiento.tipo, MovimientoExistencia.Tipo.DEVOLUCION)
+        self.assertEqual(movimiento.observacion, "listo")
+
+    def test_devolver_parcial_deja_saldo_en_mano(self):
+        self.existencia.entregar(soldado=self.soldado_a, cantidad=30, usuario=self.usuario)
+        self.existencia.refresh_from_db()
+        asignada = ExistenciaAsignada.objects.get(
+            existencia=self.existencia, soldado=self.soldado_a
+        )
+        asignada.devolver(cantidad=10, usuario=self.usuario)
+        self.existencia.refresh_from_db()
+        asignada.refresh_from_db()
+        self.assertEqual(self.existencia.cantidad, 80)
+        self.assertEqual(asignada.cantidad, 20)
+
+    def test_devolver_rechaza_cantidad_mayor_a_la_asignada(self):
+        self.existencia.entregar(soldado=self.soldado_a, cantidad=30, usuario=self.usuario)
+        asignada = ExistenciaAsignada.objects.get(
+            existencia=self.existencia, soldado=self.soldado_a
+        )
+        with self.assertRaises(ValidationError):
+            asignada.devolver(cantidad=31, usuario=self.usuario)
 
 
 class PWATests(TestCase):
@@ -435,6 +623,102 @@ class ArmamentoMovimientoViewTests(TestCase):
         self.assertEqual(response.status_code, 403)
         self.arma.refresh_from_db()
         self.assertEqual(self.arma.estado, Armamento.Estado.ACTIVO)
+
+
+@override_settings(STORAGES=_PLAIN_STATIC_STORAGE)
+class ExistenciaMovimientoViewTests(TestCase):
+    """Pantallas propias de entrega/devolución de existencias (RF-18,
+    issue #12) — simétricas a `ArmamentoMovimientoViewTests`."""
+
+    def setUp(self):
+        self.unidad = Unidad.objects.create(nombre="Batallón de Prueba")
+        self.comp_a = Compania.objects.create(unidad=self.unidad, nombre="A")
+        self.deposito = Deposito.objects.create(nombre="Apiay")
+        self.municion = TipoArmamento.objects.create(
+            nombre="MUNICION CAL 5.56MM", control=TipoArmamento.Control.CANTIDAD
+        )
+        self.peloton_a1 = Peloton.objects.create(compania=self.comp_a, nombre="A 1")
+        self.soldado_a = Soldado.objects.create(
+            apellidos_nombres="Pérez Juan", compania=self.comp_a, peloton=self.peloton_a1
+        )
+        self.existencia = Existencia.objects.create(
+            tipo=self.municion, compania=self.comp_a, deposito=self.deposito,
+            lote="L-001", cantidad=100,
+        )
+        user_model = get_user_model()
+        self.admin_user = user_model.objects.create_user(
+            email="admin@example.com", password="x", role=user_model.Role.ADMIN
+        )
+        self.client.force_login(self.admin_user)
+        session = self.client.session
+        session[SESSION_KEY] = self.comp_a.pk
+        session.save()
+
+    def test_entregar_view_confirms_and_creates_movimiento(self):
+        url = reverse("inventory:existencia_entregar", args=[self.existencia.pk])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+
+        response = self.client.post(
+            url, {"soldado": self.soldado_a.pk, "cantidad": 30, "observacion": ""}
+        )
+        self.assertRedirects(response, reverse("inventory:existencia_list"))
+        self.existencia.refresh_from_db()
+        self.assertEqual(self.existencia.cantidad, 70)
+        asignada = ExistenciaAsignada.objects.get(
+            existencia=self.existencia, soldado=self.soldado_a
+        )
+        self.assertEqual(asignada.cantidad, 30)
+        self.assertTrue(
+            MovimientoExistencia.objects.filter(
+                existencia=self.existencia, tipo=MovimientoExistencia.Tipo.ENTREGA
+            ).exists()
+        )
+
+    def test_entregar_view_rechaza_cantidad_excesiva(self):
+        url = reverse("inventory:existencia_entregar", args=[self.existencia.pk])
+        response = self.client.post(
+            url, {"soldado": self.soldado_a.pk, "cantidad": 999, "observacion": ""}
+        )
+        self.assertRedirects(response, url)
+        self.existencia.refresh_from_db()
+        self.assertEqual(self.existencia.cantidad, 100)
+
+    def test_devolver_view_confirms_and_creates_movimiento(self):
+        self.existencia.entregar(soldado=self.soldado_a, cantidad=30, usuario=self.admin_user)
+        self.existencia.refresh_from_db()
+        asignada = ExistenciaAsignada.objects.get(
+            existencia=self.existencia, soldado=self.soldado_a
+        )
+        url = reverse("inventory:existencia_devolver", args=[asignada.pk])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+
+        response = self.client.post(url, {"cantidad": 30, "observacion": ""})
+        self.assertRedirects(response, reverse("inventory:existencia_asignada_list"))
+        self.existencia.refresh_from_db()
+        self.assertEqual(self.existencia.cantidad, 100)
+        self.assertFalse(ExistenciaAsignada.objects.filter(pk=asignada.pk).exists())
+        self.assertTrue(
+            MovimientoExistencia.objects.filter(
+                existencia=self.existencia, tipo=MovimientoExistencia.Tipo.DEVOLUCION
+            ).exists()
+        )
+
+    def test_enlace_puede_entregar_y_devolver(self):
+        """RF-18, igual que RF-10: ambos roles registran movimientos."""
+        enlace = get_user_model().objects.create_user(email="enlace3@example.com", password="x")
+        self.client.force_login(enlace)
+        session = self.client.session
+        session[SESSION_KEY] = self.comp_a.pk
+        session.save()
+
+        url = reverse("inventory:existencia_entregar", args=[self.existencia.pk])
+        response = self.client.post(
+            url, {"soldado": self.soldado_a.pk, "cantidad": 10, "observacion": ""}
+        )
+        self.assertRedirects(response, reverse("inventory:existencia_list"))
+        self.assertEqual(response.status_code, 302)
 
 
 @override_settings(STORAGES=_PLAIN_STATIC_STORAGE)
@@ -876,6 +1160,352 @@ class ArmamentoDetalleTests(TestCase):
         self.assertNotContains(
             response, reverse("inventory:armamento_entregar", args=[self.arma.pk])
         )
+
+    def test_historial_antepone_el_grado_del_soldado(self):
+        """RF-19, issue #13: el prefijo de grado llega hasta el historial
+        del arma, no solo a las pantallas de Soldados."""
+        self.soldado1.grado = Soldado.Grado.CT
+        self.soldado1.save()
+        self.arma.entregar(soldado=self.soldado1, usuario=self.admin_user)
+
+        response = self.client.get(reverse("inventory:armamento_detalle", args=[self.arma.pk]))
+        historial = response.context["historial"]
+        self.assertEqual(historial[0]["detalle"], "A CT Pérez A.")
+
+    def test_historial_muestra_la_observacion_de_entrega_y_devolucion(self):
+        """Issue #14: `observacion` ya no se pierde — queda separada de
+        `detalle` y se renderiza en la página."""
+        self.arma.entregar(
+            soldado=self.soldado1, usuario=self.admin_user, observacion="Arma inspeccionada"
+        )
+        self.arma.devolver(
+            deposito=self.apiay, usuario=self.admin_user, observacion="Culata reemplazada"
+        )
+
+        response = self.client.get(reverse("inventory:armamento_detalle", args=[self.arma.pk]))
+        historial = response.context["historial"]
+        # [0] = devolución (más reciente), [1] = entrega.
+        self.assertEqual(historial[0]["detalle"], "A Apiay · desde Pérez A.")
+        self.assertEqual(historial[0]["observacion"], "Culata reemplazada")
+        self.assertEqual(historial[1]["detalle"], "A Pérez A.")
+        self.assertEqual(historial[1]["observacion"], "Arma inspeccionada")
+        self.assertContains(response, "Culata reemplazada")
+        self.assertContains(response, "Arma inspeccionada")
+
+    def test_historial_muestra_la_observacion_de_baja_separada_del_detalle(self):
+        self.arma.dar_de_baja(
+            motivo=Armamento.MotivoBaja.DANO,
+            fecha=date.today(),
+            usuario=self.admin_user,
+            observacion="Culata partida en entrenamiento",
+        )
+        response = self.client.get(reverse("inventory:armamento_detalle", args=[self.arma.pk]))
+        historial = response.context["historial"]
+        self.assertEqual(historial[0]["detalle"], "Dada de baja")
+        self.assertEqual(historial[0]["observacion"], "Culata partida en entrenamiento")
+        self.assertContains(response, "Culata partida en entrenamiento")
+
+    def test_historial_no_muestra_observacion_vacia(self):
+        self.arma.entregar(soldado=self.soldado1, usuario=self.admin_user, observacion="")
+        response = self.client.get(reverse("inventory:armamento_detalle", args=[self.arma.pk]))
+        self.assertNotContains(response, "Observación:")
+
+
+@override_settings(STORAGES=_PLAIN_STATIC_STORAGE)
+class MovimientoListObservacionTests(TestCase):
+    """Issue #14: la lista de Movimientos también muestra la observación,
+    no solo el historial del arma."""
+
+    def setUp(self):
+        self.unidad = Unidad.objects.create(nombre="Batallón de Prueba")
+        self.compania = Compania.objects.create(unidad=self.unidad, nombre="Alcatraz")
+        self.deposito = Deposito.objects.create(nombre="Apiay")
+        self.peloton = Peloton.objects.create(compania=self.compania, nombre="Alcatraz 1")
+        self.soldado = Soldado.objects.create(
+            apellidos_nombres="Pérez A.", compania=self.compania, peloton=self.peloton
+        )
+        self.tipo = TipoArmamento.objects.create(
+            nombre="ACE-23", control=TipoArmamento.Control.SERIE
+        )
+        self.arma = Armamento.objects.create(
+            numero_serie="MOV-1", tipo=self.tipo, compania=self.compania,
+            ubicacion=Armamento.Ubicacion.DEPOSITO, deposito=self.deposito,
+        )
+        user_model = get_user_model()
+        self.admin_user = user_model.objects.create_user(
+            email="admin@example.com", password="x", role=user_model.Role.ADMIN
+        )
+        self.client.force_login(self.admin_user)
+        session = self.client.session
+        session[SESSION_KEY] = self.compania.pk
+        session.save()
+
+    def test_lista_muestra_observacion_no_vacia(self):
+        self.arma.entregar(
+            soldado=self.soldado, usuario=self.admin_user, observacion="Revisar mira"
+        )
+        response = self.client.get(reverse("inventory:movimiento_list"))
+        self.assertContains(response, "Revisar mira")
+
+    def test_lista_no_muestra_nada_cuando_la_observacion_esta_vacia(self):
+        self.arma.entregar(soldado=self.soldado, usuario=self.admin_user, observacion="")
+        response = self.client.get(reverse("inventory:movimiento_list"))
+        self.assertNotContains(response, "Observación:")
+
+
+@override_settings(STORAGES=_PLAIN_STATIC_STORAGE)
+class MovimientoListUnificadaTests(TestCase):
+    """Issue #16: Movimientos muestra armas, entregas/devoluciones de
+    existencias (RF-18) y préstamos entre compañías (RF-15), mezclados por
+    fecha, y Munición indica cuánto está en mano y de quién."""
+
+    def setUp(self):
+        self.unidad = Unidad.objects.create(nombre="Batallón de Prueba")
+        self.comp_a = Compania.objects.create(unidad=self.unidad, nombre="Alcatraz")
+        self.comp_b = Compania.objects.create(unidad=self.unidad, nombre="Bisonte")
+        self.comp_c = Compania.objects.create(unidad=self.unidad, nombre="Córsega")
+        self.deposito = Deposito.objects.create(nombre="Apiay")
+        peloton_a = Peloton.objects.create(compania=self.comp_a, nombre="Alcatraz 1")
+        peloton_c = Peloton.objects.create(compania=self.comp_c, nombre="Córsega 1")
+        self.soldado_a = Soldado.objects.create(
+            apellidos_nombres="Rada Pedro", compania=self.comp_a, peloton=peloton_a,
+            grado="TE",
+        )
+        self.soldado_c = Soldado.objects.create(
+            apellidos_nombres="Gómez Luis", compania=self.comp_c, peloton=peloton_c
+        )
+        self.fusil = TipoArmamento.objects.create(
+            nombre="FUSIL GALIL", control=TipoArmamento.Control.SERIE
+        )
+        self.granada = TipoArmamento.objects.create(
+            nombre="GRANADA DE MANO", control=TipoArmamento.Control.CANTIDAD
+        )
+        self.cartucho = TipoArmamento.objects.create(
+            nombre="CARTUCHO 5.56", control=TipoArmamento.Control.CANTIDAD
+        )
+        self.arma = Armamento.objects.create(
+            numero_serie="GAL-001", tipo=self.fusil, compania=self.comp_a,
+            ubicacion=Armamento.Ubicacion.DEPOSITO, deposito=self.deposito,
+        )
+        self.granadas_a = Existencia.objects.create(
+            tipo=self.granada, compania=self.comp_a, deposito=self.deposito,
+            lote="LG-7", cantidad=40,
+        )
+        self.granadas_c = Existencia.objects.create(
+            tipo=self.granada, compania=self.comp_c, deposito=self.deposito, cantidad=10
+        )
+        self.cartuchos_a = Existencia.objects.create(
+            tipo=self.cartucho, compania=self.comp_a, deposito=self.deposito,
+            lote="L-1", cantidad=500,
+        )
+        user_model = get_user_model()
+        self.admin_user = user_model.objects.create_user(
+            email="admin@example.com", password="x", role=user_model.Role.ADMIN
+        )
+        self.client.force_login(self.admin_user)
+        session = self.client.session
+        session[SESSION_KEY] = self.comp_a.pk
+        session.save()
+
+    def _prestar(self, cantidad, origen, destino):
+        prestamo = Prestamo(
+            tipo=self.cartucho, deposito=self.deposito, lote="L-1", cantidad=cantidad,
+            compania_origen=origen, compania_destino=destino, usuario=self.admin_user,
+        )
+        prestamo.full_clean()
+        prestamo.save()
+        return prestamo
+
+    def _clases(self, response):
+        return [m.clase for m in response.context["movimientos"]]
+
+    def _escalonar_fechas(self):
+        """`auto_now_add` puede repetir la misma marca de tiempo entre filas
+        creadas seguidas; aquí se fijan fechas distintas en el orden en que
+        cada test crea los registros (armas, luego munición, luego préstamos;
+        dentro de cada modelo, por pk)."""
+        base = timezone.now() - timedelta(days=1)
+        paso = 0
+        for modelo in (Movimiento, MovimientoExistencia, Prestamo):
+            for pk in modelo.objects.order_by("pk").values_list("pk", flat=True):
+                modelo.objects.filter(pk=pk).update(fecha=base + timedelta(minutes=paso))
+                paso += 1
+
+    def _get(self, url):
+        self._escalonar_fechas()
+        return self.client.get(url)
+
+    def test_entrega_de_municion_aparece_con_cantidad_y_soldado(self):
+        self.granadas_a.entregar(
+            soldado=self.soldado_a, cantidad=15, usuario=self.admin_user,
+            observacion="Para el ejercicio",
+        )
+        response = self._get(reverse("inventory:movimiento_list"))
+        self.assertContains(response, "GRANADA DE MANO")
+        self.assertContains(response, "Lote LG-7")
+        self.assertContains(response, "TE Rada Pedro")
+        self.assertContains(response, '<span class="siga-card__serie">15</span>', html=True)
+        self.assertContains(response, "Para el ejercicio")
+
+    def test_devolucion_parcial_de_municion_aparece_con_la_cantidad_devuelta(self):
+        self.granadas_a.entregar(soldado=self.soldado_a, cantidad=15, usuario=self.admin_user)
+        asignada = ExistenciaAsignada.objects.get(existencia=self.granadas_a)
+        asignada.devolver(cantidad=5, usuario=self.admin_user)
+        response = self._get(reverse("inventory:movimiento_list"))
+        movimientos = response.context["movimientos"]
+        self.assertEqual([m.cantidad for m in movimientos], [5, 15])
+        self.assertEqual(
+            [m.tipo for m in movimientos],
+            [MovimientoExistencia.Tipo.DEVOLUCION, MovimientoExistencia.Tipo.ENTREGA],
+        )
+
+    def test_mezcla_las_tres_clases_ordenadas_por_fecha(self):
+        self.arma.entregar(soldado=self.soldado_a, usuario=self.admin_user)
+        self.granadas_a.entregar(soldado=self.soldado_a, cantidad=15, usuario=self.admin_user)
+        self._prestar(200, self.comp_a, self.comp_b)
+        response = self._get(reverse("inventory:movimiento_list"))
+        self.assertEqual(self._clases(response), ["PRESTAMO", "MUNICION", "ARMAMENTO"])
+        fechas = [m.fecha for m in response.context["movimientos"]]
+        self.assertEqual(fechas, sorted(fechas, reverse=True))
+
+    def test_prestamo_muestra_origen_y_destino(self):
+        self._prestar(200, self.comp_a, self.comp_b)
+        response = self._get(reverse("inventory:movimiento_list"))
+        self.assertContains(response, "Préstamo")
+        self.assertContains(response, "<strong>Alcatraz</strong> → <strong>Bisonte</strong>")
+
+    def test_prestamo_aparece_en_la_compania_origen_y_en_la_destino(self):
+        self._prestar(200, self.comp_a, self.comp_b)
+        response = self._get(reverse("inventory:movimiento_list"))
+        self.assertEqual(self._clases(response), ["PRESTAMO"])
+
+        session = self.client.session
+        session[SESSION_KEY] = self.comp_b.pk
+        session.save()
+        response = self._get(reverse("inventory:movimiento_list"))
+        self.assertEqual(self._clases(response), ["PRESTAMO"])
+
+        session = self.client.session
+        session[SESSION_KEY] = self.comp_c.pk
+        session.save()
+        response = self._get(reverse("inventory:movimiento_list"))
+        self.assertEqual(self._clases(response), [])
+
+    def test_compania_de_trabajo_filtra_municion_y_ver_todas_la_incluye(self):
+        self.granadas_c.entregar(soldado=self.soldado_c, cantidad=3, usuario=self.admin_user)
+        response = self._get(reverse("inventory:movimiento_list"))
+        self.assertEqual(self._clases(response), [])
+        response = self._get(reverse("inventory:movimiento_list") + "?todas=1")
+        self.assertEqual(self._clases(response), ["MUNICION"])
+
+    def test_filtro_clase(self):
+        self.arma.entregar(soldado=self.soldado_a, usuario=self.admin_user)
+        self.granadas_a.entregar(soldado=self.soldado_a, cantidad=15, usuario=self.admin_user)
+        self._prestar(200, self.comp_a, self.comp_b)
+        url = reverse("inventory:movimiento_list")
+        self.assertEqual(self._clases(self._get(url + "?clase=MUNICION")), ["MUNICION"])
+        self.assertEqual(
+            self._clases(self._get(url + "?clase=ARMAMENTO")), ["ARMAMENTO"]
+        )
+        self.assertEqual(self._clases(self._get(url + "?clase=PRESTAMO")), ["PRESTAMO"])
+        # Un valor desconocido se ignora (equivale a Todos).
+        self.assertEqual(len(self._clases(self._get(url + "?clase=OTRA"))), 3)
+
+    def test_filtro_tipo_excluye_prestamos_y_baja_excluye_municion(self):
+        self.arma.entregar(soldado=self.soldado_a, usuario=self.admin_user)
+        self.granadas_a.entregar(soldado=self.soldado_a, cantidad=15, usuario=self.admin_user)
+        self._prestar(200, self.comp_a, self.comp_b)
+        url = reverse("inventory:movimiento_list")
+        response = self._get(url + "?tipo=ENTREGA")
+        self.assertEqual(self._clases(response), ["MUNICION", "ARMAMENTO"])
+
+        self.arma.dar_de_baja(
+            motivo=Armamento.MotivoBaja.DANO, fecha=date(2026, 10, 1), usuario=self.admin_user
+        )
+        response = self._get(url + "?tipo=BAJA")
+        self.assertEqual(self._clases(response), ["ARMAMENTO"])
+
+    def test_busqueda_por_soldado_trae_armas_y_municion(self):
+        self.arma.entregar(soldado=self.soldado_a, usuario=self.admin_user)
+        self.granadas_a.entregar(soldado=self.soldado_a, cantidad=15, usuario=self.admin_user)
+        self._prestar(200, self.comp_a, self.comp_b)
+        response = self._get(reverse("inventory:movimiento_list") + "?q=rada")
+        self.assertEqual(self._clases(response), ["MUNICION", "ARMAMENTO"])
+
+    def test_busqueda_por_material_y_por_compania(self):
+        self.arma.entregar(soldado=self.soldado_a, usuario=self.admin_user)
+        self.granadas_a.entregar(soldado=self.soldado_a, cantidad=15, usuario=self.admin_user)
+        self._prestar(200, self.comp_a, self.comp_b)
+        url = reverse("inventory:movimiento_list")
+        self.assertEqual(self._clases(self._get(url + "?q=granada")), ["MUNICION"])
+        self.assertEqual(self._clases(self._get(url + "?q=bisonte")), ["PRESTAMO"])
+
+    def test_limite_se_aplica_sobre_la_lista_combinada(self):
+        from . import views
+
+        self.arma.entregar(soldado=self.soldado_a, usuario=self.admin_user)
+        self.granadas_a.entregar(soldado=self.soldado_a, cantidad=1, usuario=self.admin_user)
+        self._prestar(10, self.comp_a, self.comp_b)
+        limite_original = views.MOVIMIENTOS_LIMITE
+        views.MOVIMIENTOS_LIMITE = 2
+        try:
+            response = self._get(reverse("inventory:movimiento_list"))
+        finally:
+            views.MOVIMIENTOS_LIMITE = limite_original
+        self.assertEqual(self._clases(response), ["PRESTAMO", "MUNICION"])
+
+    def test_enlace_ve_la_lista_unificada(self):
+        enlace = get_user_model().objects.create_user(email="enlace@example.com", password="x")
+        self.client.force_login(enlace)
+        session = self.client.session
+        session[SESSION_KEY] = self.comp_a.pk
+        session.save()
+        self.granadas_a.entregar(soldado=self.soldado_a, cantidad=15, usuario=self.admin_user)
+        response = self._get(reverse("inventory:movimiento_list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self._clases(response), ["MUNICION"])
+
+    def test_municion_muestra_cuanto_esta_en_mano_y_enlaza_a_quien(self):
+        self.granadas_a.entregar(soldado=self.soldado_a, cantidad=15, usuario=self.admin_user)
+        response = self.client.get(reverse("inventory:existencia_list"))
+        self.assertContains(response, "En mano: <strong>15</strong>", html=True)
+        self.assertContains(
+            response,
+            reverse("inventory:existencia_asignada_list") + f"?existencia={self.granadas_a.pk}",
+        )
+        # Sin entregas no se muestra "En mano" (los cartuchos siguen todos en depósito).
+        existencias = {e.pk: e for e in response.context["existencias"]}
+        self.assertIsNone(existencias[self.cartuchos_a.pk].en_mano)
+        self.assertContains(response, "En mano:", count=1)
+
+    def test_municion_tiene_acceso_visible_a_municion_asignada(self):
+        response = self.client.get(reverse("inventory:existencia_list"))
+        self.assertContains(response, 'class="siga-quicklinks"')
+        self.assertContains(response, ">Munición asignada</a>")
+
+    def test_asignadas_filtradas_por_existencia(self):
+        self.granadas_a.entregar(soldado=self.soldado_a, cantidad=15, usuario=self.admin_user)
+        self.cartuchos_a.entregar(soldado=self.soldado_a, cantidad=60, usuario=self.admin_user)
+        url = reverse("inventory:existencia_asignada_list")
+        response = self.client.get(url + f"?existencia={self.granadas_a.pk}")
+        self.assertEqual(
+            [a.existencia_id for a in response.context["asignadas"]], [self.granadas_a.pk]
+        )
+        self.assertEqual(
+            [m.existencia_id for m in response.context["movimientos"]], [self.granadas_a.pk]
+        )
+
+    def test_asignadas_filtradas_por_existencia_de_otra_compania(self):
+        """El enlace "ver quién" también se usa desde "ver todas": la
+        existencia manda, no la compañía de trabajo."""
+        self.granadas_c.entregar(soldado=self.soldado_c, cantidad=3, usuario=self.admin_user)
+        url = reverse("inventory:existencia_asignada_list")
+        response = self.client.get(url + f"?existencia={self.granadas_c.pk}")
+        self.assertEqual(len(response.context["asignadas"]), 1)
+
+    def test_asignadas_existencia_inexistente_da_404(self):
+        url = reverse("inventory:existencia_asignada_list")
+        self.assertEqual(self.client.get(url + "?existencia=99999").status_code, 404)
 
 
 @override_settings(STORAGES=_PLAIN_STATIC_STORAGE)
@@ -1582,3 +2212,264 @@ class SoldadoExistenciaBorrarTests(TestCase):
             reverse("inventory:existencia_borrar", args=[existencia.pk])
         )
         self.assertEqual(response.status_code, 403)
+
+
+@override_settings(STORAGES=_PLAIN_STATIC_STORAGE)
+class SoldadoFichaTests(TestCase):
+    """Issue #17 (RF-20): ficha del soldado con lo que tiene a cargo
+    (resumen por tipo + detalle), sus últimos movimientos y acceso a
+    devolver, volviendo a la ficha."""
+
+    def setUp(self):
+        self.unidad = Unidad.objects.create(nombre="Batallón de Prueba")
+        self.comp_a = Compania.objects.create(unidad=self.unidad, nombre="ASPC")
+        self.comp_b = Compania.objects.create(unidad=self.unidad, nombre="Alcatraz")
+        self.deposito = Deposito.objects.create(nombre="Apiay")
+        self.peloton_a = Peloton.objects.create(compania=self.comp_a, nombre="ASPC 1")
+        self.peloton_b = Peloton.objects.create(compania=self.comp_b, nombre="Alcatraz 1")
+        self.soldado = Soldado.objects.create(
+            apellidos_nombres="Bolaños Gómez David", compania=self.comp_a,
+            peloton=self.peloton_a, grado="CT",
+        )
+        self.otro = Soldado.objects.create(
+            apellidos_nombres="Pérez Juan", compania=self.comp_a, peloton=self.peloton_a
+        )
+        self.de_otra_compania = Soldado.objects.create(
+            apellidos_nombres="Rada Pedro", compania=self.comp_b, peloton=self.peloton_b,
+            grado="TE",
+        )
+        self.fusil = TipoArmamento.objects.create(
+            nombre="FUSIL GALIL", control=TipoArmamento.Control.SERIE
+        )
+        self.cartucho = TipoArmamento.objects.create(
+            nombre="CARTUCHO 5.56", control=TipoArmamento.Control.CANTIDAD
+        )
+        self.casco = TipoArmamento.objects.create(
+            nombre="CASCO", control=TipoArmamento.Control.CANTIDAD
+        )
+        self.arma = self._arma("GAL-001")
+        self.cartuchos_l1 = Existencia.objects.create(
+            tipo=self.cartucho, compania=self.comp_a, deposito=self.deposito,
+            lote="L1", cantidad=500,
+        )
+        self.cartuchos_l2 = Existencia.objects.create(
+            tipo=self.cartucho, compania=self.comp_a, deposito=self.deposito,
+            lote="L2", cantidad=500,
+        )
+        self.cascos = Existencia.objects.create(
+            tipo=self.casco, compania=self.comp_a, deposito=self.deposito, cantidad=20
+        )
+        user_model = get_user_model()
+        self.admin_user = user_model.objects.create_user(
+            email="admin@example.com", password="x", role=user_model.Role.ADMIN
+        )
+        self.enlace = user_model.objects.create_user(email="enlace@example.com", password="x")
+        self._login(self.admin_user)
+
+    def _login(self, user):
+        self.client.force_login(user)
+        session = self.client.session
+        session[SESSION_KEY] = self.comp_a.pk
+        session.save()
+
+    def _arma(self, serie):
+        return Armamento.objects.create(
+            numero_serie=serie, tipo=self.fusil, compania=self.comp_a,
+            ubicacion=Armamento.Ubicacion.DEPOSITO, deposito=self.deposito,
+        )
+
+    def _url(self, soldado=None):
+        return reverse("inventory:soldado_detalle", args=[(soldado or self.soldado).pk])
+
+    def _escalonar_fechas(self):
+        """Fechas distintas en orden de creación (armas por pk, luego
+        munición por pk): `auto_now_add` puede repetirse entre filas."""
+        base = timezone.now() - timedelta(days=1)
+        paso = 0
+        for modelo in (Movimiento, MovimientoExistencia):
+            for pk in modelo.objects.order_by("pk").values_list("pk", flat=True):
+                modelo.objects.filter(pk=pk).update(fecha=base + timedelta(minutes=paso))
+                paso += 1
+
+    def test_lista_de_soldados_enlaza_a_la_ficha(self):
+        response = self.client.get(reverse("inventory:soldado_list"))
+        self.assertContains(response, f'href="{self._url()}"')
+
+    def test_ficha_muestra_encabezado(self):
+        response = self.client.get(self._url())
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "CT Bolaños Gómez David")
+        self.assertContains(response, "Compañía ASPC · Pelotón ASPC 1")
+
+    def test_resumen_suma_por_tipo_entre_lotes_y_cuenta_armas(self):
+        self.arma.entregar(soldado=self.soldado, usuario=self.admin_user)
+        self.cartuchos_l1.entregar(soldado=self.soldado, cantidad=80, usuario=self.admin_user)
+        self.cartuchos_l2.entregar(soldado=self.soldado, cantidad=40, usuario=self.admin_user)
+        self.cascos.entregar(soldado=self.soldado, cantidad=1, usuario=self.admin_user)
+        response = self.client.get(self._url())
+        resumen = [(i["nombre"], i["cantidad"]) for i in response.context["resumen"]]
+        self.assertEqual(
+            resumen, [("FUSIL GALIL", 1), ("CARTUCHO 5.56", 120), ("CASCO", 1)]
+        )
+        # El detalle sí conserva una fila por lote.
+        self.assertEqual(len(response.context["asignadas"]), 3)
+        self.assertContains(response, "A cargo actualmente")
+
+    def test_resumen_aparece_antes_que_el_detalle_y_el_historial(self):
+        self.cascos.entregar(soldado=self.soldado, cantidad=1, usuario=self.admin_user)
+        html = self.client.get(self._url()).content.decode()
+        self.assertLess(html.index("A cargo actualmente"), html.index("Armamento en mano"))
+        self.assertLess(html.index("Armamento en mano"), html.index("Últimos movimientos"))
+
+    def test_soldado_sin_nada_muestra_estados_vacios(self):
+        response = self.client.get(self._url())
+        self.assertContains(response, "No tiene material a cargo.")
+        self.assertContains(response, "No tiene armamento a cargo.")
+        self.assertContains(response, "No tiene munición a cargo.")
+        self.assertContains(response, "Sin movimientos todavía.")
+
+    def test_solo_muestra_lo_del_soldado(self):
+        otra_arma = self._arma("GAL-002")
+        otra_arma.entregar(soldado=self.otro, usuario=self.admin_user)
+        self.cascos.entregar(soldado=self.otro, cantidad=2, usuario=self.admin_user)
+        response = self.client.get(self._url())
+        self.assertEqual(response.context["resumen"], [])
+        self.assertEqual(response.context["historial"], [])
+
+    def test_devolucion_parcial_actualiza_cantidad_e_historial(self):
+        self.cascos.entregar(soldado=self.soldado, cantidad=15, usuario=self.admin_user)
+        asignada = ExistenciaAsignada.objects.get(existencia=self.cascos)
+        asignada.devolver(cantidad=5, usuario=self.admin_user, observacion="Sobraban")
+        self._escalonar_fechas()
+        response = self.client.get(self._url())
+        self.assertEqual(response.context["resumen"][0]["cantidad"], 10)
+        historial = response.context["historial"]
+        self.assertEqual([(m.tipo, m.cantidad) for m in historial], [
+            (MovimientoExistencia.Tipo.DEVOLUCION, 5),
+            (MovimientoExistencia.Tipo.ENTREGA, 15),
+        ])
+        self.assertContains(response, "Observación: Sobraban")
+        self.assertContains(response, "por admin@example.com")
+
+    def test_historial_incluye_devolucion_de_arma_aunque_no_guarde_soldado(self):
+        """`Armamento.devolver()` deja `soldado=None` en el Movimiento; la
+        ficha la atribuye al soldado que tenía el arma."""
+        self.arma.entregar(soldado=self.soldado, usuario=self.admin_user)
+        self.arma.devolver(deposito=self.deposito, usuario=self.admin_user)
+        # Después se entrega a otro y la devuelve: eso no es del soldado.
+        self.arma.entregar(soldado=self.otro, usuario=self.admin_user)
+        self.arma.devolver(deposito=self.deposito, usuario=self.admin_user)
+        self._escalonar_fechas()
+        response = self.client.get(self._url())
+        self.assertEqual(
+            [m.tipo for m in response.context["historial"]],
+            [Movimiento.Tipo.DEVOLUCION, Movimiento.Tipo.ENTREGA],
+        )
+        self.assertEqual(response.context["armas"], [])
+        self.assertContains(response, "Devolución de armamento")
+        self.assertContains(response, "· a Apiay")
+
+    def test_arma_dada_de_baja_en_mano_no_esta_a_cargo_pero_si_en_historial(self):
+        self.arma.entregar(soldado=self.soldado, usuario=self.admin_user)
+        self.arma.dar_de_baja(
+            motivo=Armamento.MotivoBaja.PERDIDA, fecha=date(2026, 10, 1),
+            usuario=self.admin_user,
+        )
+        self._escalonar_fechas()
+        response = self.client.get(self._url())
+        self.assertEqual(response.context["armas"], [])
+        self.assertEqual(response.context["resumen"], [])
+        self.assertEqual(
+            [m.tipo for m in response.context["historial"]],
+            [Movimiento.Tipo.BAJA, Movimiento.Tipo.ENTREGA],
+        )
+        self.assertContains(response, "Baja de armamento")
+
+    def test_historial_limitado_a_50(self):
+        for _ in range(30):
+            self.cartuchos_l1.entregar(soldado=self.soldado, cantidad=1, usuario=self.admin_user)
+        for _ in range(13):
+            self.arma.entregar(soldado=self.soldado, usuario=self.admin_user)
+            self.arma.devolver(deposito=self.deposito, usuario=self.admin_user)
+        response = self.client.get(self._url())
+        self.assertEqual(len(response.context["historial"]), 50)
+
+    def test_devolver_arma_desde_la_ficha_vuelve_a_la_ficha(self):
+        self.arma.entregar(soldado=self.soldado, usuario=self.admin_user)
+        response = self.client.get(self._url())
+        devolver = reverse("inventory:armamento_devolver", args=[self.arma.pk])
+        self.assertContains(response, f"{devolver}?next=")
+        response = self.client.get(devolver, {"next": self._url()})
+        self.assertContains(response, f'name="next" value="{self._url()}"')
+        response = self.client.post(
+            devolver, {"deposito": self.deposito.pk, "observacion": "", "next": self._url()}
+        )
+        self.assertRedirects(response, self._url())
+
+    def test_devolver_municion_desde_la_ficha_vuelve_a_la_ficha(self):
+        self.cascos.entregar(soldado=self.soldado, cantidad=3, usuario=self.admin_user)
+        asignada = ExistenciaAsignada.objects.get(existencia=self.cascos)
+        devolver = reverse("inventory:existencia_devolver", args=[asignada.pk])
+        response = self.client.post(
+            devolver, {"cantidad": 1, "observacion": "", "next": self._url()}
+        )
+        self.assertRedirects(response, self._url())
+
+    def test_devolver_con_error_conserva_next(self):
+        self.cascos.entregar(soldado=self.soldado, cantidad=3, usuario=self.admin_user)
+        asignada = ExistenciaAsignada.objects.get(existencia=self.cascos)
+        devolver = reverse("inventory:existencia_devolver", args=[asignada.pk])
+        response = self.client.post(
+            devolver, {"cantidad": 99, "observacion": "", "next": self._url()}
+        )
+        self.assertRedirects(
+            response, f"{devolver}?next={self._url().replace('/', '%2F')}",
+            fetch_redirect_response=False,
+        )
+
+    def test_devolver_sin_next_mantiene_el_redirect_de_siempre(self):
+        self.arma.entregar(soldado=self.soldado, usuario=self.admin_user)
+        devolver = reverse("inventory:armamento_devolver", args=[self.arma.pk])
+        response = self.client.post(devolver, {"deposito": self.deposito.pk, "observacion": ""})
+        self.assertRedirects(response, reverse("inventory:armamento_list"))
+
+    def test_devolver_ignora_next_externo(self):
+        self.arma.entregar(soldado=self.soldado, usuario=self.admin_user)
+        devolver = reverse("inventory:armamento_devolver", args=[self.arma.pk])
+        response = self.client.post(
+            devolver,
+            {"deposito": self.deposito.pk, "observacion": "", "next": "https://evil.example/"},
+        )
+        self.assertRedirects(response, reverse("inventory:armamento_list"))
+
+    def test_enlace_ve_la_ficha_y_devolver_pero_no_editar(self):
+        self.cascos.entregar(soldado=self.soldado, cantidad=3, usuario=self.admin_user)
+        self._login(self.enlace)
+        response = self.client.get(self._url())
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Devolver")
+        self.assertNotContains(
+            response, reverse("inventory:soldado_editar", args=[self.soldado.pk])
+        )
+
+    def test_admin_ve_editar(self):
+        response = self.client.get(self._url())
+        self.assertContains(
+            response, reverse("inventory:soldado_editar", args=[self.soldado.pk])
+        )
+
+    def test_ficha_de_soldado_de_otra_compania_se_puede_abrir(self):
+        response = self.client.get(self._url(self.de_otra_compania))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "TE Rada Pedro")
+
+    def test_soldado_inexistente_da_404(self):
+        response = self.client.get(reverse("inventory:soldado_detalle", args=[99999]))
+        self.assertEqual(response.status_code, 404)
+
+    def test_navegacion_marca_soldados_como_activo(self):
+        response = self.client.get(self._url())
+        soldados = reverse("inventory:soldado_list")
+        self.assertContains(
+            response, f'siga-bottom-nav__item--active" href="{soldados}"'
+        )
