@@ -2665,3 +2665,148 @@ class SoldadoFichaTests(TestCase):
         self.assertContains(
             response, f'siga-bottom-nav__item--active" href="{soldados}"'
         )
+
+
+@override_settings(STORAGES=_PLAIN_STATIC_STORAGE)
+class DevolucionPrestamoTests(TestCase):
+    """Devolver préstamos de munición y resaltar lo prestado/recibido
+    (issue #22, RF-22, ADR-0006)."""
+
+    def setUp(self):
+        self.unidad = Unidad.objects.create(nombre="Batallón de Prueba")
+        self.alcatraz = Compania.objects.create(unidad=self.unidad, nombre="Alcatraz")
+        self.aspc = Compania.objects.create(unidad=self.unidad, nombre="ASPC")
+        self.deposito = Deposito.objects.create(nombre="Caruru")
+        self.municion = TipoArmamento.objects.create(
+            nombre="MUNICION CAL 5.56MM", control=TipoArmamento.Control.CANTIDAD
+        )
+        self.origen = Existencia.objects.create(
+            tipo=self.municion, compania=self.alcatraz, deposito=self.deposito,
+            lote="P068", cantidad=2000,
+        )
+        self.usuario = get_user_model().objects.create_user(
+            email="enlace@example.com", password="x"
+        )
+        self.prestamo = Prestamo(
+            tipo=self.municion, deposito=self.deposito, lote="P068", cantidad=1500,
+            compania_origen=self.alcatraz, compania_destino=self.aspc, usuario=self.usuario,
+        )
+        self.prestamo.full_clean()
+        self.prestamo.save()
+        self.destino = Existencia.objects.get(compania=self.aspc, tipo=self.municion)
+
+    def _entrar(self, compania):
+        self.client.force_login(self.usuario)
+        session = self.client.session
+        session[SESSION_KEY] = compania.pk
+        session.save()
+
+    def _refrescar(self):
+        for obj in (self.prestamo, self.origen, self.destino):
+            obj.refresh_from_db()
+
+    def test_devolucion_parcial_ajusta_existencias_y_saldo(self):
+        devolucion = self.prestamo.devolver(
+            cantidad=500, usuario=self.usuario, observacion="Sobró del polígono"
+        )
+        self._refrescar()
+        self.assertEqual(self.destino.cantidad, 1000)
+        self.assertEqual(self.origen.cantidad, 1000)
+        self.assertEqual(self.prestamo.saldo, 1000)
+        self.assertEqual(devolucion.cantidad, 500)
+        self.assertEqual(devolucion.observacion, "Sobró del polígono")
+
+    def test_devolucion_total_deja_saldo_en_cero(self):
+        self.prestamo.devolver(cantidad=600, usuario=self.usuario)
+        self.prestamo.devolver(cantidad=900, usuario=self.usuario)
+        self._refrescar()
+        self.assertEqual(self.prestamo.saldo, 0)
+        self.assertEqual(self.origen.cantidad, 2000)
+        self.assertEqual(self.destino.cantidad, 0)
+        self.assertEqual(
+            self.prestamo.cantidad_devuelta,
+            sum(d.cantidad for d in self.prestamo.devoluciones.all()),
+        )
+
+    def test_no_devuelve_mas_que_el_saldo(self):
+        self.prestamo.devolver(cantidad=1000, usuario=self.usuario)
+        with self.assertRaisesMessage(ValidationError, "Solo quedan 500 pendientes"):
+            self.prestamo.devolver(cantidad=501, usuario=self.usuario)
+
+    def test_no_devuelve_lo_que_esta_en_mano_de_soldados(self):
+        peloton = Peloton.objects.create(compania=self.aspc, nombre="ASPC 1")
+        soldado = Soldado.objects.create(
+            apellidos_nombres="Ríos Carlos", compania=self.aspc, peloton=peloton
+        )
+        self.destino.entregar(soldado=soldado, cantidad=1200, usuario=self.usuario)
+        with self.assertRaisesMessage(ValidationError, "ASPC solo tiene 300 en depósito"):
+            self.prestamo.devolver(cantidad=400, usuario=self.usuario)
+        self._refrescar()
+        self.assertEqual(self.prestamo.saldo, 1500)
+
+    def test_cantidad_cero_rechazada(self):
+        with self.assertRaises(ValidationError):
+            self.prestamo.devolver(cantidad=0, usuario=self.usuario)
+
+    def test_municion_resalta_recibido_y_prestado(self):
+        self._entrar(self.aspc)
+        response = self.client.get(reverse("inventory:existencia_list"))
+        self.assertContains(response, "siga-card--prestamo")
+        self.assertContains(response, "En préstamo de <strong>Alcatraz</strong>: <strong>1500")
+        self.assertContains(
+            response, reverse("inventory:prestamo_devolver", args=[self.prestamo.pk])
+        )
+
+        self._entrar(self.alcatraz)
+        response = self.client.get(reverse("inventory:existencia_list"))
+        self.assertContains(response, "A <strong>ASPC</strong>: <strong>1500")
+
+    def test_sin_resaltado_cuando_ya_se_devolvio(self):
+        self.prestamo.devolver(cantidad=1500, usuario=self.usuario)
+        self._entrar(self.aspc)
+        response = self.client.get(reverse("inventory:existencia_list") + "?todas=1")
+        self.assertNotContains(response, "siga-card--prestamo")
+
+    def test_vista_devolver_registra_y_vuelve_a_municion(self):
+        self._entrar(self.aspc)
+        url = reverse("inventory:prestamo_devolver", args=[self.prestamo.pk])
+        self.assertContains(self.client.get(url), 'value="1500"')
+        municion = reverse("inventory:existencia_list")
+        response = self.client.post(
+            url, {"cantidad": "500", "observacion": "", "next": municion}
+        )
+        self.assertRedirects(response, municion)
+        self._refrescar()
+        self.assertEqual(self.prestamo.saldo, 1000)
+
+    def test_vista_devolver_muestra_error_si_excede(self):
+        self._entrar(self.aspc)
+        url = reverse("inventory:prestamo_devolver", args=[self.prestamo.pk])
+        response = self.client.post(url, {"cantidad": "9999"}, follow=True)
+        self.assertContains(response, "Solo quedan 1500 pendientes")
+        self._refrescar()
+        self.assertEqual(self.prestamo.saldo, 1500)
+
+    def test_lista_de_prestamos_muestra_estado(self):
+        self._entrar(self.aspc)
+        url = reverse("inventory:prestamo_list")
+        self.assertContains(self.client.get(url), "Pendiente")
+        self.prestamo.devolver(cantidad=500, usuario=self.usuario)
+        self.assertContains(self.client.get(url), "Devuelto parcial")
+        self.prestamo.devolver(cantidad=1000, usuario=self.usuario)
+        response = self.client.get(url)
+        self.assertContains(response, "Devuelto")
+        self.assertNotContains(
+            response, reverse("inventory:prestamo_devolver", args=[self.prestamo.pk])
+        )
+
+    def test_devolucion_aparece_en_movimientos(self):
+        self.prestamo.devolver(cantidad=500, usuario=self.usuario, observacion="Parcial")
+        self._entrar(self.aspc)
+        url = reverse("inventory:movimiento_list")
+        for params in ({}, {"clase": "PRESTAMO"}):
+            response = self.client.get(url, params)
+            self.assertContains(response, "Devolución de préstamo", msg_prefix=str(params))
+            self.assertContains(response, "Parcial", msg_prefix=str(params))
+        response = self.client.get(url, {"clase": "MUNICION"})
+        self.assertNotContains(response, "Devolución de préstamo")

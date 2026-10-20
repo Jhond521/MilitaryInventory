@@ -54,6 +54,20 @@
       <span>Depósito: <strong>{{ movimiento.deposito.nombre }}</strong></span>
       <span>Por: <strong>{{ movimiento.usuario }}</strong></span>
     </div>
+    {% elif movimiento.clase == "DEVOLUCION_PRESTAMO" %}
+    <div class="siga-card__top">
+      <span class="siga-card__serie">{{ movimiento.cantidad }}</span>
+      <span class="siga-badge siga-badge--devolucion">Devolución de préstamo</span>
+    </div>
+    <div class="siga-card__tipo">{{ movimiento.prestamo.tipo.nombre }}{% if movimiento.prestamo.lote %} · Lote {{ movimiento.prestamo.lote }}{% endif %}</div>
+    <div class="siga-card__meta">
+      <span><strong>{{ movimiento.prestamo.compania_destino.nombre }}</strong> → <strong>{{ movimiento.prestamo.compania_origen.nombre }}</strong></span>
+      <span>{{ movimiento.fecha|date:"d/m/Y H:i" }}</span>
+    </div>
+    <div class="siga-card__meta">
+      <span>Depósito: <strong>{{ movimiento.prestamo.deposito.nombre }}</strong></span>
+      <span>Por: <strong>{{ movimiento.usuario }}</strong></span>
+    </div>
     {% else %}
     <div class="siga-card__top">
       {% if movimiento.clase == "MUNICION" %}

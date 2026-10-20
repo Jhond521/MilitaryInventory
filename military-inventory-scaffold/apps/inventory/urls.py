@@ -57,6 +57,7 @@ urlpatterns = [
     ),
     path("prestamos/", views.prestamo_list, name="prestamo_list"),
     path("prestamos/nuevo/", views.prestamo_transferir, name="prestamo_transferir"),
+    path("prestamos/<int:pk>/devolver/", views.prestamo_devolver, name="prestamo_devolver"),
     path("compania/", views.elegir_compania, name="elegir_compania"),
     path("ajustes/", views.ajustes, name="ajustes"),
     *_crud_urls("unidades", "unidad", "Unidad"),

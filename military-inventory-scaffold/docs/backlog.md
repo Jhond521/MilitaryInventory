@@ -319,9 +319,12 @@ El corazón del sistema.
   - **Estado**: Hecho (issue #21). Campo `Soldado.cedula` (nulo para los soldados ya cargados),
     obligatorio en el formulario, búsqueda por nombre o cédula en Soldados y al entregar, y
     visible en la ficha.
-- H-28 — Devolver préstamos de munición (total o parcial) y resaltar lo prestado/recibido en Munición (RF-22)
-  - **Estado**: Pendiente (issue #22). Requiere ADR-0006 (modelo de devolución de préstamo)
-    antes de codificar.
+- H-28 — Devolver préstamos de munición (total o parcial) y resaltar lo prestado/recibido en Munición (RF-22) ✅
+  - **Estado**: Hecho (issue #22, ADR-0006). `Prestamo.devolver()` + modelo
+    `DevolucionPrestamo` y saldo pendiente en `Prestamo.cantidad_devuelta`. Ruta
+    `inventory:prestamo_devolver` (`/prestamos/<pk>/devolver/`). Munición resalta cada
+    existencia con préstamos pendientes ("En préstamo de X" con Devolver / "Prestado a Y"),
+    Préstamos muestra el estado y Movimientos las devoluciones (clase "Préstamos").
 - H-29 — Préstamo temporal de armamento serializado entre compañías, con devolución y resaltado (RF-23)
   - **Estado**: Pendiente (issue #23). Depende de H-28. Reescribe NO-3: la compañía dueña
     nunca cambia. Requiere ADR antes de codificar.

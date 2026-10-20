@@ -38,7 +38,7 @@
 
 <div class="siga-card-list">
   {% for existencia in existencias %}
-  <div class="siga-card">
+  <div class="siga-card{% if existencia.prestamos_recibidos or existencia.prestamos_realizados %} siga-card--prestamo{% endif %}">
     <div class="siga-card__top">
       <span class="siga-card__tipo" style="font-weight:600;">{{ existencia.tipo.nombre }}</span>
       <span class="siga-card__serie">{{ existencia.cantidad }}</span>
@@ -47,6 +47,19 @@
       <span>Depósito: <strong>{{ existencia.deposito.nombre }}</strong></span>
       {% if existencia.lote %}<span>Lote: <strong>{{ existencia.lote }}</strong></span>{% endif %}
     </div>
+    {% for prestamo in existencia.prestamos_recibidos %}
+    <div class="siga-prestamo-nota">
+      <span class="siga-badge siga-badge--prestamo">Recibido</span>
+      <span>En préstamo de <strong>{{ prestamo.compania_origen.nombre }}</strong>: <strong>{{ prestamo.saldo }}</strong></span>
+      <a href="{% url 'inventory:prestamo_devolver' prestamo.pk %}?next={{ request.get_full_path|urlencode }}">Devolver</a>
+    </div>
+    {% endfor %}
+    {% for prestamo in existencia.prestamos_realizados %}
+    <div class="siga-prestamo-nota">
+      <span class="siga-badge siga-badge--prestamo">Prestado</span>
+      <span>A <strong>{{ prestamo.compania_destino.nombre }}</strong>: <strong>{{ prestamo.saldo }}</strong></span>
+    </div>
+    {% endfor %}
     {% if existencia.en_mano %}
     <div class="siga-card__meta">
       <span>En mano: <strong>{{ existencia.en_mano }}</strong></span>

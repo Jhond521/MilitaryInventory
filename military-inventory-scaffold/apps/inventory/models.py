@@ -18,6 +18,8 @@ Conceptos (ver docs/PRD.md):
                 depósito y lote opcional (RF-14).
 - Prestamo    : traslado de cantidad de un tipo CANTIDAD entre compañías,
                 ajustando las existencias de origen y destino (RF-15).
+- DevolucionPrestamo: devolución total o parcial de un `Prestamo` a la
+                compañía de origen; el préstamo lleva el acumulado (RF-22).
 - ExistenciaAsignada: cantidad de una `Existencia` que tiene en mano un
                 soldado — contraparte de la cantidad en depósito (RF-18).
 - Movimiento  : historial de entregas/devoluciones de armamento serializado
@@ -565,12 +567,16 @@ class MovimientoExistencia(models.Model):
 class Prestamo(models.Model):
     """Préstamo de una cantidad de un tipo CANTIDAD (típicamente munición)
     entre compañías — RF-15. Al crearse, ajusta atómicamente las existencias
-    de origen (resta) y destino (suma, creándola si no existía)."""
+    de origen (resta) y destino (suma, creándola si no existía). Se devuelve
+    total o parcialmente con `devolver()` (RF-22, ADR-0006)."""
 
     tipo = models.ForeignKey(TipoArmamento, on_delete=models.PROTECT, related_name="prestamos")
     deposito = models.ForeignKey(Deposito, on_delete=models.PROTECT, related_name="prestamos")
     lote = models.CharField("número de lote", max_length=80, blank=True)
     cantidad = models.PositiveIntegerField("cantidad")
+    # Acumulado de `devoluciones` (ADR-0006). Solo lo escribe `devolver()`,
+    # en la misma transacción que crea la `DevolucionPrestamo`.
+    cantidad_devuelta = models.PositiveIntegerField("cantidad devuelta", default=0)
     compania_origen = models.ForeignKey(
         Compania, on_delete=models.PROTECT, related_name="prestamos_realizados"
     )
@@ -646,3 +652,79 @@ class Prestamo(models.Model):
                     f"{self.compania_origen} no tiene suficiente cantidad "
                     f"({origen.cantidad} disponible, se solicitan {self.cantidad})."
                 )
+
+    @property
+    def saldo(self) -> int:
+        """Cantidad que la compañía destino aún no ha devuelto (RF-22)."""
+        return self.cantidad - self.cantidad_devuelta
+
+    def devolver(self, *, cantidad, usuario, observacion=""):
+        """Devuelve a la compañía de origen una cantidad (total o parcial)
+        del saldo pendiente, por el mismo depósito y lote del préstamo,
+        dejando rastro (RF-22, ADR-0006). Solo se devuelve lo que la
+        compañía destino tiene en depósito: lo entregado a soldados (RF-18)
+        debe volver antes al depósito."""
+        if cantidad <= 0:
+            raise ValidationError("La cantidad a devolver debe ser mayor a cero.")
+        with transaction.atomic():
+            prestamo = Prestamo.objects.select_for_update().get(pk=self.pk)
+            if cantidad > prestamo.saldo:
+                raise ValidationError(
+                    f"Solo quedan {prestamo.saldo} pendientes de devolver en este préstamo."
+                )
+            destino = Existencia.objects.select_for_update().filter(
+                tipo_id=self.tipo_id,
+                compania_id=self.compania_destino_id,
+                deposito_id=self.deposito_id,
+                lote=self.lote,
+            ).first()
+            disponible = destino.cantidad if destino else 0
+            if cantidad > disponible:
+                raise ValidationError(
+                    f"{self.compania_destino} solo tiene {disponible} en depósito para "
+                    f"devolver (se intentan devolver {cantidad})."
+                )
+            destino.cantidad -= cantidad
+            destino.save(update_fields=["cantidad"])
+            origen, _ = Existencia.objects.select_for_update().get_or_create(
+                tipo_id=self.tipo_id,
+                compania_id=self.compania_origen_id,
+                deposito_id=self.deposito_id,
+                lote=self.lote,
+                defaults={"cantidad": 0},
+            )
+            origen.cantidad += cantidad
+            origen.save(update_fields=["cantidad"])
+            prestamo.cantidad_devuelta += cantidad
+            prestamo.save(update_fields=["cantidad_devuelta"])
+            self.cantidad_devuelta = prestamo.cantidad_devuelta
+            return DevolucionPrestamo.objects.create(
+                prestamo=prestamo, cantidad=cantidad, usuario=usuario, observacion=observacion
+            )
+
+
+class DevolucionPrestamo(models.Model):
+    """Devolución (total o parcial) de un `Prestamo` a la compañía de
+    origen — RF-22, ADR-0006. Se crea solo vía `Prestamo.devolver()`."""
+
+    prestamo = models.ForeignKey(
+        Prestamo, on_delete=models.PROTECT, related_name="devoluciones"
+    )
+    cantidad = models.PositiveIntegerField("cantidad")
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="devoluciones_prestamo"
+    )
+    observacion = models.CharField("observación", max_length=300, blank=True)
+    fecha = models.DateTimeField("fecha y hora", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "devolución de préstamo"
+        verbose_name_plural = "devoluciones de préstamo"
+        ordering = ["-fecha"]
+
+    def __str__(self):
+        prestamo = self.prestamo
+        return (
+            f"Devolución {prestamo.tipo} x{self.cantidad}: "
+            f"{prestamo.compania_destino} → {prestamo.compania_origen}"
+        )

@@ -8,7 +8,7 @@ from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.core.exceptions import ValidationError
-from django.db.models import ProtectedError, Q, Sum
+from django.db.models import F, ProtectedError, Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -29,6 +29,7 @@ from .models import (
     Armamento,
     Compania,
     Deposito,
+    DevolucionPrestamo,
     Existencia,
     ExistenciaAsignada,
     Movimiento,
@@ -413,6 +414,8 @@ MOVIMIENTOS_LIMITE = 200
 CLASE_ARMAMENTO = "ARMAMENTO"
 CLASE_MUNICION = "MUNICION"
 CLASE_PRESTAMO = "PRESTAMO"
+# Solo marca de fila para la plantilla: en el filtro va dentro de "Préstamos".
+CLASE_DEVOLUCION_PRESTAMO = "DEVOLUCION_PRESTAMO"
 CLASE_CHOICES = [
     (CLASE_ARMAMENTO, "Armamento"),
     (CLASE_MUNICION, "Munición"),
@@ -444,7 +447,8 @@ def movimiento_list(request):
     de armamento (`Movimiento`), entregas/devoluciones de existencias
     (`MovimientoExistencia`, RF-18) y préstamos entre compañías
     (`Prestamo`, RF-15). Son tres modelos separados (ADR-0005); se mezclan
-    aquí, en la vista, sin un modelo común."""
+    aquí, en la vista, sin un modelo común. Las devoluciones de préstamo
+    (`DevolucionPrestamo`, RF-22) van con la clase "Préstamos"."""
     compania_id, ver_todas = _companias_scope(request)
     q = request.GET.get("q", "").strip()
     tipo = request.GET.get("tipo", "")
@@ -505,6 +509,25 @@ def movimiento_list(request):
                 | Q(compania_destino__nombre__icontains=q)
             )
         grupos.append((CLASE_PRESTAMO, qs))
+
+        # Devoluciones de préstamo (RF-22) — mismos filtros que su préstamo.
+        devoluciones = DevolucionPrestamo.objects.select_related(
+            "prestamo__tipo", "prestamo__deposito", "prestamo__compania_origen",
+            "prestamo__compania_destino", "usuario",
+        )
+        if filtra_compania:
+            devoluciones = devoluciones.filter(
+                Q(prestamo__compania_origen_id=compania_id)
+                | Q(prestamo__compania_destino_id=compania_id)
+            )
+        if q:
+            devoluciones = devoluciones.filter(
+                Q(prestamo__tipo__nombre__icontains=q)
+                | Q(prestamo__lote__icontains=q)
+                | Q(prestamo__compania_origen__nombre__icontains=q)
+                | Q(prestamo__compania_destino__nombre__icontains=q)
+            )
+        grupos.append((CLASE_DEVOLUCION_PRESTAMO, devoluciones))
 
     context = {
         "movimientos": _mezclar_por_fecha(grupos, MOVIMIENTOS_LIMITE),
@@ -701,6 +724,31 @@ def soldado_borrar(request, pk):
     return render(request, "inventory/master_confirm_delete.html", context)
 
 
+def _marcar_prestamos_pendientes(existencias):
+    """Anota en cada existencia los préstamos con saldo pendiente que la
+    afectan (RF-22): `.prestamos_recibidos` (la compañía de la existencia
+    es la destino) y `.prestamos_realizados` (es la origen), con el mismo
+    tipo, depósito y lote. Para resaltarlos en Munición sin guardar nada."""
+    claves = {(e.tipo_id, e.deposito_id, e.lote) for e in existencias}
+    recibidos, realizados = {}, {}
+    pendientes = Prestamo.objects.filter(
+        cantidad__gt=F("cantidad_devuelta"),
+        tipo_id__in={tipo for tipo, _, _ in claves},
+    ).select_related("compania_origen", "compania_destino")
+    for prestamo in pendientes:
+        clave = (prestamo.tipo_id, prestamo.deposito_id, prestamo.lote)
+        if clave not in claves:
+            continue
+        recibidos.setdefault(clave + (prestamo.compania_destino_id,), []).append(prestamo)
+        realizados.setdefault(clave + (prestamo.compania_origen_id,), []).append(prestamo)
+    for existencia in existencias:
+        clave = (
+            existencia.tipo_id, existencia.deposito_id, existencia.lote, existencia.compania_id,
+        )
+        existencia.prestamos_recibidos = recibidos.get(clave, [])
+        existencia.prestamos_realizados = realizados.get(clave, [])
+
+
 @requiere_autorizado
 def existencia_list(request):
     compania_id, ver_todas = _companias_scope(request)
@@ -720,8 +768,10 @@ def existencia_list(request):
     if deposito_id:
         qs = qs.filter(deposito_id=deposito_id)
 
+    existencias = list(qs)
+    _marcar_prestamos_pendientes(existencias)
     context = {
-        "existencias": qs,
+        "existencias": existencias,
         "q": q,
         "depositos": Deposito.objects.order_by("nombre"),
         "deposito_id": deposito_id,
@@ -928,3 +978,51 @@ def prestamo_transferir(request):
         initial = {"compania_origen": compania_id} if compania_id else {}
         form = PrestamoForm(initial=initial)
     return render(request, "inventory/prestamo_form.html", {"form": form})
+
+
+@requiere_autorizado
+def prestamo_devolver(request, pk):
+    """Devolución total o parcial de un préstamo a la compañía de origen
+    (RF-22, ADR-0006). Ambos roles, igual que prestar (RF-15)."""
+    prestamo = get_object_or_404(
+        Prestamo.objects.select_related(
+            "tipo", "deposito", "compania_origen", "compania_destino"
+        ),
+        pk=pk,
+    )
+    destino = Existencia.objects.filter(
+        tipo_id=prestamo.tipo_id,
+        compania_id=prestamo.compania_destino_id,
+        deposito_id=prestamo.deposito_id,
+        lote=prestamo.lote,
+    ).first()
+    disponible = destino.cantidad if destino else 0
+    maximo = min(prestamo.saldo, disponible)
+
+    next_url = _next_seguro(request)
+    if request.method == "POST":
+        try:
+            cantidad = int(request.POST.get("cantidad", ""))
+        except ValueError:
+            cantidad = 0
+        observacion = request.POST.get("observacion", "")
+        try:
+            prestamo.devolver(cantidad=cantidad, usuario=request.user, observacion=observacion)
+        except ValidationError as exc:
+            messages.error(request, " ".join(exc.messages))
+            return redirect(
+                _con_next(reverse("inventory:prestamo_devolver", args=[prestamo.pk]), next_url)
+            )
+        messages.success(
+            request,
+            f"{cantidad} de {prestamo.tipo.nombre} devueltas a {prestamo.compania_origen.nombre}.",
+        )
+        return redirect(next_url or "inventory:prestamo_list")
+
+    context = {
+        "prestamo": prestamo,
+        "disponible": disponible,
+        "maximo": maximo,
+        "next": next_url,
+    }
+    return render(request, "inventory/prestamo_devolver.html", context)
