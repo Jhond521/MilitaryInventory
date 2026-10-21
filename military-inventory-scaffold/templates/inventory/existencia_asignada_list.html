@@ -10,7 +10,7 @@
   · {{ asignadas|length }} soldado{{ asignadas|length|pluralize }} con material en mano
   · <a href="{% url 'inventory:existencia_asignada_list' %}">ver toda la munición asignada</a>
   {% else %}
-  {% if ver_todas %}Todas las compañías{% else %}Compañía {{ compania_actual|default:"—" }}{% endif %}
+  {% include "inventory/_alcance.html" with con_deposito=True %}
   · {{ asignadas|length }} soldado{{ asignadas|length|pluralize }} con material en mano
   {% if not ver_todas %}· <a href="?todas=1">ver todas</a>{% endif %}
   {% endif %}

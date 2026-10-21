@@ -1,8 +1,9 @@
-"""Sends an authenticated user without a compañía de trabajo picked to the
-selector before letting them into the rest of the app (RF-02)."""
+"""Sends an authenticated user with neither a compañía nor a depósito de
+trabajo picked to the selector before letting them into the rest of the app
+(RF-02, issue #25 — at least one of the two is enough)."""
 from django.shortcuts import redirect
 
-from .views import SESSION_KEY
+from .views import SESSION_KEY, SESSION_KEY_DEPOSITO
 
 EXEMPT_PATH_PREFIXES = (
     "/cuenta/login/",
@@ -23,6 +24,7 @@ class CompaniaContextMiddleware:
         if (
             request.user.is_authenticated
             and SESSION_KEY not in request.session
+            and SESSION_KEY_DEPOSITO not in request.session
             and not request.path.startswith(EXEMPT_PATH_PREFIXES)
         ):
             return redirect(f"/compania/?next={request.path}")

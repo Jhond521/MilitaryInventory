@@ -33,7 +33,7 @@
     <label for="deposito">Depósito receptor</label>
     <select id="deposito" name="deposito">
       {% for deposito in depositos %}
-      <option value="{{ deposito.pk }}">{{ deposito.nombre }}</option>
+      <option value="{{ deposito.pk }}"{% if deposito.pk == deposito_actual_id %} selected{% endif %}>{{ deposito.nombre }}</option>
       {% endfor %}
     </select>
   </div>

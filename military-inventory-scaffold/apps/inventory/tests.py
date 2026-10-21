@@ -28,7 +28,7 @@ from .models import (
     UnicodeJSONEncoder,
     Unidad,
 )
-from .views import SESSION_KEY
+from .views import SESSION_KEY, SESSION_KEY_DEPOSITO
 
 # Los tests que renderizan una página completa del admin usan almacenamiento
 # de estáticos simple: el manifest de whitenoise solo existe tras
@@ -3023,3 +3023,220 @@ class PrestamoArmamentoTests(TestCase):
         self._entrar(self.aspc)
         resp = self.client.get(reverse("inventory:soldado_detalle", args=[self.soldado_aspc.pk]))
         self.assertContains(resp, "P-001")
+
+
+@override_settings(STORAGES=_PLAIN_STATIC_STORAGE)
+class SeleccionGlobalTests(TestCase):
+    """Selección global de compañía y/o depósito (issue #25, RF-02/RF-24)."""
+
+    def setUp(self):
+        self.unidad = Unidad.objects.create(nombre="Batallón de Prueba")
+        self.alcatraz = Compania.objects.create(unidad=self.unidad, nombre="Alcatraz")
+        self.bisonte = Compania.objects.create(unidad=self.unidad, nombre="Bisonte")
+        self.apiay = Deposito.objects.create(nombre="Apiay")
+        self.caruru = Deposito.objects.create(nombre="Caruru")
+        peloton_a = Peloton.objects.create(compania=self.alcatraz, nombre="Alcatraz 1")
+        peloton_b = Peloton.objects.create(compania=self.bisonte, nombre="Bisonte 1")
+        self.soldado_a = Soldado.objects.create(
+            apellidos_nombres="Rada Pedro", compania=self.alcatraz, peloton=peloton_a
+        )
+        self.soldado_b = Soldado.objects.create(
+            apellidos_nombres="Gómez Luis", compania=self.bisonte, peloton=peloton_b
+        )
+        self.fusil = TipoArmamento.objects.create(
+            nombre="FUSIL GALIL", control=TipoArmamento.Control.SERIE
+        )
+        self.cartucho = TipoArmamento.objects.create(
+            nombre="CARTUCHO 5.56", control=TipoArmamento.Control.CANTIDAD
+        )
+        self.a_apiay = self._arma("A-APIAY", self.alcatraz, self.apiay)
+        self.a_caruru = self._arma("A-CARURU", self.alcatraz, self.caruru)
+        self.b_apiay = self._arma("B-APIAY", self.bisonte, self.apiay)
+        self.a_en_mano = self._arma("A-MANO", self.alcatraz, self.apiay)
+        self.usuario = get_user_model().objects.create_user(
+            email="admin@example.com", password="x", role=get_user_model().Role.ADMIN
+        )
+        self.a_en_mano.entregar(soldado=self.soldado_a, usuario=self.usuario)
+        self.client.force_login(self.usuario)
+
+    def _arma(self, serie, compania, deposito):
+        return Armamento.objects.create(
+            numero_serie=serie, tipo=self.fusil, compania=compania,
+            ubicacion=Armamento.Ubicacion.DEPOSITO, deposito=deposito,
+        )
+
+    def _seleccionar(self, compania=None, deposito=None):
+        session = self.client.session
+        for key, obj in ((SESSION_KEY, compania), (SESSION_KEY_DEPOSITO, deposito)):
+            if obj:
+                session[key] = obj.pk
+            else:
+                session.pop(key, None)
+        session.save()
+
+    # --- Pantalla de selección -------------------------------------------
+
+    def test_selector_muestra_companias_y_depositos(self):
+        response = self.client.get(reverse("inventory:elegir_compania"))
+        self.assertContains(response, "Compañías")
+        self.assertContains(response, "Depósitos")
+        self.assertContains(response, "ALCATRAZ")
+        self.assertContains(response, "CARURU")
+        # Apiay: A-APIAY y B-APIAY en depósito; A-MANO está en mano.
+        self.assertContains(response, "2 armas en depósito")
+
+    def test_elegir_solo_deposito(self):
+        response = self.client.post(
+            reverse("inventory:elegir_compania"), {"compania": "", "deposito": self.apiay.pk}
+        )
+        self.assertRedirects(response, reverse("inventory:armamento_list"))
+        self.assertEqual(self.client.session[SESSION_KEY_DEPOSITO], self.apiay.pk)
+        self.assertNotIn(SESSION_KEY, self.client.session)
+
+    def test_elegir_compania_y_deposito(self):
+        self.client.post(
+            reverse("inventory:elegir_compania"),
+            {"compania": self.alcatraz.pk, "deposito": self.caruru.pk},
+        )
+        self.assertEqual(self.client.session[SESSION_KEY], self.alcatraz.pk)
+        self.assertEqual(self.client.session[SESSION_KEY_DEPOSITO], self.caruru.pk)
+
+    def test_sin_ninguna_seleccion_muestra_error_y_no_guarda(self):
+        response = self.client.post(
+            reverse("inventory:elegir_compania"), {"compania": "", "deposito": ""}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Elija al menos una compañía o un depósito.")
+        self.assertNotIn(SESSION_KEY, self.client.session)
+        self.assertNotIn(SESSION_KEY_DEPOSITO, self.client.session)
+
+    def test_desmarcar_compania_la_quita_de_la_sesion(self):
+        self._seleccionar(self.alcatraz, self.apiay)
+        self.client.post(
+            reverse("inventory:elegir_compania"), {"compania": "", "deposito": self.apiay.pk}
+        )
+        self.assertNotIn(SESSION_KEY, self.client.session)
+        self.assertEqual(self.client.session[SESSION_KEY_DEPOSITO], self.apiay.pk)
+
+    def test_con_solo_deposito_el_middleware_no_redirige(self):
+        self._seleccionar(deposito=self.apiay)
+        response = self.client.get(reverse("inventory:armamento_list"))
+        self.assertEqual(response.status_code, 200)
+
+    def test_header_muestra_compania_y_deposito(self):
+        self._seleccionar(deposito=self.apiay)
+        response = self.client.get(reverse("inventory:armamento_list"))
+        self.assertContains(response, "Todas · Apiay")
+
+    # --- Listados ------------------------------------------------------
+
+    def test_inventario_con_deposito_solo_muestra_lo_que_esta_en_el(self):
+        self._seleccionar(deposito=self.apiay)
+        response = self.client.get(reverse("inventory:armamento_list"))
+        self.assertContains(response, "A-APIAY")
+        self.assertContains(response, "B-APIAY")
+        self.assertNotContains(response, "A-CARURU")
+        self.assertNotContains(response, "A-MANO")
+        self.assertEqual(response.context["kpi_en_mano"], 0)
+        self.assertEqual(response.context["kpi_en_deposito"], 2)
+
+    def test_inventario_con_compania_y_deposito_es_la_interseccion(self):
+        self._seleccionar(self.alcatraz, self.apiay)
+        response = self.client.get(reverse("inventory:armamento_list"))
+        self.assertContains(response, "A-APIAY")
+        self.assertNotContains(response, "B-APIAY")
+        self.assertNotContains(response, "A-CARURU")
+        self.assertContains(response, "Compañía Alcatraz · Depósito Apiay")
+
+    def test_ver_todas_quita_ambos_filtros(self):
+        self._seleccionar(self.alcatraz, self.apiay)
+        response = self.client.get(reverse("inventory:armamento_list"), {"todas": "1"})
+        for serie in ("A-APIAY", "B-APIAY", "A-CARURU", "A-MANO"):
+            self.assertContains(response, serie)
+
+    def test_soldados_no_se_filtran_por_deposito(self):
+        self._seleccionar(deposito=self.apiay)
+        response = self.client.get(reverse("inventory:soldado_list"))
+        self.assertContains(response, "Rada Pedro")
+        self.assertContains(response, "Gómez Luis")
+
+    def test_municion_filtra_por_deposito_y_el_selector_lo_puede_quitar(self):
+        Existencia.objects.create(
+            tipo=self.cartucho, compania=self.alcatraz, deposito=self.apiay,
+            lote="L-APIAY", cantidad=100,
+        )
+        Existencia.objects.create(
+            tipo=self.cartucho, compania=self.alcatraz, deposito=self.caruru,
+            lote="L-CARURU", cantidad=100,
+        )
+        self._seleccionar(deposito=self.apiay)
+        response = self.client.get(reverse("inventory:existencia_list"))
+        self.assertContains(response, "L-APIAY")
+        self.assertNotContains(response, "L-CARURU")
+
+        response = self.client.get(reverse("inventory:existencia_list"), {"deposito": ""})
+        self.assertContains(response, "L-CARURU")
+
+    def test_prestamos_filtran_por_deposito(self):
+        for deposito, lote in ((self.apiay, "P-APIAY"), (self.caruru, "P-CARURU")):
+            Existencia.objects.create(
+                tipo=self.cartucho, compania=self.alcatraz, deposito=deposito,
+                lote=lote, cantidad=100,
+            )
+            prestamo = Prestamo(
+                tipo=self.cartucho, deposito=deposito, lote=lote, cantidad=10,
+                compania_origen=self.alcatraz, compania_destino=self.bisonte,
+                usuario=self.usuario,
+            )
+            prestamo.full_clean()
+            prestamo.save()
+        self._seleccionar(deposito=self.caruru)
+        response = self.client.get(reverse("inventory:prestamo_list"))
+        self.assertContains(response, "P-CARURU")
+        self.assertNotContains(response, "P-APIAY")
+
+    def test_movimientos_con_deposito_muestran_solo_lo_que_lo_toca(self):
+        self.a_caruru.entregar(soldado=self.soldado_a, usuario=self.usuario)
+        self.a_en_mano.devolver(deposito=self.apiay, usuario=self.usuario)
+        self._seleccionar(deposito=self.apiay)
+        response = self.client.get(reverse("inventory:movimiento_list"))
+        # La devolución a Apiay sí; la entrega (sin depósito) no.
+        self.assertContains(response, "A-MANO")
+        self.assertNotContains(response, "A-CARURU")
+
+    def test_municion_asignada_filtra_por_deposito_de_origen(self):
+        en_apiay = Existencia.objects.create(
+            tipo=self.cartucho, compania=self.alcatraz, deposito=self.apiay, cantidad=50
+        )
+        en_caruru = Existencia.objects.create(
+            tipo=self.cartucho, compania=self.bisonte, deposito=self.caruru, cantidad=50
+        )
+        en_apiay.entregar(soldado=self.soldado_a, cantidad=5, usuario=self.usuario)
+        en_caruru.entregar(soldado=self.soldado_b, cantidad=5, usuario=self.usuario)
+        self._seleccionar(deposito=self.apiay)
+        response = self.client.get(reverse("inventory:existencia_asignada_list"))
+        self.assertContains(response, "Rada Pedro")
+        self.assertNotContains(response, "Gómez Luis")
+
+    # --- Formularios: preseleccionados, pero editables -------------------
+
+    def test_devolver_arma_preselecciona_el_deposito(self):
+        self._seleccionar(deposito=self.caruru)
+        response = self.client.get(
+            reverse("inventory:armamento_devolver", args=[self.a_en_mano.pk])
+        )
+        self.assertContains(response, f'<option value="{self.caruru.pk}" selected>')
+        self.assertContains(response, f'<option value="{self.apiay.pk}">')
+
+    def test_formularios_de_alta_y_prestamo_preseleccionan_el_alcance(self):
+        self._seleccionar(self.bisonte, self.caruru)
+        expected = {"compania": self.bisonte.pk, "deposito": self.caruru.pk}
+        for url_name in ("inventory:armamento_crear", "inventory:existencia_crear"):
+            form = self.client.get(reverse(url_name)).context["form"]
+            self.assertEqual(form.initial, expected)
+            self.assertEqual(form.fields["deposito"].queryset.count(), 2)
+
+        form = self.client.get(reverse("inventory:prestamo_transferir")).context["form"]
+        self.assertEqual(
+            form.initial, {"compania_origen": self.bisonte.pk, "deposito": self.caruru.pk}
+        )

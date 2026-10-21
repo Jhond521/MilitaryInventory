@@ -12,7 +12,7 @@
   <a href="{% url 'inventory:prestamo_list' %}{% if ver_todas %}?todas=1{% endif %}">Préstamos</a>
 </nav>
 <div class="siga-page-subtitle">
-  {% if ver_todas %}Todas las compañías{% else %}Compañía {{ compania_actual|default:"—" }}{% endif %}
+  {% include "inventory/_alcance.html" with con_deposito=True %}
   · {{ existencias|length }} registro{{ existencias|length|pluralize }}
   {% if not ver_todas %}· <a href="?todas=1{% if q %}&q={{ q|urlencode }}{% endif %}">ver todas</a>{% endif %}
 </div>

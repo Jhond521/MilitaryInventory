@@ -4,9 +4,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Elegir compañía — SIGA</title>
+  <title>Elegir compañía y depósito — SIGA</title>
   {% include "inventory/_pwa_head.html" %}
-  <link rel="stylesheet" href="{% static 'css/mobile.css' %}?v=9">
+  <link rel="stylesheet" href="{% static 'css/mobile.css' %}?v=11">
   <style>
     * { box-sizing: border-box; }
     html, body { margin: 0; }
@@ -46,17 +46,61 @@
       text-align: center;
     }
 
-    .siga-compania-picker__grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 16px;
-      margin-top: 36px;
+    .siga-compania-picker__form {
       width: 100%;
       max-width: 1060px;
     }
 
+    /* Dos columnas en escritorio (compañías | depósitos), apiladas en
+       móvil con compañías primero (issue #25). */
+    .siga-compania-picker__cols {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 28px;
+      margin-top: 32px;
+    }
+
+    @media (min-width: 900px) {
+      .siga-compania-picker__cols { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+    }
+
+    .siga-compania-picker__heading {
+      color: var(--siga-header-rule);
+      font-family: var(--font-heading);
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      margin: 0 0 12px;
+    }
+
+    .siga-compania-picker__grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
     @media (min-width: 640px) {
-      .siga-compania-picker__grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .siga-compania-picker__grid--companias { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+
+    @media (min-width: 900px) {
+      .siga-compania-picker__grid--depositos { grid-template-columns: minmax(0, 1fr); }
+    }
+
+    .siga-compania-picker__error {
+      margin-top: 24px;
+      padding: 10px 14px;
+      border-radius: 10px;
+      background: var(--siga-badge-en-mano-bg);
+      color: var(--siga-red-dark);
+      font-size: 13px;
+      text-align: center;
+    }
+
+    .siga-compania-picker__submit {
+      max-width: 360px;
+      margin: 32px auto 0;
     }
 
     .siga-compania-card {
@@ -72,9 +116,21 @@
       font: inherit;
     }
 
-    .siga-compania-card--reciente {
+    .siga-compania-card {
+      position: relative;
+      min-height: 44px;
+    }
+
+    /* La tarjeta marcada (radio oculto) se ve clara; al cargar coincide con
+       la selección vigente, que además lleva el tag "Reciente". */
+    .siga-compania-card:has(input:checked) {
       background: #f7f4ec;
       border-color: var(--siga-header-rule);
+    }
+
+    .siga-compania-card:has(input:focus-visible) {
+      outline: 2px solid var(--siga-header-rule);
+      outline-offset: 2px;
     }
 
     .siga-compania-card__top {
@@ -97,7 +153,7 @@
       font-weight: 700;
     }
 
-    .siga-compania-card--reciente .siga-compania-card__badge {
+    .siga-compania-card:has(input:checked) .siga-compania-card__badge {
       background: var(--siga-header-bg);
     }
 
@@ -121,7 +177,7 @@
       color: #f4f0e6;
     }
 
-    .siga-compania-card--reciente .siga-compania-card__name {
+    .siga-compania-card:has(input:checked) .siga-compania-card__name {
       color: #10151e;
     }
 
@@ -131,7 +187,7 @@
       margin-top: 3px;
     }
 
-    .siga-compania-card--reciente .siga-compania-card__meta {
+    .siga-compania-card:has(input:checked) .siga-compania-card__meta {
       color: var(--siga-text-muted);
     }
 
@@ -157,34 +213,81 @@
 </head>
 <body class="siga-compania-picker">
   <img class="siga-compania-picker__crest" src="{% static 'icons/crest.png' %}" alt="Escudo del Batallón de Selva No. 52">
-  <div class="siga-compania-picker__title">Seleccione compañía</div>
-  <div class="siga-compania-picker__subtitle">Batallón de Selva N.º 52 · elija con qué compañía va a trabajar</div>
+  <div class="siga-compania-picker__title">Seleccione compañía y depósito</div>
+  <div class="siga-compania-picker__subtitle">Batallón de Selva N.º 52 · elija con qué compañía y/o depósito va a trabajar (al menos uno)</div>
 
-  <form method="post" id="siga-compania-form">
+  <form method="post" class="siga-compania-picker__form">
     {% csrf_token %}
     <input type="hidden" name="next" value="{{ next }}">
-    <div class="siga-compania-picker__grid">
-      {% for opcion in opciones %}
-      <label class="siga-compania-card{% if opcion.reciente %} siga-compania-card--reciente{% endif %}">
-        <input type="radio" name="compania" value="{{ opcion.compania.pk }}" style="position:absolute; opacity:0; pointer-events:none;"
-          {% if opcion.reciente %}checked{% endif %} onchange="document.getElementById('siga-compania-form').submit()">
-        <div class="siga-compania-card__top">
-          <span class="siga-compania-card__badge">{{ opcion.codigo }}</span>
-          {% if opcion.reciente %}<span class="siga-compania-card__tag">Reciente</span>{% endif %}
+    {% if error %}<div class="siga-compania-picker__error" role="alert">{{ error }}</div>{% endif %}
+
+    <div class="siga-compania-picker__cols">
+      <section aria-labelledby="siga-titulo-companias">
+        <h2 class="siga-compania-picker__heading" id="siga-titulo-companias">Compañías</h2>
+        <div class="siga-compania-picker__grid siga-compania-picker__grid--companias">
+          <label class="siga-compania-card">
+            <input type="radio" name="compania" value="" style="position:absolute; opacity:0; pointer-events:none;"
+              {% if not actual_id %}checked{% endif %}>
+            <div class="siga-compania-card__top">
+              <span class="siga-compania-card__badge">∗</span>
+            </div>
+            <div class="siga-compania-card__name">TODAS</div>
+            <div class="siga-compania-card__meta">Sin filtrar por compañía</div>
+          </label>
+          {% for opcion in opciones %}
+          <label class="siga-compania-card{% if opcion.reciente %} siga-compania-card--reciente{% endif %}">
+            <input type="radio" name="compania" value="{{ opcion.compania.pk }}" style="position:absolute; opacity:0; pointer-events:none;"
+              {% if opcion.reciente %}checked{% endif %}>
+            <div class="siga-compania-card__top">
+              <span class="siga-compania-card__badge">{{ opcion.codigo }}</span>
+              {% if opcion.reciente %}<span class="siga-compania-card__tag">Reciente</span>{% endif %}
+            </div>
+            <div class="siga-compania-card__name">{{ opcion.compania.nombre|upper }}</div>
+            <div class="siga-compania-card__meta">Código {{ opcion.codigo }} · {{ opcion.total }} elemento{{ opcion.total|pluralize }}</div>
+          </label>
+          {% endfor %}
+          {% if user.is_admin_role %}
+          <a class="siga-compania-card siga-compania-card--nueva" href="{% url 'inventory:compania_crear' %}">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--siga-header-rule)" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+            Nueva compañía
+          </a>
+          {% endif %}
         </div>
-        <div class="siga-compania-card__name">{{ opcion.compania.nombre|upper }}</div>
-        <div class="siga-compania-card__meta">Código {{ opcion.codigo }} · {{ opcion.total }} elemento{{ opcion.total|pluralize }}</div>
-      </label>
-      {% endfor %}
-      {% if user.is_admin_role %}
-      <a class="siga-compania-card siga-compania-card--nueva" href="{% url 'inventory:compania_crear' %}">
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--siga-header-rule)" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-        Nueva compañía
-      </a>
-      {% endif %}
+      </section>
+
+      <section aria-labelledby="siga-titulo-depositos">
+        <h2 class="siga-compania-picker__heading" id="siga-titulo-depositos">Depósitos</h2>
+        <div class="siga-compania-picker__grid siga-compania-picker__grid--depositos">
+          <label class="siga-compania-card">
+            <input type="radio" name="deposito" value="" style="position:absolute; opacity:0; pointer-events:none;"
+              {% if not deposito_actual_id %}checked{% endif %}>
+            <div class="siga-compania-card__top">
+              <span class="siga-compania-card__badge">∗</span>
+            </div>
+            <div class="siga-compania-card__name">TODOS</div>
+            <div class="siga-compania-card__meta">Sin filtrar por depósito</div>
+          </label>
+          {% for opcion in opciones_deposito %}
+          <label class="siga-compania-card{% if opcion.reciente %} siga-compania-card--reciente{% endif %}">
+            <input type="radio" name="deposito" value="{{ opcion.deposito.pk }}" style="position:absolute; opacity:0; pointer-events:none;"
+              {% if opcion.reciente %}checked{% endif %}>
+            <div class="siga-compania-card__top">
+              <span class="siga-compania-card__badge">{{ opcion.codigo }}</span>
+              {% if opcion.reciente %}<span class="siga-compania-card__tag">Reciente</span>{% endif %}
+            </div>
+            <div class="siga-compania-card__name">{{ opcion.deposito.nombre|upper }}</div>
+            <div class="siga-compania-card__meta">{{ opcion.total }} arma{{ opcion.total|pluralize }} en depósito</div>
+          </label>
+          {% endfor %}
+        </div>
+      </section>
+    </div>
+
+    <div class="siga-compania-picker__submit">
+      <button type="submit" class="siga-btn-primary">Continuar</button>
     </div>
   </form>
 
-  <div class="siga-compania-picker__footer">Podrá cambiar de compañía en cualquier momento sin cerrar sesión.</div>
+  <div class="siga-compania-picker__footer">Podrá cambiar la compañía y el depósito en cualquier momento sin cerrar sesión.</div>
 </body>
 </html>
