@@ -7,6 +7,10 @@
 | **Última actualización** | 2026-10-21 |
 | **Versión** | v1.7 |
 
+> **Terminología** (issue #26, 2026-10-21): en la interfaz, el módulo de existencias por
+> cantidad (munición, cascos sin serie, granadas, etc.) se llama **Consumo**. En este
+> documento "munición" sigue nombrando ese mismo material.
+>
 > **Cambios v1.7** (issue #25, 2026-10-21): se agrega **RF-24**. La selección de
 > trabajo al ingresar ya no es solo de compañía: el usuario elige **compañía y/o
 > depósito**, al menos uno. Todo se filtra por esa combinación y sigue siendo

@@ -31,7 +31,7 @@
         </a>
         <a class="siga-sidebar__link{% if url_name == 'existencia_list' or url_name == 'existencia_entregar' or url_name == 'existencia_devolver' or url_name == 'existencia_asignada_list' %} siga-sidebar__link--active{% endif %}" href="{% url 'inventory:existencia_list' %}">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l8 4v10l-8 4-8-4V7z"/><path d="M4 7l8 4 8-4M12 11v10"/></svg>
-          Munición
+          Consumo
         </a>
         <a class="siga-sidebar__link{% if url_name == 'soldado_list' or url_name == 'soldado_detalle' %} siga-sidebar__link--active{% endif %}" href="{% url 'inventory:soldado_list' %}">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="3.2"/><path d="M5 20c0-3.9 3.1-7 7-7s7 3.1 7 7"/></svg>
@@ -100,7 +100,7 @@
     </a>
     <a class="siga-bottom-nav__item{% if url_name == 'existencia_list' or url_name == 'existencia_entregar' or url_name == 'existencia_devolver' or url_name == 'existencia_asignada_list' %} siga-bottom-nav__item--active{% endif %}" href="{% url 'inventory:existencia_list' %}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l8 4v10l-8 4-8-4V7z"/><path d="M4 7l8 4 8-4M12 11v10"/></svg>
-      Munición
+      Consumo
     </a>
   </nav>
   {% endwith %}

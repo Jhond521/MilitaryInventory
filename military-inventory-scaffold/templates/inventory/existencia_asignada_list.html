@@ -1,14 +1,14 @@
 {% extends "inventory/base_mobile.html" %}
-{% block title %}Munición asignada{% endblock %}
+{% block title %}Consumo asignado{% endblock %}
 {% block content %}
 <div class="siga-card__top" style="margin-bottom:10px;">
-  <h1 class="siga-page-title" style="margin:0;">Munición asignada</h1>
+  <h1 class="siga-page-title" style="margin:0;">Consumo asignado</h1>
 </div>
 <div class="siga-page-subtitle">
   {% if existencia %}
   {{ existencia.tipo.nombre }}{% if existencia.lote %} · Lote {{ existencia.lote }}{% endif %} · {{ existencia.deposito.nombre }}
   · {{ asignadas|length }} soldado{{ asignadas|length|pluralize }} con material en mano
-  · <a href="{% url 'inventory:existencia_asignada_list' %}">ver toda la munición asignada</a>
+  · <a href="{% url 'inventory:existencia_asignada_list' %}">ver todo el consumo asignado</a>
   {% else %}
   {% include "inventory/_alcance.html" with con_deposito=True %}
   · {{ asignadas|length }} soldado{{ asignadas|length|pluralize }} con material en mano
@@ -32,7 +32,7 @@
     </div>
   </div>
   {% empty %}
-  <p class="siga-empty">Nadie tiene munición asignada en este momento.</p>
+  <p class="siga-empty">Nadie tiene consumo asignado en este momento.</p>
   {% endfor %}
 </div>
 
@@ -63,7 +63,7 @@
     {% endif %}
   </div>
   {% empty %}
-  <p class="siga-empty">Sin movimientos de munición todavía.</p>
+  <p class="siga-empty">Sin movimientos de consumo todavía.</p>
   {% endfor %}
 </div>
 {% endblock %}

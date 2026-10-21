@@ -1673,7 +1673,7 @@ class MovimientoListUnificadaTests(TestCase):
     def test_municion_tiene_acceso_visible_a_municion_asignada(self):
         response = self.client.get(reverse("inventory:existencia_list"))
         self.assertContains(response, 'class="siga-quicklinks"')
-        self.assertContains(response, ">Munición asignada</a>")
+        self.assertContains(response, ">Consumo asignado</a>")
 
     def test_asignadas_filtradas_por_existencia(self):
         self.granadas_a.entregar(soldado=self.soldado_a, cantidad=15, usuario=self.admin_user)
@@ -2517,7 +2517,7 @@ class SoldadoFichaTests(TestCase):
         response = self.client.get(self._url())
         self.assertContains(response, "No tiene material a cargo.")
         self.assertContains(response, "No tiene armamento a cargo.")
-        self.assertContains(response, "No tiene munición a cargo.")
+        self.assertContains(response, "No tiene consumo a cargo.")
         self.assertContains(response, "Sin movimientos todavía.")
 
     def test_solo_muestra_lo_del_soldado(self):
@@ -3240,3 +3240,27 @@ class SeleccionGlobalTests(TestCase):
         self.assertEqual(
             form.initial, {"compania_origen": self.bisonte.pk, "deposito": self.caruru.pk}
         )
+
+
+@override_settings(STORAGES=_PLAIN_STATIC_STORAGE)
+class RenombresTests(TestCase):
+    """Issue #26: el módulo de existencias se llama "Consumo" en la UI y el
+    login muestra el acrónimo SIGA completo."""
+
+    def test_login_muestra_el_acronimo_completo(self):
+        response = self.client.get(reverse("accounts:login"))
+        self.assertContains(response, "Sistema de Inventario y Gestión de Armamento")
+
+    def test_navegacion_y_pantalla_dicen_consumo(self):
+        unidad = Unidad.objects.create(nombre="Batallón de Prueba")
+        compania = Compania.objects.create(unidad=unidad, nombre="Alcatraz")
+        usuario = get_user_model().objects.create_user(email="enlace@example.com", password="x")
+        self.client.force_login(usuario)
+        session = self.client.session
+        session[SESSION_KEY] = compania.pk
+        session.save()
+
+        response = self.client.get(reverse("inventory:existencia_list"))
+        self.assertContains(response, ">Consumo</h1>")
+        self.assertContains(response, ">Consumo asignado</a>")
+        self.assertNotContains(response, "Munición")

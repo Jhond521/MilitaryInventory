@@ -349,6 +349,11 @@ El corazón del sistema.
     Soldados solo por compañía. Los formularios preseleccionan la selección, que se puede
     cambiar. No hay migraciones.
 
+- H-32 — Renombres de interfaz: "Munición" → "Consumo" y acrónimo SIGA completo en el login ✅
+  - **Estado**: Hecho (issue #26). Solo textos visibles: navegación, títulos, ficha del soldado,
+    clase de Movimientos, el login ("Sistema de Inventario y Gestión de Armamento") y el `name`
+    del manifest de la PWA. Rutas, modelos y nombres de tipos no cambian.
+
 ## Fase 2 — Siguiente
 
 - H-20 — Módulo de importación de Excel autoservicio (que David suba y cargue) (RF-13)
