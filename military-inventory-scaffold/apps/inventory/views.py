@@ -8,7 +8,7 @@ from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.core.exceptions import ValidationError
-from django.db.models import ProtectedError, Q, Sum
+from django.db.models import F, ProtectedError, Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -29,6 +29,7 @@ from .models import (
     Armamento,
     Compania,
     Deposito,
+    DevolucionPrestamo,
     Existencia,
     ExistenciaAsignada,
     Movimiento,
@@ -142,11 +143,15 @@ def armamento_list(request):
     compania_id, ver_todas = _companias_scope(request)
     qs = (
         Armamento.objects.filter(estado=Armamento.Estado.ACTIVO)
-        .select_related("tipo", "compania", "deposito", "soldado", "soldado__peloton")
+        .select_related(
+            "tipo", "compania", "compania_en_prestamo", "deposito", "soldado", "soldado__peloton"
+        )
         .order_by("numero_serie")
     )
     if compania_id and not ver_todas:
-        qs = qs.filter(compania_id=compania_id)
+        # Sus armas (incluidas las que prestó, con etiqueta) y las que tiene
+        # prestadas de otra compañía (RF-23).
+        qs = qs.filter(Q(compania_id=compania_id) | Q(compania_en_prestamo_id=compania_id))
 
     q = request.GET.get("q", "").strip()
     if q:
@@ -180,9 +185,14 @@ def armamento_list(request):
     # KPIs del layout de escritorio (issue #3): sobre el alcance de compañía
     # actual, sin aplicar q/peloton/ubicacion/tipo — mismo criterio que el
     # subtítulo "Compañía X" ya usa, no el resultado ya filtrado por texto.
+    # Un arma prestada cuenta en la compañía que la tiene, no en la dueña
+    # (RF-23, ADR-0007), así nadie la cuenta dos veces.
     kpi_qs = Armamento.objects.all()
     if compania_id and not ver_todas:
-        kpi_qs = kpi_qs.filter(compania_id=compania_id)
+        kpi_qs = kpi_qs.filter(
+            Q(compania_id=compania_id, compania_en_prestamo__isnull=True)
+            | Q(compania_en_prestamo_id=compania_id)
+        )
     kpi_total = kpi_qs.count()
     kpi_en_deposito = kpi_qs.filter(
         estado=Armamento.Estado.ACTIVO, ubicacion=Armamento.Ubicacion.DEPOSITO
@@ -240,9 +250,9 @@ def _historial_arma(armamento):
     `detalle` (destino/origen) y `observacion` (texto libre capturado en el
     formulario) son campos separados — antes se mezclaban para BAJA y se
     perdían por completo para ENTREGA/DEVOLUCION (issue #14)."""
-    movimientos = armamento.movimientos.select_related("soldado", "deposito", "usuario").order_by(
-        "fecha"
-    )
+    movimientos = armamento.movimientos.select_related(
+        "soldado", "deposito", "usuario", "compania_en_prestamo"
+    ).order_by("fecha")
     historial = []
     origen = None
     for mov in movimientos:
@@ -254,6 +264,26 @@ def _historial_arma(armamento):
             titulo = "Devolución a depósito"
             destino_nombre = mov.deposito.nombre if mov.deposito else "—"
             detalle = f"A {destino_nombre}"
+        elif mov.tipo in (Movimiento.Tipo.PRESTAMO, Movimiento.Tipo.DEV_PRESTAMO):
+            # El arma no se mueve del depósito: solo cambia qué compañía la
+            # puede usar (RF-23), así que no altera el "desde" encadenado.
+            prestada = mov.compania_en_prestamo.nombre if mov.compania_en_prestamo else "—"
+            if mov.tipo == Movimiento.Tipo.PRESTAMO:
+                titulo = "Préstamo a otra compañía"
+                detalle = f"De {armamento.compania.nombre} a {prestada}"
+            else:
+                titulo = "Devolución de préstamo"
+                detalle = f"De {prestada} a {armamento.compania.nombre}"
+            historial.append(
+                {
+                    "titulo": titulo,
+                    "detalle": detalle,
+                    "observacion": mov.observacion,
+                    "fecha": mov.fecha,
+                    "usuario": mov.usuario,
+                }
+            )
+            continue
         else:
             titulo = "Baja"
             destino_nombre = None
@@ -287,12 +317,18 @@ def _historial_arma(armamento):
 def armamento_detalle(request, pk):
     arma = get_object_or_404(
         Armamento.objects.select_related(
-            "tipo", "compania", "deposito", "soldado", "soldado__peloton"
+            "tipo", "compania", "compania_en_prestamo", "deposito", "soldado", "soldado__peloton"
         ),
         pk=pk,
     )
+    # Mientras está prestada, la dueña no la entrega: la usa la compañía
+    # que la recibió (RF-23).
+    compania_id, _ = _companias_scope(request)
+    prestada_por_mi = bool(arma.compania_en_prestamo_id) and compania_id == arma.compania_id
     context = {
         "arma": arma,
+        "puede_entregar": arma.estado == Armamento.Estado.ACTIVO and not prestada_por_mi,
+        "la_tengo_prestada": bool(compania_id) and compania_id == arma.compania_en_prestamo_id,
         "historial": _historial_arma(arma),
         "campos_personalizados": (arma.datos_extra or {}).items(),
     }
@@ -344,7 +380,7 @@ def armamento_entregar(request, pk):
     """Flujo guiado de 3 pasos (Arma → Soldado → Confirmar) sobre
     `Armamento.entregar()` (RF-10)."""
     arma = get_object_or_404(
-        Armamento.objects.select_related("tipo", "compania", "deposito"),
+        Armamento.objects.select_related("tipo", "compania", "compania_en_prestamo", "deposito"),
         pk=pk,
         ubicacion=Armamento.Ubicacion.DEPOSITO,
         estado=Armamento.Estado.ACTIVO,
@@ -352,7 +388,7 @@ def armamento_entregar(request, pk):
 
     if request.method == "POST":
         soldado = get_object_or_404(
-            Soldado, pk=request.POST.get("soldado"), compania_id=arma.compania_id
+            Soldado, pk=request.POST.get("soldado"), compania_id=arma.compania_poseedora_id
         )
         observacion = request.POST.get("observacion", "")
         try:
@@ -365,14 +401,17 @@ def armamento_entregar(request, pk):
 
     soldado_id = request.GET.get("soldado")
     if soldado_id:
-        soldado = get_object_or_404(Soldado, pk=soldado_id, compania_id=arma.compania_id)
+        soldado = get_object_or_404(
+            Soldado, pk=soldado_id, compania_id=arma.compania_poseedora_id
+        )
         context = {"arma": arma, "soldado": soldado, "paso": "confirmar"}
         return render(request, "inventory/armamento_entregar.html", context)
 
     q = request.GET.get("q", "").strip()
-    soldados = Soldado.objects.filter(compania_id=arma.compania_id).select_related("peloton")
-    if q:
-        soldados = soldados.filter(apellidos_nombres__icontains=q)
+    soldados = Soldado.objects.filter(
+        compania_id=arma.compania_poseedora_id
+    ).select_related("peloton")
+    soldados = _buscar_soldados(soldados, q)
 
     context = {"arma": arma, "q": q, "soldados": soldados[:30], "paso": "soldado"}
     return render(request, "inventory/armamento_entregar.html", context)
@@ -410,10 +449,62 @@ def armamento_devolver(request, pk):
     return render(request, "inventory/armamento_devolver.html", context)
 
 
+@requiere_autorizado
+def armamento_prestar(request, pk):
+    """Préstamo temporal del arma a otra compañía (RF-23, ADR-0007). Ambos
+    roles, igual que el préstamo de munición (RF-15)."""
+    arma = get_object_or_404(
+        Armamento.objects.select_related("tipo", "compania", "deposito"),
+        pk=pk,
+        estado=Armamento.Estado.ACTIVO,
+    )
+    companias = Compania.objects.exclude(pk=arma.compania_id).order_by("nombre")
+    if request.method == "POST":
+        compania = get_object_or_404(companias, pk=request.POST.get("compania"))
+        observacion = request.POST.get("observacion", "")
+        try:
+            arma.prestar(compania=compania, usuario=request.user, observacion=observacion)
+        except ValidationError as exc:
+            messages.error(request, " ".join(exc.messages))
+            return redirect("inventory:armamento_prestar", pk=arma.pk)
+        messages.success(request, f"{arma.numero_serie} prestada a {compania}.")
+        return redirect("inventory:armamento_detalle", pk=arma.pk)
+    return render(
+        request, "inventory/armamento_prestar.html", {"arma": arma, "companias": companias}
+    )
+
+
+@requiere_autorizado
+def armamento_devolver_prestamo(request, pk):
+    """Devuelve el arma prestada a su compañía dueña (RF-23); solo con el
+    arma en depósito."""
+    arma = get_object_or_404(
+        Armamento.objects.select_related("tipo", "compania", "compania_en_prestamo", "deposito"),
+        pk=pk,
+        compania_en_prestamo__isnull=False,
+    )
+    if request.method == "POST":
+        observacion = request.POST.get("observacion", "")
+        compania_prestamo = arma.compania_en_prestamo
+        try:
+            arma.devolver_prestamo(usuario=request.user, observacion=observacion)
+        except ValidationError as exc:
+            messages.error(request, " ".join(exc.messages))
+            return redirect("inventory:armamento_devolver_prestamo", pk=arma.pk)
+        messages.success(
+            request,
+            f"{arma.numero_serie} devuelta de {compania_prestamo} a {arma.compania}.",
+        )
+        return redirect("inventory:armamento_detalle", pk=arma.pk)
+    return render(request, "inventory/armamento_devolver_prestamo.html", {"arma": arma})
+
+
 MOVIMIENTOS_LIMITE = 200
 CLASE_ARMAMENTO = "ARMAMENTO"
 CLASE_MUNICION = "MUNICION"
 CLASE_PRESTAMO = "PRESTAMO"
+# Solo marca de fila para la plantilla: en el filtro va dentro de "Préstamos".
+CLASE_DEVOLUCION_PRESTAMO = "DEVOLUCION_PRESTAMO"
 CLASE_CHOICES = [
     (CLASE_ARMAMENTO, "Armamento"),
     (CLASE_MUNICION, "Munición"),
@@ -445,7 +536,8 @@ def movimiento_list(request):
     de armamento (`Movimiento`), entregas/devoluciones de existencias
     (`MovimientoExistencia`, RF-18) y préstamos entre compañías
     (`Prestamo`, RF-15). Son tres modelos separados (ADR-0005); se mezclan
-    aquí, en la vista, sin un modelo común."""
+    aquí, en la vista, sin un modelo común. Las devoluciones de préstamo
+    (`DevolucionPrestamo`, RF-22) van con la clase "Préstamos"."""
     compania_id, ver_todas = _companias_scope(request)
     q = request.GET.get("q", "").strip()
     tipo = request.GET.get("tipo", "")
@@ -459,10 +551,14 @@ def movimiento_list(request):
     grupos = []
     if clase in ("", CLASE_ARMAMENTO):
         qs = Movimiento.objects.select_related(
-            "armamento__tipo", "soldado", "deposito", "usuario"
+            "armamento__tipo", "armamento__compania", "soldado", "deposito", "usuario",
+            "compania_en_prestamo",
         )
         if filtra_compania:
-            qs = qs.filter(armamento__compania_id=compania_id)
+            # También lo que hizo con armas que tenía prestadas (RF-23).
+            qs = qs.filter(
+                Q(armamento__compania_id=compania_id) | Q(compania_en_prestamo_id=compania_id)
+            )
         if q:
             qs = qs.filter(
                 Q(armamento__numero_serie__icontains=q)
@@ -507,6 +603,25 @@ def movimiento_list(request):
             )
         grupos.append((CLASE_PRESTAMO, qs))
 
+        # Devoluciones de préstamo (RF-22) — mismos filtros que su préstamo.
+        devoluciones = DevolucionPrestamo.objects.select_related(
+            "prestamo__tipo", "prestamo__deposito", "prestamo__compania_origen",
+            "prestamo__compania_destino", "usuario",
+        )
+        if filtra_compania:
+            devoluciones = devoluciones.filter(
+                Q(prestamo__compania_origen_id=compania_id)
+                | Q(prestamo__compania_destino_id=compania_id)
+            )
+        if q:
+            devoluciones = devoluciones.filter(
+                Q(prestamo__tipo__nombre__icontains=q)
+                | Q(prestamo__lote__icontains=q)
+                | Q(prestamo__compania_origen__nombre__icontains=q)
+                | Q(prestamo__compania_destino__nombre__icontains=q)
+            )
+        grupos.append((CLASE_DEVOLUCION_PRESTAMO, devoluciones))
+
     context = {
         "movimientos": _mezclar_por_fecha(grupos, MOVIMIENTOS_LIMITE),
         "q": q,
@@ -519,6 +634,18 @@ def movimiento_list(request):
     return render(request, "inventory/movimiento_list.html", context)
 
 
+def _buscar_soldados(qs, q):
+    """Filtra soldados por nombre o cédula (RF-21). La cédula se compara
+    sin puntos ni espacios, igual a como se guarda."""
+    if not q:
+        return qs
+    filtro = Q(apellidos_nombres__icontains=q)
+    cedula = q.replace(".", "").replace(" ", "")
+    if cedula.isascii() and cedula.isdigit():
+        filtro |= Q(cedula__icontains=cedula)
+    return qs.filter(filtro)
+
+
 @requiere_autorizado
 def soldado_list(request):
     compania_id, ver_todas = _companias_scope(request)
@@ -527,8 +654,7 @@ def soldado_list(request):
         qs = qs.filter(compania_id=compania_id)
 
     q = request.GET.get("q", "").strip()
-    if q:
-        qs = qs.filter(apellidos_nombres__icontains=q)
+    qs = _buscar_soldados(qs, q)
 
     peloton_id = request.GET.get("peloton", "")
     if peloton_id:
@@ -691,6 +817,31 @@ def soldado_borrar(request, pk):
     return render(request, "inventory/master_confirm_delete.html", context)
 
 
+def _marcar_prestamos_pendientes(existencias):
+    """Anota en cada existencia los préstamos con saldo pendiente que la
+    afectan (RF-22): `.prestamos_recibidos` (la compañía de la existencia
+    es la destino) y `.prestamos_realizados` (es la origen), con el mismo
+    tipo, depósito y lote. Para resaltarlos en Munición sin guardar nada."""
+    claves = {(e.tipo_id, e.deposito_id, e.lote) for e in existencias}
+    recibidos, realizados = {}, {}
+    pendientes = Prestamo.objects.filter(
+        cantidad__gt=F("cantidad_devuelta"),
+        tipo_id__in={tipo for tipo, _, _ in claves},
+    ).select_related("compania_origen", "compania_destino")
+    for prestamo in pendientes:
+        clave = (prestamo.tipo_id, prestamo.deposito_id, prestamo.lote)
+        if clave not in claves:
+            continue
+        recibidos.setdefault(clave + (prestamo.compania_destino_id,), []).append(prestamo)
+        realizados.setdefault(clave + (prestamo.compania_origen_id,), []).append(prestamo)
+    for existencia in existencias:
+        clave = (
+            existencia.tipo_id, existencia.deposito_id, existencia.lote, existencia.compania_id,
+        )
+        existencia.prestamos_recibidos = recibidos.get(clave, [])
+        existencia.prestamos_realizados = realizados.get(clave, [])
+
+
 @requiere_autorizado
 def existencia_list(request):
     compania_id, ver_todas = _companias_scope(request)
@@ -710,8 +861,10 @@ def existencia_list(request):
     if deposito_id:
         qs = qs.filter(deposito_id=deposito_id)
 
+    existencias = list(qs)
+    _marcar_prestamos_pendientes(existencias)
     context = {
-        "existencias": qs,
+        "existencias": existencias,
         "q": q,
         "depositos": Deposito.objects.order_by("nombre"),
         "deposito_id": deposito_id,
@@ -798,8 +951,7 @@ def existencia_entregar(request, pk):
 
     q = request.GET.get("q", "").strip()
     soldados = Soldado.objects.filter(compania_id=existencia.compania_id).select_related("peloton")
-    if q:
-        soldados = soldados.filter(apellidos_nombres__icontains=q)
+    soldados = _buscar_soldados(soldados, q)
 
     context = {"existencia": existencia, "q": q, "soldados": soldados[:30], "paso": "soldado"}
     return render(request, "inventory/existencia_entregar.html", context)
@@ -919,3 +1071,51 @@ def prestamo_transferir(request):
         initial = {"compania_origen": compania_id} if compania_id else {}
         form = PrestamoForm(initial=initial)
     return render(request, "inventory/prestamo_form.html", {"form": form})
+
+
+@requiere_autorizado
+def prestamo_devolver(request, pk):
+    """Devolución total o parcial de un préstamo a la compañía de origen
+    (RF-22, ADR-0006). Ambos roles, igual que prestar (RF-15)."""
+    prestamo = get_object_or_404(
+        Prestamo.objects.select_related(
+            "tipo", "deposito", "compania_origen", "compania_destino"
+        ),
+        pk=pk,
+    )
+    destino = Existencia.objects.filter(
+        tipo_id=prestamo.tipo_id,
+        compania_id=prestamo.compania_destino_id,
+        deposito_id=prestamo.deposito_id,
+        lote=prestamo.lote,
+    ).first()
+    disponible = destino.cantidad if destino else 0
+    maximo = min(prestamo.saldo, disponible)
+
+    next_url = _next_seguro(request)
+    if request.method == "POST":
+        try:
+            cantidad = int(request.POST.get("cantidad", ""))
+        except ValueError:
+            cantidad = 0
+        observacion = request.POST.get("observacion", "")
+        try:
+            prestamo.devolver(cantidad=cantidad, usuario=request.user, observacion=observacion)
+        except ValidationError as exc:
+            messages.error(request, " ".join(exc.messages))
+            return redirect(
+                _con_next(reverse("inventory:prestamo_devolver", args=[prestamo.pk]), next_url)
+            )
+        messages.success(
+            request,
+            f"{cantidad} de {prestamo.tipo.nombre} devueltas a {prestamo.compania_origen.nombre}.",
+        )
+        return redirect(next_url or "inventory:prestamo_list")
+
+    context = {
+        "prestamo": prestamo,
+        "disponible": disponible,
+        "maximo": maximo,
+        "next": next_url,
+    }
+    return render(request, "inventory/prestamo_devolver.html", context)

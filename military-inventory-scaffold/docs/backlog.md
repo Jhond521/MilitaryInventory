@@ -313,6 +313,31 @@ El corazón del sistema.
     ficha vía `?next=`) y los últimos 50 movimientos. El bug relacionado (munición ausente en
     Movimientos, #16) no lleva historia, por convención.
 
+## Actualizaciones v1.6 (feedback de David, issues #18 y #20)
+
+- H-27 — Cédula del soldado: única, solo dígitos, obligatoria al crear/editar, buscable (RF-21) ✅
+  - **Estado**: Hecho (issue #21). Campo `Soldado.cedula` (nulo para los soldados ya cargados),
+    obligatorio en el formulario, búsqueda por nombre o cédula en Soldados y al entregar, y
+    visible en la ficha.
+- H-28 — Devolver préstamos de munición (total o parcial) y resaltar lo prestado/recibido en Munición (RF-22) ✅
+  - **Estado**: Hecho (issue #22, ADR-0006). `Prestamo.devolver()` + modelo
+    `DevolucionPrestamo` y saldo pendiente en `Prestamo.cantidad_devuelta`. Ruta
+    `inventory:prestamo_devolver` (`/prestamos/<pk>/devolver/`). Munición resalta cada
+    existencia con préstamos pendientes ("En préstamo de X" con Devolver / "Prestado a Y"),
+    Préstamos muestra el estado y Movimientos las devoluciones (clase "Préstamos").
+- H-29 — Préstamo temporal de armamento serializado entre compañías, con devolución y resaltado (RF-23) ✅
+  - **Estado**: Hecho (issue #23, ADR-0007). Campo `Armamento.compania_en_prestamo` (la
+    dueña nunca cambia) y `Armamento.prestar()` / `.devolver_prestamo()`, solo con el arma
+    en depósito. Movimientos de tipo `PRESTAMO` / `DEV_PRESTAMO`. Rutas
+    `inventory:armamento_prestar` y `inventory:armamento_devolver_prestamo`. La compañía
+    que la recibe la entrega a sus soldados; Inventario muestra "Prestada por X" /
+    "Prestada a Y" y la cuenta en la compañía que la tiene. Sin baja ni préstamo en cadena
+    mientras está prestada.
+- H-30 — Lista de soldados numerada 1…N y con la cédula visible (RF-06/RF-21) ✅
+  - **Estado**: Hecho (issue #20). Soldados y los selectores de soldado al entregar (arma y
+    munición) numeran cada fila con su posición en la lista visible y muestran la cédula.
+    Solo plantillas y CSS (`.siga-pick-item__num`).
+
 ## Fase 2 — Siguiente
 
 - H-20 — Módulo de importación de Excel autoservicio (que David suba y cargue) (RF-13)

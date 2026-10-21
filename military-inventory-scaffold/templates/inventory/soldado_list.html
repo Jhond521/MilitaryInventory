@@ -15,7 +15,7 @@
 
 <form method="get" class="siga-search">
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b6f76" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-  <input type="text" name="q" value="{{ q }}" placeholder="Buscar por nombre…">
+  <input type="text" name="q" value="{{ q }}" placeholder="Buscar por nombre o cédula…">
   {% if ver_todas %}<input type="hidden" name="todas" value="1">{% endif %}
 </form>
 
@@ -35,10 +35,11 @@
 <div class="siga-pick-list">
   {% for soldado in soldados %}
   <div class="siga-pick-item">
+    <span class="siga-pick-item__num">{{ forloop.counter }}</span>
     <span class="siga-pick-item__avatar">{{ soldado.apellidos_nombres|slice:":2"|upper }}</span>
     <a class="siga-pick-item__link" href="{% url 'inventory:soldado_detalle' soldado.pk %}">
       <span class="siga-pick-item__name">{{ soldado.nombre_con_grado }}</span>
-      <span class="siga-pick-item__meta">{{ soldado.compania.nombre }} · Pelotón {{ soldado.peloton.nombre }}</span>
+      <span class="siga-pick-item__meta">{% if soldado.cedula %}C.C. {{ soldado.cedula }}{% else %}Sin cédula{% endif %} · {{ soldado.compania.nombre }} · Pelotón {{ soldado.peloton.nombre }}</span>
     </a>
     {% if user.is_admin_role %}
     <a href="{% url 'inventory:soldado_editar' soldado.pk %}">Editar</a>

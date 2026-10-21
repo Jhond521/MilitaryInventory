@@ -2,11 +2,19 @@
 
 | | |
 |---|---|
-| **Estado** | En revisión (v1.5 — ficha del soldado) |
+| **Estado** | En revisión (v1.6 — cédula y préstamos con devolución) |
 | **Autor** | John Cuervo (para David Bolaños — Batallón de Selva No. 52) |
-| **Última actualización** | 2026-10-13 |
-| **Versión** | v1.5 |
+| **Última actualización** | 2026-10-20 |
+| **Versión** | v1.6 |
 
+> **Cambios v1.6** (feedback de David, issues #18 "Set de correcciones nuevo" y #20,
+> 2026-10-20): se agrega **RF-21** (cédula del soldado como identificador único),
+> **RF-22** (devolver préstamos de munición y resaltar lo prestado/recibido) y
+> **RF-23** (préstamo temporal de armamento serializado entre compañías). Por RF-23 se
+> **reescribe NO-3**: el arma nunca cambia de compañía **dueña**, pero sí puede
+> prestarse temporalmente. Además, la lista de Soldados se numera y muestra la cédula
+> (issue #20, sin RF nuevo). Issues #21, #22 y #23.
+>
 > **Cambios v1.5** (feedback de David, issue #15 "Correcciones Nuevas", 2026-10-06):
 > se agrega **RF-20** (ficha del soldado: todo el material que tiene a cargo,
 > armas y munición, más su historial). Además, un bug sobre RF-18/RNF-03: las
@@ -107,9 +115,10 @@ Los soldados **no** son usuarios: son registros a los que se les asigna material
   unidades a futuro, sin configurador ahora.
 - NO-2: **No** se agregan atributos personalizados a soldados ni a tipos de material.
   Los campos personalizados solo aplican al material serializado (armamento).
-- NO-3: **No** se transfiere material **serializado** entre compañías; un arma
-  pertenece a una compañía y solo a esa. (La **munición** sí se presta entre
-  compañías — ver RF-15.)
+- NO-3: **No** se transfiere de forma definitiva material **serializado** entre
+  compañías: un arma pertenece a una compañía **dueña** y esa nunca cambia. Desde
+  v1.6 sí puede **prestarse temporalmente** a otra compañía y devolverse (RF-23). (La
+  **munición** se presta entre compañías — ver RF-15/RF-22.)
 - NO-4: **No** hay app móvil nativa en v1 (la web debe verse bien en celular).
 - NO-5: **No** se modelan sub-depósitos por compañía dentro de cada depósito; basta
   con depósito + compañía dueña (decisión de David, P-3).
@@ -339,6 +348,52 @@ en un solo lugar qué le fue entregado.
 - [ ] Administrador y enlace pueden ver la ficha. Los soldados siguen sin
   campos personalizados (NO-2).
 
+### RF-21 — Cédula del soldado
+**Prioridad**: Alta
+**Descripción**: Como administrador, quiero registrar la cédula de cada soldado
+para identificarlo sin depender de cómo se escribió su nombre.
+**Criterios de aceptación**:
+
+- [ ] El soldado tiene un campo **Cédula**, solo dígitos, **única** en todo el
+  batallón. Es obligatoria al crear un soldado y al editar uno que no la tenga.
+- [ ] Los soldados ya registrados quedan sin cédula hasta que se editen.
+- [ ] Se puede buscar a un soldado por cédula (Soldados y elegir soldado al entregar).
+- [ ] La cédula se muestra en la ficha del soldado y en las listas de soldados,
+  que además van numeradas 1…N (issue #20).
+- [ ] Es un campo fijo del modelo, como Grado. NO-2 sigue aplicando.
+
+### RF-22 — Devolución y visibilidad de préstamos de munición
+**Prioridad**: Alta
+**Descripción**: Como administrador o enlace, quiero devolver lo que una compañía
+recibió en préstamo y ver claramente qué está prestado, a quién y de dónde viene.
+**Criterios de aceptación**:
+
+- [ ] Cada préstamo (RF-15) lleva un **saldo pendiente**: lo prestado menos lo devuelto.
+- [ ] La compañía que recibió puede **devolver** total o parcialmente, sin superar
+  el saldo ni lo disponible en depósito. Cada devolución queda registrada (RNF-03)
+  y aparece en Movimientos.
+- [ ] En Munición, las existencias con préstamos pendientes se ven **resaltadas**:
+  "Recibido en préstamo de X: N" (con Devolver) en la compañía que recibió y
+  "Prestado a Y: N" en la que prestó.
+- [ ] Administrador y enlace pueden devolver.
+
+### RF-23 — Préstamo temporal de armamento serializado entre compañías
+**Prioridad**: Alta
+**Descripción**: Como administrador o enlace, quiero prestar un arma de mi
+compañía a otra desde Inventario y que se devuelva después, igual que con la
+munición.
+**Criterios de aceptación**:
+
+- [ ] Solo se presta un arma activa, en depósito y no prestada, a otra compañía.
+  La compañía **dueña** del arma no cambia nunca (NO-3).
+- [ ] Mientras está prestada, la compañía que la recibe puede entregarla a sus
+  soldados y devolverla a depósito. La dueña no puede entregarla ni prestarla.
+- [ ] El préstamo se devuelve a la dueña solo con el arma en depósito.
+- [ ] En Inventario el arma se ve resaltada: "Prestada por X" en la que la recibe
+  (con Devolver préstamo) y "Prestada a Y" en la dueña.
+- [ ] Préstamo y devolución quedan en el historial del arma y en Movimientos (RNF-03).
+- [ ] Administrador y enlace pueden prestar y devolver.
+
 ## 7. Requerimientos no funcionales
 
 | ID | Categoría | Requerimiento | Cómo se verifica |
@@ -394,7 +449,7 @@ información se respalda. Los elementos dados de baja se conservan (no se elimin
 
 | Fase | Contenido | Requerimientos |
 |---|---|---|
-| v1 (MVP) | Acceso + roles, selección de compañía, CRUD de datos maestros, pelotones, material serializado (alta/ubicación/estado/movimientos/baja), existencias por cantidad y préstamo de munición, entrega/devolución de existencias a un soldado, grado del soldado, búsqueda, campos personalizados, carga inicial serializada, ficha del soldado, y app **móvil responsive e instalable (PWA)**. | RF-01 a RF-20 |
+| v1 (MVP) | Acceso + roles, selección de compañía, CRUD de datos maestros, pelotones, material serializado (alta/ubicación/estado/movimientos/baja), existencias por cantidad y préstamo de munición, entrega/devolución de existencias a un soldado, grado del soldado, búsqueda, campos personalizados, carga inicial serializada, ficha del soldado, cédula del soldado, devolución de préstamos de munición, préstamo temporal de armamento, y app **móvil responsive e instalable (PWA)**. | RF-01 a RF-23 |
 | Siguiente | Importador de Excel autoservicio, carga de munición inicial, reportes/exportes, tablero de resumen por compañía, acuse de entrega. | — |
 | Algún día | Multi-unidad con configurador, app móvil, escaneo de serie. | — |
 
@@ -415,7 +470,8 @@ información se respalda. Los elementos dados de baja se conservan (no se elimin
 - S-3: **Administrador** = comandante, auxiliar y bodegueros; **enlace** = los 2 de
   movimientos (confirmado por David, P-2).
 - S-4: La munición se controla por **lote + cantidad** y **se presta entre compañías**
-  (confirmado por David, P-4). El material serializado no se presta entre compañías.
+  (confirmado por David, P-4). Desde v1.6 el material serializado también puede
+  prestarse temporalmente, sin cambiar su compañía dueña (RF-23).
 - S-5: Las bajas son poco frecuentes (daño, pérdida o robo).
 - S-6: La carga inicial serializada la hace John con un script desde el Excel.
 - S-7: Los cascos "SIN SERIE" se llevan por cantidad por compañía (no se prestan entre

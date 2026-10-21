@@ -1,0 +1,69 @@
+{% extends "inventory/base_mobile.html" %}
+{% block title %}Devolver préstamo{% endblock %}
+{% block content %}
+<h1 class="siga-page-title">Devolver préstamo</h1>
+<div class="siga-page-subtitle">De vuelta a {{ prestamo.compania_origen.nombre }}, dejando rastro del movimiento.</div>
+
+<div class="siga-field">
+  <label>Préstamo</label>
+  <div class="siga-summary">
+    <div class="siga-summary__row">
+      <span class="label">Tipo</span>
+      <span class="value">{{ prestamo.tipo.nombre }}</span>
+    </div>
+    {% if prestamo.lote %}
+    <div class="siga-summary__row">
+      <span class="label">Lote</span>
+      <span class="value">{{ prestamo.lote }}</span>
+    </div>
+    {% endif %}
+    <div class="siga-summary__row">
+      <span class="label">Prestado por</span>
+      <span class="value">{{ prestamo.compania_origen.nombre }}</span>
+    </div>
+    <div class="siga-summary__row">
+      <span class="label">Lo tiene</span>
+      <span class="value">{{ prestamo.compania_destino.nombre }}</span>
+    </div>
+    <div class="siga-summary__row">
+      <span class="label">Depósito</span>
+      <span class="value">{{ prestamo.deposito.nombre }}</span>
+    </div>
+    <div class="siga-summary__row">
+      <span class="label">Prestado</span>
+      <span class="value">{{ prestamo.cantidad }} · {{ prestamo.fecha|date:"d/m/Y" }}</span>
+    </div>
+    <div class="siga-summary__row">
+      <span class="label">Pendiente</span>
+      <span class="value">{{ prestamo.saldo }}</span>
+    </div>
+    <div class="siga-summary__row">
+      <span class="label">En depósito en {{ prestamo.compania_destino.nombre }}</span>
+      <span class="value">{{ disponible }}</span>
+    </div>
+  </div>
+</div>
+
+{% if maximo > 0 %}
+<form method="post">
+  {% csrf_token %}
+  {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+  <div class="siga-field">
+    <label for="cantidad">Cantidad a devolver</label>
+    <input type="number" id="cantidad" name="cantidad" min="1" max="{{ maximo }}" value="{{ maximo }}" required>
+    {% if maximo < prestamo.saldo %}
+    <div class="siga-help-text">Máximo {{ maximo }}: lo demás no está en depósito (está entregado a soldados).</div>
+    {% endif %}
+  </div>
+  <div class="siga-field">
+    <label for="observacion">Observación (opcional)</label>
+    <textarea id="observacion" name="observacion" rows="2"></textarea>
+  </div>
+  <button type="submit" class="siga-btn-primary">Confirmar devolución</button>
+</form>
+{% elif prestamo.saldo == 0 %}
+<p class="siga-empty">Este préstamo ya fue devuelto por completo.</p>
+{% else %}
+<p class="siga-empty">{{ prestamo.compania_destino.nombre }} no tiene nada de este préstamo en depósito: primero deben devolverlo los soldados que lo tienen.</p>
+{% endif %}
+{% endblock %}

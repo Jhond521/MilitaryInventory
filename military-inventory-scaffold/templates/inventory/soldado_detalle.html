@@ -6,7 +6,7 @@
     <span class="siga-pick-item__avatar siga-ficha__avatar">{{ soldado.apellidos_nombres|slice:":2"|upper }}</span>
     <div>
       <h1 class="siga-page-title siga-ficha__nombre">{{ soldado.nombre_con_grado }}</h1>
-      <div class="siga-detail-header__sub">Compañía {{ soldado.compania.nombre }} · Pelotón {{ soldado.peloton.nombre }}</div>
+      <div class="siga-detail-header__sub">{% if soldado.cedula %}C.C. {{ soldado.cedula }}{% else %}Sin cédula{% endif %} · Compañía {{ soldado.compania.nombre }} · Pelotón {{ soldado.peloton.nombre }}</div>
     </div>
   </div>
   {% if user.is_admin_role %}

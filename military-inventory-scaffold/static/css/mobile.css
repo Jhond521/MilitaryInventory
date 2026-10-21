@@ -291,6 +291,34 @@ body.siga-app {
   color: #7a5a17;
 }
 
+/* Existencia con préstamos pendientes (issue #22, RF-22): franja dorada del
+   escudo a la izquierda y una nota por préstamo — recibido o prestado. */
+.siga-card--prestamo {
+  border-left: 4px solid var(--siga-header-rule);
+}
+
+.siga-prestamo-nota {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fbf6e9;
+  font-size: 12px;
+  color: var(--siga-text);
+}
+
+.siga-prestamo-nota a {
+  margin-left: auto;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 6px;
+  font-weight: 600;
+}
+
 /* Accesos directos de una pantalla (ej. Munición → Préstamos / Munición asignada).
    Pastillas táctiles de 44px, en vez de enlaces pequeños en el subtítulo. */
 .siga-quicklinks {
@@ -474,6 +502,17 @@ body.siga-app {
   justify-content: center;
   font-size: 12px;
   font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* Número de fila en las listas de soldados (issue #20): solo la posición en
+   la lista que se está viendo, no un identificador del soldado. */
+.siga-pick-item__num {
+  min-width: 3ch;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--siga-text-muted);
   flex-shrink: 0;
 }
 

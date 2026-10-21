@@ -74,7 +74,8 @@ apps/accounts/     # custom User (email login), roles (ADMIN/ENLACE), email allo
   views.py, urls.py, forms.py # login/logout/password-change (over django.contrib.auth.views) +
                    #   usuario_list/_crear/_editar/_restablecer_password (ADMIN-only) — mounted at /cuenta/
 apps/inventory/    # domain: Unidad, Compania, Deposito, Peloton, Soldado, TipoArmamento,
-                   #         Armamento, Movimiento, CampoPersonalizado, Existencia, Prestamo
+                   #         Armamento, Movimiento, CampoPersonalizado, Existencia, Prestamo,
+                   #         DevolucionPrestamo, ExistenciaAsignada, MovimientoExistencia
   forms.py         # EntregaForm/DevolucionForm/BajaForm, Armamento*/Soldado/Existencia/Prestamo
                    #   forms, campo_* helpers for custom fields (H-12)
   crud.py          # generic ListView/CreateView/UpdateView/DeleteView for the 6 simple
@@ -83,7 +84,7 @@ apps/inventory/    # domain: Unidad, Compania, Deposito, Peloton, Soldado, TipoA
   templatetags/inventory_extras.py # valor_campo filter (renders a field or its get_*_display())
   views.py         # everything else: armamento_list/_crear/_editar/_entregar/_devolver/_baja,
                    #   movimiento_list, soldado_list/_detalle/_crear/_editar, existencia_list/_crear/_editar,
-                   #   prestamo_list/_transferir, elegir_compania, ajustes — mounted at "/"
+                   #   prestamo_list/_transferir/_devolver, elegir_compania, ajustes — mounted at "/"
   middleware.py, urls.py, context_processors.py   # compañía de trabajo (RF-02)
   management/commands/seed_initial.py       # idempotent master-data seed
   management/commands/importar_armamento.py # initial Excel load (RF-13, H-13)
@@ -97,22 +98,37 @@ docs/              # PRD (Spanish), backlog (Spanish), ADRs
 
 ## Domain rules that matter
 
-- A weapon (`Armamento`) belongs to exactly one company and is **never** transferred
-  between companies (PRD NO-3). Every `TipoArmamento` is either `SERIE` (individual,
+- A weapon (`Armamento`) belongs to exactly one owner company (`compania`), which
+  **never** changes (PRD NO-3). It can be lent temporarily to another company
+  (`compania_en_prestamo`, RF-23, ADR-0007) via `prestar()` / `devolver_prestamo()`,
+  only from depósito, no chained loans, no baja while lent. While lent, the receiving
+  company can entregar it to its own soldiers: anything that decides who may use a
+  weapon must compare against `compania_poseedora`, not `compania`. Every `TipoArmamento` is either `SERIE` (individual,
   used by `Armamento`) or `CANTIDAD` (stock, used by `Existencia`) — `Armamento.clean()`
   rejects a `CANTIDAD` tipo, `Existencia.clean()` rejects a `SERIE` one.
-- Location is a two-state field: `EN_MANO` (needs a `soldado` of the same company)
+- Location is a two-state field: `EN_MANO` (needs a `soldado` of `compania_poseedora`)
   or `DEPOSITO` (needs a `deposito`). `Armamento.clean()` enforces both — call
   `full_clean()` before saving from views.
 - A soldier belongs to exactly one `Peloton` of their own company (`Soldado.clean()`
   checks this); a weapon has no pelotón of its own — `Armamento.peloton_actual` derives
   it from the soldier currently holding it, and is `None` while in depósito (RF-16).
+- `Soldado.cedula` (RF-21) is the soldier's unique ID, digits only. It's `null=True`
+  (never `""`) so soldiers loaded before it existed don't collide in the unique index;
+  `SoldadoForm` makes it required and normalizes dots/spaces away. Search soldiers with
+  `_buscar_soldados()` in `apps/inventory/views.py` (name or cédula) — every soldier
+  search box uses it.
 - Ammunition/quantity stock (`Existencia`) **does** cross companies via `Prestamo`
   (RF-15) — the only exception to the no-transfer rule above, which applies to
   serialized weapons only. `Prestamo.save()` atomically debits the origin
   `Existencia` and credits (or creates) the destination one; `Prestamo.clean()`
   validates the tipo, the quantity and that enough stock exists — always call
-  `full_clean()` before `save()`.
+  `full_clean()` before `save()`. A loan is returned (total or partial) only through
+  `Prestamo.devolver()` (RF-22, ADR-0006): it moves the quantity back destino → origen
+  in the same depósito/lote, creates a `DevolucionPrestamo` row and bumps the
+  denormalized `Prestamo.cantidad_devuelta` in one transaction (pending = `.saldo`).
+  It can only return what the destino has **in depósito** — stock handed to soldiers
+  (RF-18) must come back first. Munición highlights pending loans per existencia via
+  `_marcar_prestamos_pendientes()` (computed, nothing stored).
 - Custom fields (`CampoPersonalizado` + `Armamento.datos_extra` JSON) apply **only**
   to weapons. Soldiers and weapon types have a fixed schema (PRD NO-2).
   `datos_extra` uses `UnicodeJSONEncoder` (not Django's default, which escapes
@@ -132,7 +148,8 @@ docs/              # PRD (Spanish), backlog (Spanish), ADRs
   use `Armamento.entregar()`/`.devolver()` (transactional, validate company match
   and current ubicación) instead of setting `ubicacion`/`soldado`/`deposito` by hand.
 - `movimiento_list` (Movimientos screen) is the **unified history** (issue #16):
-  it merges `Movimiento` (armas), `MovimientoExistencia` (RF-18) and `Prestamo` (RF-15)
+  it merges `Movimiento` (armas), `MovimientoExistencia` (RF-18), `Prestamo` (RF-15) and
+  `DevolucionPrestamo` (RF-22, shown under the "Préstamos" clase)
   through `_mezclar_por_fecha()` in `apps/inventory/views.py`, tagging each row with
   `.clase` for the template. A new kind of movement model must be added there as well
   (and to its `clase` filter), or it will be invisible in Movimientos again (ADR-0005).

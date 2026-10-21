@@ -17,8 +17,18 @@
       <span>{{ prestamo.fecha|date:"d/m/Y H:i" }}</span>
     </div>
     <div class="siga-card__meta">
-      <span>Depósito: <strong>{{ prestamo.deposito.nombre }}</strong></span>
+      <span>Depósito: <strong>{{ prestamo.deposito.nombre }}</strong>{% if prestamo.lote %} · Lote <strong>{{ prestamo.lote }}</strong>{% endif %}</span>
       <span>Por: <strong>{{ prestamo.usuario }}</strong></span>
+    </div>
+    <div class="siga-card__meta">
+      {% if prestamo.saldo == 0 %}
+      <span class="siga-badge siga-badge--devolucion">Devuelto</span>
+      {% elif prestamo.cantidad_devuelta %}
+      <span><span class="siga-badge siga-badge--prestamo">Devuelto parcial</span> Pendiente: <strong>{{ prestamo.saldo }}</strong></span>
+      {% else %}
+      <span><span class="siga-badge siga-badge--prestamo">Pendiente</span> {{ prestamo.saldo }}</span>
+      {% endif %}
+      {% if prestamo.saldo %}<a href="{% url 'inventory:prestamo_devolver' prestamo.pk %}">Devolver</a>{% endif %}
     </div>
   </div>
   {% empty %}
