@@ -1,9 +1,11 @@
-"""Superficie principal de SIGA: selección de compañía de trabajo (RF-02) y
+"""Superficie principal de SIGA: selección de compañía y/o depósito de
+trabajo (RF-02, RF-24) y
 todas las pantallas de inventario/entrega/devolución/movimientos/soldados/
 munición/préstamos/datos maestros (T-06, H-17) — el admin de Django ya no
 existe (ADR-0004); esto es la única UI de la aplicación.
 """
 from operator import attrgetter
+from typing import NamedTuple
 from urllib.parse import urlencode
 
 from django.contrib import messages
@@ -41,6 +43,7 @@ from .models import (
 )
 
 SESSION_KEY = "compania_actual_id"
+SESSION_KEY_DEPOSITO = "deposito_actual_id"
 
 
 def _codigo_compania(nombre):
@@ -54,7 +57,11 @@ def _codigo_compania(nombre):
 
 @requiere_autorizado
 def elegir_compania(request):
+    """Selección global de trabajo (RF-02, RF-24, issue #25): compañía y/o
+    depósito — al menos uno, pueden ser ambos. Cada lado tiene una opción
+    "Todas"/"Todos" (valor vacío) para no fijarlo."""
     companias = Compania.objects.order_by("nombre")
+    depositos = Deposito.objects.order_by("nombre")
 
     next_url = (
         request.POST.get("next") or request.GET.get("next") or reverse("inventory:armamento_list")
@@ -64,28 +71,59 @@ def elegir_compania(request):
     ):
         next_url = reverse("inventory:armamento_list")
 
+    compania_id = request.session.get(SESSION_KEY)
+    deposito_id = request.session.get(SESSION_KEY_DEPOSITO)
+    error = ""
     if request.method == "POST":
-        compania_id = request.POST.get("compania")
-        if compania_id and companias.filter(pk=compania_id).exists():
-            request.session[SESSION_KEY] = int(compania_id)
+        compania_post = request.POST.get("compania", "")
+        deposito_post = request.POST.get("deposito", "")
+        compania_valida = compania_post.isdigit() and companias.filter(pk=compania_post).exists()
+        deposito_valido = deposito_post.isdigit() and depositos.filter(pk=deposito_post).exists()
+        if compania_valida or deposito_valido:
+            for key, valido, valor in (
+                (SESSION_KEY, compania_valida, compania_post),
+                (SESSION_KEY_DEPOSITO, deposito_valido, deposito_post),
+            ):
+                if valido:
+                    request.session[key] = int(valor)
+                else:
+                    request.session.pop(key, None)
             return redirect(next_url)
+        error = "Elija al menos una compañía o un depósito."
+        compania_id = int(compania_post) if compania_valida else None
+        deposito_id = int(deposito_post) if deposito_valido else None
 
-    actual_id = request.session.get(SESSION_KEY)
     opciones = [
         {
             "compania": compania,
             "codigo": _codigo_compania(compania.nombre),
             "total": Armamento.objects.filter(compania=compania).count(),
-            "reciente": compania.pk == actual_id,
+            "reciente": compania.pk == compania_id,
         }
         for compania in companias
     ]
+    opciones_deposito = [
+        {
+            "deposito": deposito,
+            "codigo": deposito.nombre[:1].upper(),
+            "total": Armamento.objects.filter(
+                deposito=deposito,
+                ubicacion=Armamento.Ubicacion.DEPOSITO,
+                estado=Armamento.Estado.ACTIVO,
+            ).count(),
+            "reciente": deposito.pk == deposito_id,
+        }
+        for deposito in depositos
+    ]
 
     context = {
-        "title": "Elegir compañía de trabajo",
+        "title": "Elegir compañía y depósito",
         "companias": companias,
         "opciones": opciones,
-        "actual_id": actual_id,
+        "opciones_deposito": opciones_deposito,
+        "actual_id": compania_id,
+        "deposito_actual_id": deposito_id,
+        "error": error,
         "next": next_url,
     }
     return render(request, "inventory/elegir_compania.html", context)
@@ -131,16 +169,42 @@ def _con_next(url, next_url):
     return f"{url}?{urlencode({'next': next_url})}" if next_url else url
 
 
-def _companias_scope(request):
-    """(compania_id, ver_todas) — igual criterio que el antiguo
-    `CompaniaContextoMixin` del admin (RF-02, S-2): filtra por la compañía de
-    trabajo salvo que se pida explícitamente ver todas."""
-    return request.session.get(SESSION_KEY), request.GET.get("todas") == "1"
+class Alcance(NamedTuple):
+    """Compañía y depósito de trabajo efectivos para filtrar un listado
+    (RF-02, RF-24). Con "ver todas" ambos son `None`."""
+
+    compania_id: int | None
+    deposito_id: int | None
+    ver_todas: bool
+
+
+def _alcance(request):
+    """Igual criterio que el antiguo `CompaniaContextoMixin` del admin
+    (RF-02, S-2), ampliado al depósito (issue #25): filtra por la compañía
+    y/o el depósito de trabajo salvo que se pida explícitamente ver todas
+    (`?todas=1`, que quita ambos filtros)."""
+    if request.GET.get("todas") == "1":
+        return Alcance(None, None, True)
+    return Alcance(
+        request.session.get(SESSION_KEY), request.session.get(SESSION_KEY_DEPOSITO), False
+    )
+
+
+def _initial_alcance(request):
+    """`initial` para un formulario con campos `compania`/`deposito`: los
+    preselecciona con la selección de trabajo, sin restringir las opciones
+    (issue #25, S-2)."""
+    initial = {}
+    if request.session.get(SESSION_KEY):
+        initial["compania"] = request.session[SESSION_KEY]
+    if request.session.get(SESSION_KEY_DEPOSITO):
+        initial["deposito"] = request.session[SESSION_KEY_DEPOSITO]
+    return initial
 
 
 @requiere_autorizado
 def armamento_list(request):
-    compania_id, ver_todas = _companias_scope(request)
+    compania_id, deposito_id, ver_todas = _alcance(request)
     qs = (
         Armamento.objects.filter(estado=Armamento.Estado.ACTIVO)
         .select_related(
@@ -148,10 +212,14 @@ def armamento_list(request):
         )
         .order_by("numero_serie")
     )
-    if compania_id and not ver_todas:
+    if compania_id:
         # Sus armas (incluidas las que prestó, con etiqueta) y las que tiene
         # prestadas de otra compañía (RF-23).
         qs = qs.filter(Q(compania_id=compania_id) | Q(compania_en_prestamo_id=compania_id))
+    if deposito_id:
+        # Solo lo que está físicamente en el depósito: un arma en mano no
+        # tiene depósito (issue #25).
+        qs = qs.filter(ubicacion=Armamento.Ubicacion.DEPOSITO, deposito_id=deposito_id)
 
     q = request.GET.get("q", "").strip()
     if q:
@@ -176,23 +244,26 @@ def armamento_list(request):
     if tipo_id:
         qs = qs.filter(tipo_id=tipo_id)
 
-    if compania_id and not ver_todas:
+    if compania_id:
         pelotones = Peloton.objects.filter(compania_id=compania_id)
     else:
         pelotones = Peloton.objects.all()
     tipos = TipoArmamento.objects.filter(control=TipoArmamento.Control.SERIE).order_by("nombre")
 
     # KPIs del layout de escritorio (issue #3): sobre el alcance de compañía
-    # actual, sin aplicar q/peloton/ubicacion/tipo — mismo criterio que el
-    # subtítulo "Compañía X" ya usa, no el resultado ya filtrado por texto.
+    # y depósito actual, sin aplicar q/peloton/ubicacion/tipo — mismo
+    # criterio que el subtítulo ya usa, no el resultado ya filtrado por texto.
     # Un arma prestada cuenta en la compañía que la tiene, no en la dueña
-    # (RF-23, ADR-0007), así nadie la cuenta dos veces.
+    # (RF-23, ADR-0007), así nadie la cuenta dos veces. Con depósito, "en
+    # mano" es 0 por definición (issue #25).
     kpi_qs = Armamento.objects.all()
-    if compania_id and not ver_todas:
+    if compania_id:
         kpi_qs = kpi_qs.filter(
             Q(compania_id=compania_id, compania_en_prestamo__isnull=True)
             | Q(compania_en_prestamo_id=compania_id)
         )
+    if deposito_id:
+        kpi_qs = kpi_qs.filter(ubicacion=Armamento.Ubicacion.DEPOSITO, deposito_id=deposito_id)
     kpi_total = kpi_qs.count()
     kpi_en_deposito = kpi_qs.filter(
         estado=Armamento.Estado.ACTIVO, ubicacion=Armamento.Ubicacion.DEPOSITO
@@ -229,7 +300,7 @@ def armamento_crear(request):
             messages.success(request, f"{armamento.numero_serie} añadida al inventario.")
             return redirect("inventory:armamento_list")
     else:
-        form = ArmamentoCrearForm()
+        form = ArmamentoCrearForm(initial=_initial_alcance(request))
     return render(
         request, "inventory/armamento_form.html", {"form": form, "titulo": "Añadir armamento"}
     )
@@ -323,7 +394,7 @@ def armamento_detalle(request, pk):
     )
     # Mientras está prestada, la dueña no la entrega: la usa la compañía
     # que la recibió (RF-23).
-    compania_id, _ = _companias_scope(request)
+    compania_id = request.session.get(SESSION_KEY)
     prestada_por_mi = bool(arma.compania_en_prestamo_id) and compania_id == arma.compania_id
     context = {
         "arma": arma,
@@ -444,6 +515,8 @@ def armamento_devolver(request, pk):
     context = {
         "arma": arma,
         "depositos": Deposito.objects.order_by("nombre"),
+        # Preseleccionado con el depósito de trabajo, pero editable (issue #25).
+        "deposito_actual_id": request.session.get(SESSION_KEY_DEPOSITO),
         "next": next_url,
     }
     return render(request, "inventory/armamento_devolver.html", context)
@@ -507,7 +580,7 @@ CLASE_PRESTAMO = "PRESTAMO"
 CLASE_DEVOLUCION_PRESTAMO = "DEVOLUCION_PRESTAMO"
 CLASE_CHOICES = [
     (CLASE_ARMAMENTO, "Armamento"),
-    (CLASE_MUNICION, "Munición"),
+    (CLASE_MUNICION, "Consumo"),
     (CLASE_PRESTAMO, "Préstamos"),
 ]
 
@@ -538,7 +611,7 @@ def movimiento_list(request):
     (`Prestamo`, RF-15). Son tres modelos separados (ADR-0005); se mezclan
     aquí, en la vista, sin un modelo común. Las devoluciones de préstamo
     (`DevolucionPrestamo`, RF-22) van con la clase "Préstamos"."""
-    compania_id, ver_todas = _companias_scope(request)
+    compania_id, deposito_id, ver_todas = _alcance(request)
     q = request.GET.get("q", "").strip()
     tipo = request.GET.get("tipo", "")
     if tipo not in Movimiento.Tipo.values:
@@ -546,7 +619,7 @@ def movimiento_list(request):
     clase = request.GET.get("clase", "")
     if clase not in dict(CLASE_CHOICES):
         clase = ""
-    filtra_compania = bool(compania_id and not ver_todas)
+    filtra_compania = bool(compania_id)
 
     grupos = []
     if clase in ("", CLASE_ARMAMENTO):
@@ -559,6 +632,10 @@ def movimiento_list(request):
             qs = qs.filter(
                 Q(armamento__compania_id=compania_id) | Q(compania_en_prestamo_id=compania_id)
             )
+        if deposito_id:
+            # Solo las filas que tocan ese depósito: devoluciones a él. Una
+            # entrega o baja de un arma en mano no tiene depósito (issue #25).
+            qs = qs.filter(deposito_id=deposito_id)
         if q:
             qs = qs.filter(
                 Q(armamento__numero_serie__icontains=q)
@@ -575,6 +652,8 @@ def movimiento_list(request):
         )
         if filtra_compania:
             qs = qs.filter(existencia__compania_id=compania_id)
+        if deposito_id:
+            qs = qs.filter(existencia__deposito_id=deposito_id)
         if q:
             qs = qs.filter(
                 Q(existencia__tipo__nombre__icontains=q)
@@ -594,6 +673,8 @@ def movimiento_list(request):
             qs = qs.filter(
                 Q(compania_origen_id=compania_id) | Q(compania_destino_id=compania_id)
             )
+        if deposito_id:
+            qs = qs.filter(deposito_id=deposito_id)
         if q:
             qs = qs.filter(
                 Q(tipo__nombre__icontains=q)
@@ -613,6 +694,8 @@ def movimiento_list(request):
                 Q(prestamo__compania_origen_id=compania_id)
                 | Q(prestamo__compania_destino_id=compania_id)
             )
+        if deposito_id:
+            devoluciones = devoluciones.filter(prestamo__deposito_id=deposito_id)
         if q:
             devoluciones = devoluciones.filter(
                 Q(prestamo__tipo__nombre__icontains=q)
@@ -648,9 +731,10 @@ def _buscar_soldados(qs, q):
 
 @requiere_autorizado
 def soldado_list(request):
-    compania_id, ver_todas = _companias_scope(request)
+    # Los soldados no tienen depósito: solo filtra la compañía (issue #25).
+    compania_id, _, ver_todas = _alcance(request)
     qs = Soldado.objects.select_related("compania", "peloton")
-    if compania_id and not ver_todas:
+    if compania_id:
         qs = qs.filter(compania_id=compania_id)
 
     q = request.GET.get("q", "").strip()
@@ -660,7 +744,7 @@ def soldado_list(request):
     if peloton_id:
         qs = qs.filter(peloton_id=peloton_id)
 
-    if compania_id and not ver_todas:
+    if compania_id:
         pelotones = Peloton.objects.filter(compania_id=compania_id)
     else:
         pelotones = Peloton.objects.all()
@@ -844,20 +928,25 @@ def _marcar_prestamos_pendientes(existencias):
 
 @requiere_autorizado
 def existencia_list(request):
-    compania_id, ver_todas = _companias_scope(request)
+    compania_id, deposito_actual_id, ver_todas = _alcance(request)
     # `en_mano`: cuánto de cada existencia tienen hoy los soldados (RF-18),
     # para que se vea desde Munición a dónde se fue lo entregado (issue #16).
     qs = Existencia.objects.select_related("tipo", "compania", "deposito").annotate(
         en_mano=Sum("asignaciones__cantidad")
     )
-    if compania_id and not ver_todas:
+    if compania_id:
         qs = qs.filter(compania_id=compania_id)
 
     q = request.GET.get("q", "").strip()
     if q:
         qs = qs.filter(Q(tipo__nombre__icontains=q) | Q(lote__icontains=q))
 
-    deposito_id = request.GET.get("deposito", "")
+    # El selector de depósito de la pantalla manda; sin él, el depósito de
+    # trabajo (issue #25). "Todos" en el selector envía `deposito=` vacío.
+    if "deposito" in request.GET:
+        deposito_id = request.GET["deposito"]
+    else:
+        deposito_id = str(deposito_actual_id or "")
     if deposito_id:
         qs = qs.filter(deposito_id=deposito_id)
 
@@ -882,7 +971,7 @@ def existencia_crear(request):
             messages.success(request, "Existencia añadida.")
             return redirect("inventory:existencia_list")
     else:
-        form = ExistenciaForm()
+        form = ExistenciaForm(initial=_initial_alcance(request))
     context = {
         "form": form, "titulo": "Añadir existencia", "cancelar_url": "inventory:existencia_list",
     }
@@ -1002,7 +1091,7 @@ def existencia_asignada_list(request):
     issue #16) restringe todo a esa existencia. En ese caso la compañía de
     trabajo no se aplica: la existencia ya define su compañía, y el enlace
     también se usa desde "ver todas"."""
-    compania_id, ver_todas = _companias_scope(request)
+    compania_id, deposito_id, ver_todas = _alcance(request)
     asignadas = ExistenciaAsignada.objects.select_related(
         "existencia__tipo", "existencia__compania", "existencia__deposito", "soldado"
     )
@@ -1017,9 +1106,15 @@ def existencia_asignada_list(request):
         )
         asignadas = asignadas.filter(existencia=existencia)
         movimientos = movimientos.filter(existencia=existencia)
-    elif compania_id and not ver_todas:
-        asignadas = asignadas.filter(existencia__compania_id=compania_id)
-        movimientos = movimientos.filter(existencia__compania_id=compania_id)
+    else:
+        if compania_id:
+            asignadas = asignadas.filter(existencia__compania_id=compania_id)
+            movimientos = movimientos.filter(existencia__compania_id=compania_id)
+        # Lo asignado conserva su depósito de origen (`existencia.deposito`),
+        # así que sí se filtra por él (issue #25).
+        if deposito_id:
+            asignadas = asignadas.filter(existencia__deposito_id=deposito_id)
+            movimientos = movimientos.filter(existencia__deposito_id=deposito_id)
     context = {
         "asignadas": asignadas,
         "movimientos": movimientos[:50],
@@ -1031,12 +1126,14 @@ def existencia_asignada_list(request):
 
 @requiere_autorizado
 def prestamo_list(request):
-    compania_id, ver_todas = _companias_scope(request)
+    compania_id, deposito_id, ver_todas = _alcance(request)
     qs = Prestamo.objects.select_related(
         "tipo", "deposito", "compania_origen", "compania_destino", "usuario"
     )
-    if compania_id and not ver_todas:
+    if compania_id:
         qs = qs.filter(Q(compania_origen_id=compania_id) | Q(compania_destino_id=compania_id))
+    if deposito_id:
+        qs = qs.filter(deposito_id=deposito_id)
     context = {"prestamos": qs[:200], "ver_todas": ver_todas}
     return render(request, "inventory/prestamo_list.html", context)
 
@@ -1045,7 +1142,6 @@ def prestamo_list(request):
 def prestamo_transferir(request):
     """RF-15/H-16 — ambos roles pueden registrar (es "registrar un
     movimiento", no tocar datos maestros), igual que entregar/devolver."""
-    compania_id, _ = _companias_scope(request)
     if request.method == "POST":
         form = PrestamoForm(request.POST)
         if form.is_valid():
@@ -1068,7 +1164,9 @@ def prestamo_transferir(request):
                 messages.success(request, "Préstamo registrado.")
                 return redirect("inventory:existencia_list")
     else:
-        initial = {"compania_origen": compania_id} if compania_id else {}
+        initial = _initial_alcance(request)
+        if "compania" in initial:
+            initial["compania_origen"] = initial.pop("compania")
         form = PrestamoForm(initial=initial)
     return render(request, "inventory/prestamo_form.html", {"form": form})
 

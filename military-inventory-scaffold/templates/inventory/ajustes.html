@@ -10,7 +10,7 @@
   <a class="siga-card" href="{% url 'inventory:tipoarmamento_list' %}"><strong>Tipos de armamento</strong></a>
   <a class="siga-card" href="{% url 'inventory:campopersonalizado_list' %}"><strong>Campos personalizados</strong></a>
   <a class="siga-card" href="{% url 'inventory:unidad_list' %}"><strong>Unidades</strong></a>
-  <a class="siga-card" href="{% url 'inventory:prestamo_list' %}"><strong>Préstamos de munición</strong></a>
+  <a class="siga-card" href="{% url 'inventory:prestamo_list' %}"><strong>Préstamos de consumo</strong></a>
   {% if user.is_admin_role %}
   <a class="siga-card" href="{% url 'accounts:usuario_list' %}"><strong>Usuarios</strong></a>
   {% endif %}

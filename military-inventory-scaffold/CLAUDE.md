@@ -164,14 +164,24 @@ docs/              # PRD (Spanish), backlog (Spanish), ADRs
   `estado=BAJA`, and `entregar()` refuses a weapon that isn't `ACTIVO`. Only ADMIN can
   do this (RF-11) — unlike H-09's entrega/devolución, which RF-10 authorizes for both
   roles.
-- The "compañía de trabajo" (RF-02, session key `apps.inventory.views.SESSION_KEY`) is a
-  **default filter, not a permission boundary** (PRD S-2) — every user can still see every
-  company. `CompaniaContextMiddleware` sends anyone without it to `/compania/`;
-  `_companias_scope(request)` in `apps/inventory/views.py` (used by `armamento_list`,
-  `movimiento_list`, `soldado_list`, `existencia_list`, `prestamo_list`) returns
-  `(compania_id, ver_todas)` — `ver_todas` is a plain `?todas=1` query param (the
-  "ver todas" link in each list template). Don't add a company-scoped list view without
-  applying this same filter.
+- The "compañía y/o depósito de trabajo" (RF-02, RF-24, issue #25; session keys
+  `SESSION_KEY` and `SESSION_KEY_DEPOSITO` in `apps.inventory.views`) is a **default filter,
+  not a permission boundary** (PRD S-2): every user can still see everything. At least one of
+  the two is required, and either may be unset. `CompaniaContextMiddleware` sends anyone with
+  neither to `/compania/`. `_alcance(request)` in `apps/inventory/views.py` returns an
+  `Alcance(compania_id, deposito_id, ver_todas)`; with `?todas=1` (the "ver todas" link) both
+  ids are `None`. It is used by `armamento_list`, `movimiento_list`, `soldado_list`,
+  `existencia_list`, `existencia_asignada_list` and `prestamo_list`. How the depósito
+  applies:
+  - Only what is **physically** in the depósito. An `EN_MANO` weapon has `deposito=None`,
+    so it drops out.
+  - Soldiers have no depósito, so Soldados ignores it.
+  - Movimientos keep only rows that touch it.
+  - Munición asignada uses `existencia.deposito`.
+
+  Forms only **preselect** the scope via `_initial_alcance()` and never restrict the
+  choices. Don't add a scoped list view without applying `_alcance()`. The list subtitle is
+  `templates/inventory/_alcance.html`.
 - Access is restricted to `settings.AUTHORIZED_EMAILS`; the `AllowlistModelBackend`
   rejects logins outside the list even if a user row exists.
 - Role gates (`apps/accounts/permissions.py`, RF-01/RF-10, H-03) check `user.role`

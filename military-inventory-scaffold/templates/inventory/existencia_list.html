@@ -1,18 +1,18 @@
 {% extends "inventory/base_mobile.html" %}
-{% block title %}Munición{% endblock %}
+{% block title %}Consumo{% endblock %}
 {% block content %}
 <div class="siga-card__top" style="margin-bottom:2px;">
-  <h1 class="siga-page-title" style="margin:0;">Munición</h1>
+  <h1 class="siga-page-title" style="margin:0;">Consumo</h1>
   {% if user.is_admin_role %}
   <a class="siga-btn-secondary" style="width:auto; height:auto; padding:8px 14px; line-height:1; text-decoration:none;" href="{% url 'inventory:existencia_crear' %}">+ Añadir</a>
   {% endif %}
 </div>
-<nav class="siga-quicklinks" aria-label="Accesos de munición">
-  <a href="{% url 'inventory:existencia_asignada_list' %}{% if ver_todas %}?todas=1{% endif %}">Munición asignada</a>
+<nav class="siga-quicklinks" aria-label="Accesos de consumo">
+  <a href="{% url 'inventory:existencia_asignada_list' %}{% if ver_todas %}?todas=1{% endif %}">Consumo asignado</a>
   <a href="{% url 'inventory:prestamo_list' %}{% if ver_todas %}?todas=1{% endif %}">Préstamos</a>
 </nav>
 <div class="siga-page-subtitle">
-  {% if ver_todas %}Todas las compañías{% else %}Compañía {{ compania_actual|default:"—" }}{% endif %}
+  {% include "inventory/_alcance.html" with con_deposito=True %}
   · {{ existencias|length }} registro{{ existencias|length|pluralize }}
   {% if not ver_todas %}· <a href="?todas=1{% if q %}&q={{ q|urlencode }}{% endif %}">ver todas</a>{% endif %}
 </div>

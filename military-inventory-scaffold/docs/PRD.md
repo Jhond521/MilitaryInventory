@@ -2,11 +2,20 @@
 
 | | |
 |---|---|
-| **Estado** | En revisión (v1.6 — cédula y préstamos con devolución) |
+| **Estado** | En revisión (v1.7 — selección global de compañía y/o depósito) |
 | **Autor** | John Cuervo (para David Bolaños — Batallón de Selva No. 52) |
-| **Última actualización** | 2026-10-20 |
-| **Versión** | v1.6 |
+| **Última actualización** | 2026-10-21 |
+| **Versión** | v1.7 |
 
+> **Terminología** (issue #26, 2026-10-21): en la interfaz, el módulo de existencias por
+> cantidad (munición, cascos sin serie, granadas, etc.) se llama **Consumo**. En este
+> documento "munición" sigue nombrando ese mismo material.
+>
+> **Cambios v1.7** (issue #25, 2026-10-21): se agrega **RF-24**. La selección de
+> trabajo al ingresar ya no es solo de compañía: el usuario elige **compañía y/o
+> depósito**, al menos uno. Todo se filtra por esa combinación y sigue siendo
+> contexto, no permiso (S-2).
+>
 > **Cambios v1.6** (feedback de David, issues #18 "Set de correcciones nuevo" y #20,
 > 2026-10-20): se agrega **RF-21** (cédula del soldado como identificador único),
 > **RF-22** (devolver préstamos de munición y resaltar lo prestado/recibido) y
@@ -394,6 +403,25 @@ munición.
 - [ ] Préstamo y devolución quedan en el historial del arma y en Movimientos (RNF-03).
 - [ ] Administrador y enlace pueden prestar y devolver.
 
+### RF-24 — Selección global de compañía y/o depósito
+**Prioridad**: Alta
+**Descripción**: Como usuario, quiero elegir con qué compañía y/o depósito trabajo
+para que todo el sistema se filtre por esa combinación. Amplía RF-02.
+**Criterios de aceptación**:
+
+- [ ] La pantalla de selección muestra las compañías a un lado y los depósitos al otro.
+  Hay que elegir al menos una de las dos y se pueden elegir ambas.
+- [ ] El encabezado muestra la compañía y el depósito elegidos. La que no se eligió
+  aparece como "Todas" o "Todos".
+- [ ] Con un depósito elegido se ve solo lo que está **físicamente** en él. Un arma en
+  mano no tiene depósito, así que no aparece.
+- [ ] Soldados se filtra solo por compañía, porque los soldados no tienen depósito.
+- [ ] Movimientos muestra solo las filas que tocan el depósito elegido. La munición
+  asignada se filtra por el depósito del que salió.
+- [ ] En los formularios, la compañía y el depósito elegidos vienen preseleccionados,
+  pero se pueden cambiar.
+- [ ] "Ver todas" quita ambos filtros. Sigue siendo contexto, no permiso (S-2).
+
 ## 7. Requerimientos no funcionales
 
 | ID | Categoría | Requerimiento | Cómo se verifica |
@@ -449,7 +477,7 @@ información se respalda. Los elementos dados de baja se conservan (no se elimin
 
 | Fase | Contenido | Requerimientos |
 |---|---|---|
-| v1 (MVP) | Acceso + roles, selección de compañía, CRUD de datos maestros, pelotones, material serializado (alta/ubicación/estado/movimientos/baja), existencias por cantidad y préstamo de munición, entrega/devolución de existencias a un soldado, grado del soldado, búsqueda, campos personalizados, carga inicial serializada, ficha del soldado, cédula del soldado, devolución de préstamos de munición, préstamo temporal de armamento, y app **móvil responsive e instalable (PWA)**. | RF-01 a RF-23 |
+| v1 (MVP) | Acceso + roles, selección de compañía, CRUD de datos maestros, pelotones, material serializado (alta/ubicación/estado/movimientos/baja), existencias por cantidad y préstamo de munición, entrega/devolución de existencias a un soldado, grado del soldado, búsqueda, campos personalizados, carga inicial serializada, ficha del soldado, cédula del soldado, devolución de préstamos de munición, préstamo temporal de armamento, selección global de compañía y/o depósito, y app **móvil responsive e instalable (PWA)**. | RF-01 a RF-24 |
 | Siguiente | Importador de Excel autoservicio, carga de munición inicial, reportes/exportes, tablero de resumen por compañía, acuse de entrega. | — |
 | Algún día | Multi-unidad con configurador, app móvil, escaneo de serie. | — |
 
@@ -465,8 +493,9 @@ información se respalda. Los elementos dados de baja se conservan (no se elimin
 ## 13. Supuestos
 
 - S-1: "Unidad" del soldado = su **compañía**. Una sola unidad (Batallón de Selva No. 52).
-- S-2: La selección de compañía al ingresar es **contexto de trabajo**, no restricción
-  de permisos: los 6 usuarios ven todas las compañías.
+- S-2: La selección de compañía y/o depósito al ingresar (RF-02, RF-24) es **contexto
+  de trabajo**, no restricción de permisos: los 6 usuarios ven todas las compañías y
+  todos los depósitos.
 - S-3: **Administrador** = comandante, auxiliar y bodegueros; **enlace** = los 2 de
   movimientos (confirmado por David, P-2).
 - S-4: La munición se controla por **lote + cantidad** y **se presta entre compañías**

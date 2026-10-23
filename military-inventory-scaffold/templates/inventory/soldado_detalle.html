@@ -54,7 +54,7 @@
   </section>
 
   <section class="siga-detail-panel" aria-labelledby="municion-titulo">
-    <div class="siga-detail-panel__title" id="municion-titulo">Munición y elementos en mano</div>
+    <div class="siga-detail-panel__title" id="municion-titulo">Consumo y elementos en mano</div>
     <div class="siga-card-list">
       {% for asignada in asignadas %}
       <div class="siga-card">
@@ -71,7 +71,7 @@
         </div>
       </div>
       {% empty %}
-      <p class="siga-empty" style="padding:8px 0;">No tiene munición a cargo.</p>
+      <p class="siga-empty" style="padding:8px 0;">No tiene consumo a cargo.</p>
       {% endfor %}
     </div>
   </section>
@@ -89,7 +89,7 @@
       </div>
       <div class="siga-timeline__content">
         {% if mov.clase == "MUNICION" %}
-        <div class="siga-timeline__titulo">{% if mov.tipo == "ENTREGA" %}Entrega de munición{% else %}Devolución de munición{% endif %}</div>
+        <div class="siga-timeline__titulo">{% if mov.tipo == "ENTREGA" %}Entrega de consumo{% else %}Devolución de consumo{% endif %}</div>
         <div class="siga-timeline__detalle">{{ mov.cantidad }} · {{ mov.existencia.tipo.nombre }}{% if mov.existencia.lote %} · Lote {{ mov.existencia.lote }}{% endif %}</div>
         {% else %}
         <div class="siga-timeline__titulo">{% if mov.tipo == "ENTREGA" %}Entrega de armamento{% elif mov.tipo == "DEVOLUCION" %}Devolución de armamento{% else %}Baja de armamento{% endif %}</div>

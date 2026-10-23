@@ -5,6 +5,11 @@
   <h1 class="siga-page-title" style="margin:0;">Préstamos</h1>
   <a class="siga-btn-secondary" style="width:auto; height:auto; padding:8px 14px; line-height:1; text-decoration:none;" href="{% url 'inventory:prestamo_transferir' %}">+ Prestar</a>
 </div>
+<div class="siga-page-subtitle">
+  {% include "inventory/_alcance.html" with con_deposito=True %}
+  · {{ prestamos|length }} préstamo{{ prestamos|length|pluralize }}
+  {% if not ver_todas %}· <a href="?todas=1">ver todas</a>{% endif %}
+</div>
 <div class="siga-card-list">
   {% for prestamo in prestamos %}
   <div class="siga-card">

@@ -126,6 +126,29 @@ body.siga-app {
   letter-spacing: 1px;
 }
 
+/* Compañía y depósito de trabajo (issue #25): el chip no debe desbordar el
+   header en móvil — el valor se recorta con ellipsis. */
+.siga-header__compania {
+  min-width: 0;
+}
+
+.siga-header__compania-label {
+  flex-shrink: 0;
+}
+
+.siga-header__compania-valor {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 380px) {
+  .siga-header__compania-label {
+    display: none;
+  }
+}
+
 /* Content */
 .siga-content {
   padding: 14px 16px 24px;

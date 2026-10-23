@@ -338,6 +338,22 @@ El corazón del sistema.
     munición) numeran cada fila con su posición en la lista visible y muestran la cédula.
     Solo plantillas y CSS (`.siga-pick-item__num`).
 
+## Actualizaciones v1.7 (issue #25)
+
+- H-31 — Selección global de compañía y/o depósito (RF-24, amplía RF-02/H-08) ✅
+  - **Estado**: Hecho (issue #25). `/compania/` muestra compañías y depósitos, y cada lado
+    tiene la opción "Todas"/"Todos". Hay que elegir al menos uno. La sesión guarda
+    `compania_actual_id` y `deposito_actual_id`, y `_alcance(request)` devuelve el alcance
+    efectivo (`?todas=1` quita ambos). Inventario con depósito muestra solo lo que está en
+    él; Munición, Préstamos, Movimientos y Munición asignada también filtran por depósito;
+    Soldados solo por compañía. Los formularios preseleccionan la selección, que se puede
+    cambiar. No hay migraciones.
+
+- H-32 — Renombres de interfaz: "Munición" → "Consumo" y acrónimo SIGA completo en el login ✅
+  - **Estado**: Hecho (issue #26). Solo textos visibles: navegación, títulos, ficha del soldado,
+    clase de Movimientos, el login ("Sistema de Inventario y Gestión de Armamento") y el `name`
+    del manifest de la PWA. Rutas, modelos y nombres de tipos no cambian.
+
 ## Fase 2 — Siguiente
 
 - H-20 — Módulo de importación de Excel autoservicio (que David suba y cargue) (RF-13)
