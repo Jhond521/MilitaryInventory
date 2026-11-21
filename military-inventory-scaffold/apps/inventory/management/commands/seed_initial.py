@@ -22,68 +22,52 @@ DEPOSITOS = [
 ]
 
 # (nombre, forma de control) — ver docs/PRD.md, RF-05 y Anexo A.
+# Catálogo oficial = el que quedó en producción con la carga del inventario
+# inicial (2026-11-20): los nombres de armamento son la "Denominación" tal cual
+# aparece en el Excel de activos de David (ACTIVOS FIJOS COMPAÑIAv3.xlsx), y los
+# de consumo los del archivo de material de consumo. No reintroducir los nombres
+# largos inventados antes de tener los archivos reales (p. ej. "FUSIL AR CAL.
+# 5.56 MM"): en una base ya sembrada, `update_or_create` los volvería a crear
+# como tipos duplicados y vacíos.
 TIPOS_ARMAMENTO = [
-    ("MUNICION CAL 5.56MM", TipoArmamento.Control.CANTIDAD),
-    ("MUNICION ESLABONADA CAL 5,56MM", TipoArmamento.Control.CANTIDAD),
-    ("CARTUCHO CAL 12.7X99 MM ESLABONADA", TipoArmamento.Control.CANTIDAD),
-    ("MUNICION CAL 09 MM", TipoArmamento.Control.CANTIDAD),
-    ("MUNICION ESLABONADA CAL 7,62MM", TipoArmamento.Control.CANTIDAD),
-    ("GRANADA 40MM 40X53 HE ESLABONADA", TipoArmamento.Control.CANTIDAD),
-    ("GRANADA DE HUMO DE VARIOS COLORES", TipoArmamento.Control.CANTIDAD),
-    ("GRANADA IMC 40 MM X 46 MM H.E.", TipoArmamento.Control.CANTIDAD),
-    ("GRANADA IMC CAL 60 MM H.E. - T.C.", TipoArmamento.Control.CANTIDAD),
-    ("GRANADA IMC CAL 81 MM H.E. - T.C.", TipoArmamento.Control.CANTIDAD),
-    ("MAGAZINE,CARTRIDGE", TipoArmamento.Control.CANTIDAD),
-    ("GRANADA DE MANO IM M26 H.E.", TipoArmamento.Control.CANTIDAD),
-    ("CAÑONES DE REPUESTO", TipoArmamento.Control.CANTIDAD),
-    ("BALISTICO HELMET KEVLAR N. III (SIN SERIE)", TipoArmamento.Control.CANTIDAD),
-    ("FUSIL AR PLUS CAL. 5.56 MM", TipoArmamento.Control.SERIE),
-    ("FUSIL AR CAL. 5.56 MM", TipoArmamento.Control.SERIE),
-    ("AMETRALLADORA E-4 7,62MM", TipoArmamento.Control.SERIE),
-    ("AMETRALLADORA M-2 HB QCB 50 mm", TipoArmamento.Control.SERIE),
-    ("AMETRALLADORA M249 CAL 5.56MM", TipoArmamento.Control.SERIE),
-    ("LANZA GRANADA DE 40MM MK-19 MOD-3", TipoArmamento.Control.SERIE),
-    ("LANZA GRANADA DE 40MM MK1", TipoArmamento.Control.SERIE),
-    ("MORTERO C-06 L/A DE 60MM", TipoArmamento.Control.SERIE),
-    ("MORTERO SOLTAN", TipoArmamento.Control.SERIE),
-    ("MORTERO B-500", TipoArmamento.Control.SERIE),
-    ("PISTOLA PX4 STORM", TipoArmamento.Control.SERIE),
-    ("PISTOLA PRIETO BERETTA", TipoArmamento.Control.SERIE),
-    ("VISOR NOCTURNO AN PVS 14", TipoArmamento.Control.SERIE),
-    ("VISOR NOCTURNO AN PVS 7B", TipoArmamento.Control.SERIE),
-    ("VISOR NOCTURNO DUAL/DOBLE", TipoArmamento.Control.SERIE),
-    # Agregados al recibir los Excel reales (test files/, issue "cargar la data
-    # para probar") — las denominaciones de arriba se inventaron antes de tener
-    # el archivo real y no coinciden con él ni con el Anexo A del PRD; se dejan
-    # intactas (por si representan algo real que aún no está en estos archivos)
-    # y se agregan las denominaciones EXACTAS que sí aparecen en los Excel, para
-    # que `importar_armamento`/`importar_existencias` las reconozcan.
+    # Por serie individual (Armamento).
     ("ACE-23", TipoArmamento.Control.SERIE),
     ("GALIL AR", TipoArmamento.Control.SERIE),
     ("GALIL PLUS", TipoArmamento.Control.SERIE),
-    ("AN PVS 14", TipoArmamento.Control.SERIE),
-    ("AN PVS 7B", TipoArmamento.Control.SERIE),
+    ("M-60 E-4", TipoArmamento.Control.SERIE),
     ("M-2 HB QCB", TipoArmamento.Control.SERIE),
     ("M-249", TipoArmamento.Control.SERIE),
-    ("M-60 E-4", TipoArmamento.Control.SERIE),
-    ("MK-19 MOD-3", TipoArmamento.Control.SERIE),
-    ("TIPO MGL", TipoArmamento.Control.SERIE),
     ("TIPO MK1", TipoArmamento.Control.SERIE),
+    ("TIPO MGL", TipoArmamento.Control.SERIE),
+    ("MK-19 MOD-3", TipoArmamento.Control.SERIE),
     ("B-500", TipoArmamento.Control.SERIE),
+    ("SOLTAN", TipoArmamento.Control.SERIE),
     ("C-06 L/A", TipoArmamento.Control.SERIE),
     ("C-576 T/C", TipoArmamento.Control.SERIE),
-    ("SOLTAN", TipoArmamento.Control.SERIE),
-    ("PX4 STORM", TipoArmamento.Control.SERIE),
     ("PRIETO BERETTA", TipoArmamento.Control.SERIE),
-    ("BALISTICO HELMET KEVLAR N. III", TipoArmamento.Control.CANTIDAD),
+    ("PX4 STORM", TipoArmamento.Control.SERIE),
+    ("AN PVS 14", TipoArmamento.Control.SERIE),
+    ("AN PVS 7B", TipoArmamento.Control.SERIE),
+    ("VISOR NOCTURNO DUAL/DOBLE", TipoArmamento.Control.SERIE),
+    # Por cantidad (Existencia).
+    ("MUNICION CAL 5.56MM", TipoArmamento.Control.CANTIDAD),
+    ("MUNICION ESLABONADA CAL 5,56MM", TipoArmamento.Control.CANTIDAD),
+    ("MUNICION ESLABONADA CAL 7,62MM", TipoArmamento.Control.CANTIDAD),
+    ("CARTUCHO CAL 12.7X99 MM ESLABONADA", TipoArmamento.Control.CANTIDAD),
     ("CARTUCHO CAL 7.62 M-118", TipoArmamento.Control.CANTIDAD),
-    ("CAÑONES DE REPUESTO .50", TipoArmamento.Control.CANTIDAD),
-    ("CAÑONES DE REPUESTO M60", TipoArmamento.Control.CANTIDAD),
-    ("COMPASS,MAGNETIC,UN", TipoArmamento.Control.CANTIDAD),
-    ("GRANADA DE PRACTICA DE 60 MM", TipoArmamento.Control.CANTIDAD),
+    ("MUNICION CAL 09 MM", TipoArmamento.Control.CANTIDAD),
+    ("MAGAZINE,CARTRIDGE", TipoArmamento.Control.CANTIDAD),
+    ("GRANADA 40MM 40X53 HE ESLABONADA", TipoArmamento.Control.CANTIDAD),
+    ("GRANADA IMC 40 MM X 46 MM H.E.", TipoArmamento.Control.CANTIDAD),
     ("GRANADA IM 40MM DE PRACTICA", TipoArmamento.Control.CANTIDAD),
-    ("GRANADA IMC 40 MM X 53 MM ESLB", TipoArmamento.Control.CANTIDAD),
-    ("MUNICION ESLABONADA CAL 7,62 X 99 MM", TipoArmamento.Control.CANTIDAD),
+    ("GRANADA IMC CAL 60 MM H.E. - T.C.", TipoArmamento.Control.CANTIDAD),
+    ("GRANADA IMC CAL 60 MM H.E. - L.A.", TipoArmamento.Control.CANTIDAD),
+    ("GRANADA DE PRACTICA DE 60 MM", TipoArmamento.Control.CANTIDAD),
+    ("GRANADA IM 81 MM H.E.", TipoArmamento.Control.CANTIDAD),
+    ("GRANADA DE MANO IM M26 H.E.", TipoArmamento.Control.CANTIDAD),
+    ("GRANADA DE HUMO DE VARIOS COLORES", TipoArmamento.Control.CANTIDAD),
+    ("BALISTICO HELMET KEVLAR N. III", TipoArmamento.Control.CANTIDAD),
+    ("CAÑONES DE REPUESTO", TipoArmamento.Control.CANTIDAD),
 ]
 
 

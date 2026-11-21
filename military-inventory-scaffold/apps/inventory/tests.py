@@ -62,14 +62,28 @@ class SeedCommandTests(TestCase):
         self.assertEqual(Compania.objects.count(), 7)
         self.assertEqual(Deposito.objects.count(), 2)
         self.assertEqual(Peloton.objects.count(), 28)  # 4 por compañía x 7
-        self.assertEqual(TipoArmamento.objects.count(), 55)
+        self.assertEqual(TipoArmamento.objects.count(), 36)
 
     def test_seed_marks_control_por_serie_y_cantidad(self):
         call_command("seed_initial")
-        fusil = TipoArmamento.objects.get(nombre="FUSIL AR CAL. 5.56 MM")
+        fusil = TipoArmamento.objects.get(nombre="GALIL AR")
         municion = TipoArmamento.objects.get(nombre="MUNICION CAL 5.56MM")
         self.assertEqual(fusil.control, TipoArmamento.Control.SERIE)
         self.assertEqual(municion.control, TipoArmamento.Control.CANTIDAD)
+
+    def test_seed_uses_only_official_names(self):
+        # Los nombres largos previos a los Excel reales no deben volver a
+        # sembrarse: duplicarían, vacíos, los tipos oficiales de producción.
+        call_command("seed_initial")
+        for viejo in (
+            "FUSIL AR CAL. 5.56 MM",
+            "BALISTICO HELMET KEVLAR N. III (SIN SERIE)",
+            "GRANADA IMC CAL 81 MM H.E. - T.C.",
+        ):
+            self.assertFalse(TipoArmamento.objects.filter(nombre=viejo).exists(), viejo)
+        self.assertEqual(
+            TipoArmamento.objects.get(nombre="ACE-23").control, TipoArmamento.Control.SERIE
+        )
 
 
 class ArmamentoRulesTests(TestCase):
