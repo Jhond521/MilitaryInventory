@@ -37,3 +37,4 @@ media/
 
 # Datos reales del batallón (series de armamento, existencias) — nunca a git.
 /test files/
+/Initial_Inventory/

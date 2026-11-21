@@ -36,7 +36,7 @@ pip install -e . --group dev      # or: pip install django psycopg[binary] dj-da
 # first-time setup
 cp .env.example .env              # then edit values
 python manage.py migrate
-python manage.py seed_initial     # seeds 1 unidad, 7 compañías, 2 depósitos, 28 pelotones, 29 tipos
+python manage.py seed_initial     # seeds 1 unidad, 7 compañías, 2 depósitos, 28 pelotones, 36 tipos
 python manage.py createsuperuser  # first user, role=ADMIN (email is the login)
 
 # run in development
