@@ -34,7 +34,38 @@
       {% endfor %}
     </select>
   </label>
+  <label class="siga-chip">Pelotón
+    <select name="peloton" onchange="this.form.submit()">
+      <option value="">Todos</option>
+      {% for peloton in pelotones %}
+      <option value="{{ peloton.pk }}" {% if peloton_id == peloton.pk|stringformat:"s" %}selected{% endif %}>{{ peloton.nombre }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label class="siga-chip">Categoría
+    <select name="tipo" onchange="this.form.submit()">
+      <option value="">Todas</option>
+      {% for tipo in tipos %}
+      <option value="{{ tipo.pk }}" {% if tipo_id == tipo.pk|stringformat:"s" %}selected{% endif %}>{{ tipo.nombre }}</option>
+      {% endfor %}
+    </select>
+  </label>
 </form>
+
+<div class="siga-kpi-row">
+  <div class="siga-kpi">
+    <div class="siga-kpi__label">Total</div>
+    <div class="siga-kpi__value">{{ kpi_total }}</div>
+  </div>
+  <div class="siga-kpi siga-kpi--deposito">
+    <div class="siga-kpi__label">En depósito</div>
+    <div class="siga-kpi__value">{{ kpi_en_deposito }}</div>
+  </div>
+  <div class="siga-kpi siga-kpi--mano">
+    <div class="siga-kpi__label">En mano</div>
+    <div class="siga-kpi__value">{{ kpi_en_mano }}</div>
+  </div>
+</div>
 
 <div class="siga-card-list">
   {% for existencia in existencias %}
@@ -62,7 +93,7 @@
     {% endfor %}
     {% if existencia.en_mano %}
     <div class="siga-card__meta">
-      <span>En mano: <strong>{{ existencia.en_mano }}</strong></span>
+      <span>En mano{% if peloton_id %} del pelotón{% endif %}: <strong>{{ existencia.en_mano }}</strong></span>
       <a href="{% url 'inventory:existencia_asignada_list' %}?existencia={{ existencia.pk }}">Ver quién la tiene</a>
     </div>
     {% endif %}

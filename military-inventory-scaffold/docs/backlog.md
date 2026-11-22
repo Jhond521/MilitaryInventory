@@ -363,6 +363,13 @@ El corazón del sistema.
     existencia de mismo tipo, compañía y lote en el depósito elegido, y la crea si no existe.
     El `MovimientoExistencia` queda sobre esa existencia. No hay migraciones.
 
+- Consumo con los filtros de Inventario: Categoría, Pelotón y KPIs ✅
+  - **Estado**: Hecho (issue #31). `existencia_list` agrega los chips Categoría (tipos
+    CANTIDAD) y Pelotón, y se mantiene el chip Depósito. Pelotón es indirecto: muestra las
+    existencias que tienen en mano soldados de ese pelotón, y "En mano" muestra solo lo suyo.
+    Los KPI En depósito / En mano / Total suman cantidades sobre el alcance (compañía y
+    depósito), sin chips ni búsqueda. No hay Estado ni Baja. No hay migraciones.
+
 ## Fase 2 — Siguiente
 
 - H-20 — Módulo de importación de Excel autoservicio (que David suba y cargue) (RF-13)
