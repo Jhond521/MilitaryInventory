@@ -3,8 +3,9 @@ description: Enriquece los tickets en ToDo con detalle y los pasa a Ready
 ---
 
 Eres el asistente de planeación de **SIGA — Inventario de Armamento (Batallón de Selva N.º 52)**. Tu
-trabajo aquí es tomar los tickets que están en el estado **ToDo** del tablero y enriquecerlos con todo
-el contexto disponible, para que queden listos para desarrollar. Al terminar cada uno, lo mueves a **Ready**.
+trabajo aquí es tomar los tickets que están en el estado **ToDo** del tablero (columna **Backlog**) y
+enriquecerlos con todo el contexto disponible, para que queden listos para desarrollar. Al terminar
+cada uno, lo mueves a **Ready**.
 
 Lee primero el helper del tablero: @.claude/kanban.md
 
@@ -28,6 +29,18 @@ Lee y ten presente:
       - **Contexto / objetivo**: qué problema resuelve y a qué RF del PRD / historia del backlog corresponde.
       - **Alcance**: qué entra y qué NO entra en este ticket.
       - **Criterios de aceptación**: lista verificable (Given/When/Then o checklist), tomados del RF.
+        **Son el contrato del QA automático** (`/probar-dev`): si no se pueden comprobar, el ticket no
+        llega solo a producción. Reglas:
+        - Numéralos en orden (AC-1, AC-2…) como checklist `- [ ] AC-k …`.
+        - Cada uno debe ser **observable**: qué pantalla o ruta, qué dato de entrada, qué resultado
+          concreto (texto, cantidad, fila en la BD, movimiento registrado). No uses "funciona bien" ni
+          "se ve bien".
+        - Al final de cada uno indica `(verificación: test | dev | humano)`:
+          - `test`: lo prueba pytest.
+          - `dev`: se comprueba contra el ambiente dev desplegado, por HTTP o en la BD.
+          - `humano`: solo lo que de verdad no se puede observar así, como la apariencia visual fina,
+            un dispositivo real o instalar la PWA.
+        - Minimiza `humano`: un ticket con AC `humano` no se despliega solo.
       - **Notas de diseño**: pantallas/componentes de `design_specs/` relevantes (responsive, mobile-first,
         español, PWA instalable, paleta del escudo).
       - **Notas técnicas**: modelos/apps/rutas afectadas, reglas de `CLAUDE.md` que aplican

@@ -1,16 +1,34 @@
 # Comandos de flujo — SIGA (Inventario de Armamento)
 
-Comandos de Claude Code para el ciclo de trabajo sobre el tablero de GitHub Projects
-(ToDo → Ready → In Progress → In QA → QA Done → Done) y Railway (dev/prod).
+Comandos de Claude Code para el ciclo de trabajo sobre el tablero de GitHub Projects y Railway
+(dev/prod). Tablero real: **Backlog (= ToDo) → Ready → In progress → In review (= In QA) → Done**.
+"QA Done" no existe: lo aprobado por el QA automático pasa directo a Done al quedar en producción.
 
 | Comando | Qué hace | Mueve la tarjeta |
 |---|---|---|
-| `/enriquecer-todo` | Enriquece los tickets en **ToDo** con PRD, docs, backlog, feedback y `design_specs/`. | ToDo → **Ready** |
-| `/desarrollar <#>` | Desarrolla un ticket sobre `develop` con checklist y lo deja en local para prueba manual. | Ready → **In Progress** |
-| `/publicar-dev <#>` | Push a `develop` → deploy Railway **dev** para probar. | In Progress → **In QA** |
-| *(manual)* | Pruebas manuales en dev. | In QA → **QA Done** |
-| `/desplegar-prod` | PR `develop`→`main` de todo lo de **QA Done**, merge tras CI → deploy **prod**. | QA Done → **Done** |
-| `/quick-fix <#>` | Corre todo el pipeline (Enriquecer → Dev → Publicar dev → QA automático → Prod) sin pausas manuales. Sólo para cambios chicos y de bajo riesgo. | ToDo/Ready → **Done** |
+| `/enriquecer-todo` | Enriquece los tickets en **ToDo** con PRD, docs, backlog, feedback y `design_specs/`. Los criterios de aceptación quedan numerados (AC-k) y verificables. | ToDo → **Ready** |
+| `/desarrollar <#>` | Desarrolla un ticket sobre `develop` con checklist (un test por AC) y lo deja en local para prueba manual. | Ready → **In progress** |
+| `/publicar-dev <#>` | Push a `develop` → deploy Railway **dev**, y lanza `/probar-dev`. | In progress → **In review** |
+| `/probar-dev [#...]` | **QA automático**: prueba cada AC con tests y contra el dev desplegado (`.claude/qa/`, con rollback) más la regresión. Si todo pasa, despliega a prod (PR → CI → merge). | In review → **Done** |
+| `/desplegar-prod` | PR `develop`→`main` del lote aprobado, merge tras CI → deploy **prod**. Normalmente lo lanza `/probar-dev`. | In review (aprobado) → **Done** |
+| `/quick-fix <#>` | Corre todo el pipeline (Enriquecer → Desarrollar → Publicar dev → `/probar-dev`) sin pausas manuales. Sólo para cambios chicos y de bajo riesgo. | ToDo/Ready → **Done** |
+
+## QA automático (`.claude/qa/`)
+- `smoke_dev.py` corre **dentro del contenedor de Railway dev**. Usa el test client de Django,
+  autenticado como un ADMIN existente, en **una transacción que siempre hace rollback**: puede probar
+  pantallas con login e incluso POST sin dejar datos en dev.
+- `run_smoke_dev.sh <spec.json>` lo sube por `railway ssh` (en base64 y por trozos, con reintentos) y
+  sale 0 sólo si todos los checks pasan.
+- `specs/issue-<N>.json` tiene un check por criterio de aceptación (`#N AC-k …`). Cada ticket aprobado
+  deja su spec, y todos se vuelven a correr como **regresión** en cada `/probar-dev`.
+- Producción **nunca** se prueba por ssh: sólo `curl` a `/health/`.
+
+Gates que frenan el despliegue automático:
+- un AC sin evidencia o en rojo;
+- AC que requieren humano (pregunta antes);
+- commits en `develop` de tickets no aprobados (es todo o nada);
+- migraciones destructivas (pide autorización);
+- CI en rojo.
 
 `kanban.md` (en `.claude/kanban.md`) es un helper compartido: contiene los snippets de `gh`/GraphQL
 para descubrir el project y mover tarjetas. Los comandos lo incluyen con `@.claude/kanban.md`.

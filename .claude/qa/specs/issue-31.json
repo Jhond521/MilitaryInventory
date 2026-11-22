@@ -1,0 +1,37 @@
+{
+  "ticket": 31,
+  "title": "Consumo con filtros Categoría, Pelotón (indirecto) y KPIs",
+  "compania": null,
+  "setup": "c = ctx['compania']\nd1 = m.Deposito.objects.order_by('pk').first()\nt1 = m.TipoArmamento.objects.create(nombre='QA-31-CARTUCHO', control='CANTIDAD')\nt2 = m.TipoArmamento.objects.create(nombre='QA-31-GRANADA', control='CANTIDAD')\np1 = m.Peloton.objects.create(compania=c, nombre='QA-31-P1')\np2 = m.Peloton.objects.create(compania=c, nombre='QA-31-P2')\ns1 = m.Soldado.objects.create(apellidos_nombres='QA Uno 31', compania=c, peloton=p1, cedula='990000311')\ns2 = m.Soldado.objects.create(apellidos_nombres='QA Dos 31', compania=c, peloton=p2, cedula='990000312')\ne1 = m.Existencia.objects.create(tipo=t1, compania=c, deposito=d1, cantidad=100)\ne2 = m.Existencia.objects.create(tipo=t2, compania=c, deposito=d1, cantidad=20)\ne1.entregar(soldado=s1, cantidad=15, usuario=user)\ne1.refresh_from_db()\ne1.entregar(soldado=s2, cantidad=30, usuario=user)\ne2.entregar(soldado=s2, cantidad=4, usuario=user)\nfrom django.db.models import Sum\nalc = m.Existencia.objects.filter(compania=c, deposito=d1)\nctx.update(t1=t1, t2=t2, p1=p1, e1=e1, e2=e2, d1=d1, dep=alc.aggregate(x=Sum('cantidad'))['x'] or 0, mano=m.ExistenciaAsignada.objects.filter(existencia__in=alc).aggregate(x=Sum('cantidad'))['x'] or 0)",
+  "checks": [
+    {
+      "name": "#31 AC-1 filtro Categoría deja solo las existencias de ese tipo",
+      "path": "/municion/?tipo={ctx[t2].pk}&deposito={ctx[d1].pk}",
+      "contains": ["name=\"tipo\""],
+      "assert": "[x.pk for x in response.context['existencias']] == [ctx['e2'].pk]"
+    },
+    {
+      "name": "#31 AC-2 filtro Pelotón (indirecto) muestra lo que tiene en mano ese pelotón",
+      "path": "/municion/?peloton={ctx[p1].pk}&deposito={ctx[d1].pk}",
+      "contains": ["name=\"peloton\"", "En mano del pelotón"],
+      "assert": "[(x.pk, x.en_mano) for x in response.context['existencias']] == [(ctx['e1'].pk, 15)]"
+    },
+    {
+      "name": "#31 AC-3 KPIs En depósito / En mano / Total cuadran con el alcance (sin chips)",
+      "path": "/municion/?tipo={ctx[t2].pk}&deposito={ctx[d1].pk}",
+      "contains": ["siga-kpi-row"],
+      "assert": "(response.context['kpi_en_deposito'], response.context['kpi_en_mano'], response.context['kpi_total']) == (ctx['dep'], ctx['mano'], ctx['dep'] + ctx['mano'])"
+    },
+    {
+      "name": "#31 AC-4 chip Depósito y búsqueda siguen funcionando",
+      "path": "/municion/?q=QA-31-GRANADA&deposito={ctx[d1].pk}",
+      "contains": ["name=\"deposito\""],
+      "assert": "[x.pk for x in response.context['existencias']] == [ctx['e2'].pk]"
+    },
+    {
+      "name": "#31 AC-5 usa los componentes siga-chips y siga-kpi-row de Inventario",
+      "path": "/municion/",
+      "contains": ["class=\"siga-chips\"", "class=\"siga-kpi-row\"", "siga-kpi--deposito", "siga-kpi--mano"]
+    }
+  ]
+}

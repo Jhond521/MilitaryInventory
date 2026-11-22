@@ -2,16 +2,24 @@
 description: Despliega a producción (PR develop->main) todo lo que está en QA Done y lo pasa a Done
 ---
 
-Despliegas a **producción** todo lo que está aprobado en **QA Done**. El flujo a prod es **vía Pull
-Request** de `develop` → `main` (para que corra el CI como gate); al hacer merge, Railway despliega
-producción automáticamente desde `main`. Al confirmar el deploy, mueves esas tarjetas a **Done**.
+Despliegas a **producción** lo que está aprobado. El flujo a prod es **vía Pull Request** de
+`develop` → `main`, para que corra el CI como gate. Al hacer merge, Railway despliega producción
+automáticamente desde `main`. Al confirmar el deploy, mueves esas tarjetas a **Done**.
+
+> **QA Done no existe en el tablero.** "Aprobado" significa que está en **In review** y tiene en el
+> issue el informe "Aprobado por QA automático" de `/probar-dev`, o que yo lo aprobé explícitamente.
+> Normalmente este comando lo lanza `/probar-dev` al final, ya sin pedir confirmación del lote. Si lo
+> corro a mano, sigue los pasos tal cual, incluida la confirmación.
 
 Lee primero: @.claude/kanban.md · `docs/adr/0001-tech-stack.md` (decisiones de despliegue).
 
 ## Pasos
 1. **Setup gh** (sección 0) y descubre IDs (sección 1).
-2. **Reúne lo aprobado**: lista los items en estado **QA Done** (sección 2). Muéstrame la lista
-   (número + título) y **confirma conmigo** que ese es exactamente el lote a producción.
+2. **Reúne lo aprobado**: lista los items en **In review** con el informe de QA aprobado (sección 2).
+   Muéstrame la lista (número + título) y **confirma conmigo** que ese es exactamente el lote a
+   producción. Si te lanzó `/probar-dev` con el lote ya aprobado, no preguntes.
+   - **Todo o nada**: `git log --no-merges origin/main..origin/develop` no puede traer commits de
+     tickets que no estén en el lote aprobado. Si los trae, detente.
 3. **Chequeo de integridad de datos**: por defecto **NO** se tocan los datos existentes. Revisa si el
    lote incluye migraciones Django nuevas (`apps/*/migrations/`). Si alguna es destructiva
    (borrar/renombrar columnas o tablas, `RunPython` que borre datos), **detente y avísame**; sólo sigo
@@ -27,7 +35,7 @@ Lee primero: @.claude/kanban.md · `docs/adr/0001-tech-stack.md` (decisiones de 
    migraciones se aplican solas).
 8. **Verifica producción**: confirma que main avanzó y recuérdame revisar la URL de prod (~1–2 min).
    La siembra `seed_initial` **no** corre sola; sólo si fuese un ambiente nuevo/base recreada haría falta
-   `railway run --service MilitaryInventory --environment production python manage.py seed_initial`
+   `railway run --service web-prod --environment production python manage.py seed_initial`
    (no la corras salvo que te lo pida).
 9. **Mueve a "Done"**: cada tarjeta del lote a `$OPT_DONE` (sección 3).
 10. **Resumen**: qué tickets se desplegaron, el estado del deploy, y cualquier acción manual pendiente.
