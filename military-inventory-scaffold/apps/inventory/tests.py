@@ -621,6 +621,53 @@ class EntregaDevolucionExistenciaTests(TestCase):
         with self.assertRaises(ValidationError):
             asignada.devolver(cantidad=31, usuario=self.usuario)
 
+    def _asignar(self, cantidad=30):
+        self.existencia.entregar(
+            soldado=self.soldado_a, cantidad=cantidad, usuario=self.usuario
+        )
+        self.existencia.refresh_from_db()
+        return ExistenciaAsignada.objects.get(
+            existencia=self.existencia, soldado=self.soldado_a
+        )
+
+    def test_devolver_al_mismo_deposito_repone_la_existencia_original(self):
+        """Issue #29: elegir explícitamente el depósito de origen no cambia nada."""
+        asignada = self._asignar()
+        asignada.devolver(cantidad=30, usuario=self.usuario, deposito=self.deposito)
+        self.existencia.refresh_from_db()
+        self.assertEqual(self.existencia.cantidad, 100)
+        self.assertEqual(Existencia.objects.count(), 1)
+
+    def test_devolver_a_otro_deposito_crea_existencia_alli(self):
+        """Issue #29: la cantidad va al depósito elegido (misma compañía y
+        lote); la existencia de origen no la recupera."""
+        otro = Deposito.objects.create(nombre="Barrancón")
+        asignada = self._asignar()
+        movimiento = asignada.devolver(cantidad=20, usuario=self.usuario, deposito=otro)
+
+        self.existencia.refresh_from_db()
+        self.assertEqual(self.existencia.cantidad, 70)
+        destino = Existencia.objects.get(
+            tipo=self.municion, compania=self.comp_a, deposito=otro, lote="L-001"
+        )
+        self.assertEqual(destino.cantidad, 20)
+        self.assertEqual(movimiento.existencia, destino)
+        self.assertEqual(movimiento.tipo, MovimientoExistencia.Tipo.DEVOLUCION)
+        asignada.refresh_from_db()
+        self.assertEqual(asignada.cantidad, 10)
+
+    def test_devolver_a_otro_deposito_suma_a_existencia_existente(self):
+        otro = Deposito.objects.create(nombre="Barrancón")
+        destino = Existencia.objects.create(
+            tipo=self.municion, compania=self.comp_a, deposito=otro,
+            lote="L-001", cantidad=5,
+        )
+        asignada = self._asignar()
+        asignada.devolver(cantidad=30, usuario=self.usuario, deposito=otro)
+        destino.refresh_from_db()
+        self.assertEqual(destino.cantidad, 35)
+        self.assertFalse(ExistenciaAsignada.objects.filter(pk=asignada.pk).exists())
+
 
 class PWATests(TestCase):
     def test_manifest_is_served_at_root_with_correct_content_type(self):
@@ -910,6 +957,32 @@ class ExistenciaMovimientoViewTests(TestCase):
                 existencia=self.existencia, tipo=MovimientoExistencia.Tipo.DEVOLUCION
             ).exists()
         )
+
+    def test_devolver_view_permite_elegir_deposito_receptor(self):
+        """Issue #29: Consumo ofrece el selector de depósito, como Inventario."""
+        otro = Deposito.objects.create(nombre="Barrancón")
+        self.existencia.entregar(soldado=self.soldado_a, cantidad=30, usuario=self.admin_user)
+        asignada = ExistenciaAsignada.objects.get(
+            existencia=self.existencia, soldado=self.soldado_a
+        )
+        url = reverse("inventory:existencia_devolver", args=[asignada.pk])
+        response = self.client.get(url)
+        self.assertContains(response, 'name="deposito"')
+        self.assertContains(response, "Barrancón")
+        self.assertEqual(response.context["deposito_actual_id"], self.existencia.deposito_id)
+
+        session = self.client.session
+        session[SESSION_KEY_DEPOSITO] = otro.pk
+        session.save()
+        response = self.client.get(url)
+        self.assertEqual(response.context["deposito_actual_id"], otro.pk)
+
+        response = self.client.post(url, {"cantidad": 30, "deposito": otro.pk, "observacion": ""})
+        self.assertRedirects(response, reverse("inventory:existencia_asignada_list"))
+        self.existencia.refresh_from_db()
+        self.assertEqual(self.existencia.cantidad, 70)
+        destino = Existencia.objects.get(deposito=otro, compania=self.existencia.compania)
+        self.assertEqual(destino.cantidad, 30)
 
     def test_enlace_puede_entregar_y_devolver(self):
         """RF-18, igual que RF-10: ambos roles registran movimientos."""

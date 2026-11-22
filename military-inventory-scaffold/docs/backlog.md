@@ -354,6 +354,15 @@ El corazón del sistema.
     clase de Movimientos, el login ("Sistema de Inventario y Gestión de Armamento") y el `name`
     del manifest de la PWA. Rutas, modelos y nombres de tipos no cambian.
 
+## Correcciones (issue #29)
+
+- Devolver consumo eligiendo el depósito receptor (RF-18) ✅
+  - **Estado**: Hecho (issue #29). "Devolver consumo" ahora tiene el mismo selector
+    "Depósito receptor" que Inventario. Preselecciona el depósito de trabajo y, si no hay uno,
+    el de origen. `ExistenciaAsignada.devolver(..., deposito=None)` suma la cantidad a la
+    existencia de mismo tipo, compañía y lote en el depósito elegido, y la crea si no existe.
+    El `MovimientoExistencia` queda sobre esa existencia. No hay migraciones.
+
 ## Fase 2 — Siguiente
 
 - H-20 — Módulo de importación de Excel autoservicio (que David suba y cargue) (RF-13)

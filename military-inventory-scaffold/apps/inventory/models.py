@@ -595,11 +595,17 @@ class ExistenciaAsignada(models.Model):
     def __str__(self):
         return f"{self.existencia.tipo} — {self.soldado}: {self.cantidad}"
 
-    def devolver(self, *, cantidad, usuario, observacion=""):
+    def devolver(self, *, cantidad, usuario, observacion="", deposito=None):
         """Devuelve al depósito una cantidad (total o parcial) asignada a
         este soldado, dejando rastro — espejo de `Armamento.devolver()`
         (RF-18). Si la cantidad devuelta agota el saldo asignado, la fila
-        se borra (no tiene sentido conservar un saldo de 0 en mano)."""
+        se borra (no tiene sentido conservar un saldo de 0 en mano).
+
+        `deposito` (issue #29) elige el depósito receptor, como en
+        Inventario: si es otro distinto al de origen, la cantidad se suma a
+        la existencia del mismo tipo, compañía y lote en ese depósito
+        (creándola si no existía), y el movimiento queda sobre ella. La
+        compañía nunca cambia, solo el depósito físico."""
         if cantidad <= 0:
             raise ValidationError("La cantidad a devolver debe ser mayor a cero.")
         if cantidad > self.cantidad:
@@ -609,6 +615,14 @@ class ExistenciaAsignada(models.Model):
             )
         with transaction.atomic():
             existencia = Existencia.objects.select_for_update().get(pk=self.existencia_id)
+            if deposito is not None and deposito.pk != existencia.deposito_id:
+                existencia, _ = Existencia.objects.select_for_update().get_or_create(
+                    tipo_id=existencia.tipo_id,
+                    compania_id=existencia.compania_id,
+                    deposito=deposito,
+                    lote=existencia.lote,
+                    defaults={"cantidad": 0},
+                )
             existencia.cantidad += cantidad
             existencia.save(update_fields=["cantidad"])
             self.cantidad -= cantidad

@@ -1049,8 +1049,8 @@ def existencia_entregar(request, pk):
 @requiere_autorizado
 def existencia_devolver(request, pk):
     """Un solo paso sobre `ExistenciaAsignada.devolver()` (RF-18) —
-    simétrico a `armamento_devolver`; el depósito de retorno es siempre el
-    mismo del que salió, así que no hay nada que elegir."""
+    simétrico a `armamento_devolver`, incluido el selector de depósito
+    receptor (issue #29)."""
     asignada = get_object_or_404(
         ExistenciaAsignada.objects.select_related(
             "existencia__tipo", "existencia__compania", "existencia__deposito",
@@ -1065,20 +1065,38 @@ def existencia_devolver(request, pk):
             cantidad = int(request.POST.get("cantidad", ""))
         except ValueError:
             cantidad = 0
+        # Sin depósito en el POST (p. ej. un formulario viejo cacheado por el
+        # PWA) se devuelve al de origen, como antes del issue #29.
+        deposito_id = request.POST.get("deposito")
+        deposito = (
+            get_object_or_404(Deposito, pk=deposito_id)
+            if deposito_id else asignada.existencia.deposito
+        )
         observacion = request.POST.get("observacion", "")
+        tipo_nombre = asignada.existencia.tipo.nombre
         try:
-            asignada.devolver(cantidad=cantidad, usuario=request.user, observacion=observacion)
+            asignada.devolver(
+                cantidad=cantidad, usuario=request.user, observacion=observacion,
+                deposito=deposito,
+            )
         except ValidationError as exc:
             messages.error(request, " ".join(exc.messages))
             return redirect(
                 _con_next(reverse("inventory:existencia_devolver", args=[asignada.pk]), next_url)
             )
-        messages.success(
-            request, f"{cantidad} de {asignada.existencia.tipo.nombre} devueltas a depósito."
-        )
+        messages.success(request, f"{cantidad} de {tipo_nombre} devueltas a {deposito}.")
         return redirect(next_url or "inventory:existencia_asignada_list")
 
-    context = {"asignada": asignada, "next": next_url}
+    context = {
+        "asignada": asignada,
+        "depositos": Deposito.objects.order_by("nombre"),
+        # Como en Inventario: el depósito de trabajo si hay uno; si no, el
+        # de origen de la existencia (issue #29).
+        "deposito_actual_id": (
+            request.session.get(SESSION_KEY_DEPOSITO) or asignada.existencia.deposito_id
+        ),
+        "next": next_url,
+    }
     return render(request, "inventory/existencia_devolver.html", context)
 
 
