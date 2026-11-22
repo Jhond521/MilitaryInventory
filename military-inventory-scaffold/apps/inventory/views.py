@@ -929,17 +929,9 @@ def _marcar_prestamos_pendientes(existencias):
 @requiere_autorizado
 def existencia_list(request):
     compania_id, deposito_actual_id, ver_todas = _alcance(request)
-    # `en_mano`: cuánto de cada existencia tienen hoy los soldados (RF-18),
-    # para que se vea desde Munición a dónde se fue lo entregado (issue #16).
-    qs = Existencia.objects.select_related("tipo", "compania", "deposito").annotate(
-        en_mano=Sum("asignaciones__cantidad")
-    )
+    alcance = Existencia.objects.all()
     if compania_id:
-        qs = qs.filter(compania_id=compania_id)
-
-    q = request.GET.get("q", "").strip()
-    if q:
-        qs = qs.filter(Q(tipo__nombre__icontains=q) | Q(lote__icontains=q))
+        alcance = alcance.filter(compania_id=compania_id)
 
     # El selector de depósito de la pantalla manda; sin él, el depósito de
     # trabajo (issue #25). "Todos" en el selector envía `deposito=` vacío.
@@ -948,16 +940,71 @@ def existencia_list(request):
     else:
         deposito_id = str(deposito_actual_id or "")
     if deposito_id:
-        qs = qs.filter(deposito_id=deposito_id)
+        alcance = alcance.filter(deposito_id=deposito_id)
+
+    # Pelotón (issue #31): relación indirecta, a través de los soldados que
+    # tienen la existencia en mano. Con pelotón, `en_mano` es solo lo suyo.
+    peloton_id = request.GET.get("peloton", "")
+    if peloton_id and not peloton_id.isdigit():
+        peloton_id = ""
+    filtro_mano = Q(asignaciones__soldado__peloton_id=peloton_id) if peloton_id else None
+
+    # `en_mano`: cuánto de cada existencia tienen hoy los soldados (RF-18),
+    # para que se vea desde Munición a dónde se fue lo entregado (issue #16).
+    qs = alcance.select_related("tipo", "compania", "deposito").annotate(
+        en_mano=Sum("asignaciones__cantidad", filter=filtro_mano)
+    )
+    if peloton_id:
+        # Subconsulta: filtrar sobre el mismo join del Sum lo duplicaría.
+        qs = qs.filter(
+            pk__in=ExistenciaAsignada.objects.filter(
+                soldado__peloton_id=peloton_id
+            ).values("existencia_id")
+        )
+
+    q = request.GET.get("q", "").strip()
+    if q:
+        qs = qs.filter(Q(tipo__nombre__icontains=q) | Q(lote__icontains=q))
+
+    tipo_id = request.GET.get("tipo", "")
+    if tipo_id.isdigit():
+        qs = qs.filter(tipo_id=tipo_id)
+    else:
+        tipo_id = ""
 
     existencias = list(qs)
     _marcar_prestamos_pendientes(existencias)
+
+    # KPIs (issue #31), como en Inventario: sobre el alcance de compañía y
+    # depósito, sin búsqueda ni chips. Dos agregados separados para que el
+    # join a asignaciones no multiplique los saldos en depósito.
+    kpi_en_deposito = alcance.aggregate(t=Sum("cantidad"))["t"] or 0
+    kpi_en_mano = (
+        ExistenciaAsignada.objects.filter(existencia__in=alcance).aggregate(
+            t=Sum("cantidad")
+        )["t"]
+        or 0
+    )
+
+    if compania_id:
+        pelotones = Peloton.objects.filter(compania_id=compania_id)
+    else:
+        pelotones = Peloton.objects.all()
     context = {
         "existencias": existencias,
         "q": q,
         "depositos": Deposito.objects.order_by("nombre"),
         "deposito_id": deposito_id,
+        "pelotones": pelotones,
+        "peloton_id": peloton_id,
+        "tipos": TipoArmamento.objects.filter(
+            control=TipoArmamento.Control.CANTIDAD
+        ).order_by("nombre"),
+        "tipo_id": tipo_id,
         "ver_todas": ver_todas,
+        "kpi_total": kpi_en_deposito + kpi_en_mano,
+        "kpi_en_deposito": kpi_en_deposito,
+        "kpi_en_mano": kpi_en_mano,
     }
     return render(request, "inventory/existencia_list.html", context)
 

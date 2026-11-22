@@ -3351,3 +3351,90 @@ class RenombresTests(TestCase):
         self.assertContains(response, ">Consumo</h1>")
         self.assertContains(response, ">Consumo asignado</a>")
         self.assertNotContains(response, "Munición")
+
+
+@override_settings(STORAGES=_PLAIN_STATIC_STORAGE)
+class ConsumoFiltrosTests(TestCase):
+    """Consumo con los filtros de Inventario: Categoría, Pelotón (indirecto,
+    vía los soldados que tienen la existencia en mano) y KPIs (issue #31)."""
+
+    def setUp(self):
+        unidad = Unidad.objects.create(nombre="Batallón de Prueba")
+        self.comp = Compania.objects.create(unidad=unidad, nombre="A")
+        self.deposito = Deposito.objects.create(nombre="Apiay")
+        self.p1 = Peloton.objects.create(compania=self.comp, nombre="A 1")
+        self.p2 = Peloton.objects.create(compania=self.comp, nombre="A 2")
+        self.s1 = Soldado.objects.create(
+            apellidos_nombres="Uno Juan", compania=self.comp, peloton=self.p1
+        )
+        self.s1b = Soldado.objects.create(
+            apellidos_nombres="Uno Bis", compania=self.comp, peloton=self.p1
+        )
+        self.s2 = Soldado.objects.create(
+            apellidos_nombres="Dos Ana", compania=self.comp, peloton=self.p2
+        )
+        self.cartuchos = TipoArmamento.objects.create(
+            nombre="CARTUCHO 5.56", control=TipoArmamento.Control.CANTIDAD
+        )
+        self.granadas = TipoArmamento.objects.create(
+            nombre="GRANADA", control=TipoArmamento.Control.CANTIDAD
+        )
+        self.e_cart = Existencia.objects.create(
+            tipo=self.cartuchos, compania=self.comp, deposito=self.deposito, cantidad=100
+        )
+        self.e_gran = Existencia.objects.create(
+            tipo=self.granadas, compania=self.comp, deposito=self.deposito, cantidad=20
+        )
+        self.admin = get_user_model().objects.create_user(
+            email="admin31@example.com", password="x", role="ADMIN"
+        )
+        self.client.force_login(self.admin)
+        session = self.client.session
+        session[SESSION_KEY] = self.comp.pk
+        session.save()
+        self.e_cart.entregar(soldado=self.s1, cantidad=10, usuario=self.admin)
+        self.e_cart.refresh_from_db()
+        self.e_cart.entregar(soldado=self.s1b, cantidad=5, usuario=self.admin)
+        self.e_cart.refresh_from_db()
+        self.e_cart.entregar(soldado=self.s2, cantidad=30, usuario=self.admin)
+        self.e_gran.entregar(soldado=self.s2, cantidad=4, usuario=self.admin)
+
+    def _get(self, query=""):
+        return self.client.get(reverse("inventory:existencia_list") + query)
+
+    def test_filtro_categoria(self):
+        response = self._get(f"?tipo={self.granadas.pk}")
+        self.assertEqual([e.pk for e in response.context["existencias"]], [self.e_gran.pk])
+        self.assertContains(response, 'name="tipo"')
+
+    def test_filtro_peloton_muestra_solo_lo_que_tiene_en_mano(self):
+        response = self._get(f"?peloton={self.p1.pk}")
+        existencias = response.context["existencias"]
+        self.assertEqual([e.pk for e in existencias], [self.e_cart.pk])
+        # Solo lo del pelotón A 1 (10 + 5), no los 30 del A 2, sin duplicar filas.
+        self.assertEqual(existencias[0].en_mano, 15)
+        self.assertContains(response, "En mano del pelotón: <strong>15</strong>", html=True)
+
+    def test_sin_peloton_en_mano_es_el_total(self):
+        response = self._get()
+        en_mano = {e.pk: e.en_mano for e in response.context["existencias"]}
+        self.assertEqual(en_mano, {self.e_cart.pk: 45, self.e_gran.pk: 4})
+
+    def test_kpis_suman_cantidades_del_alcance(self):
+        response = self._get(f"?tipo={self.granadas.pk}")
+        # Saldos: cartuchos 100-45=55, granadas 20-4=16. KPIs ignoran los chips.
+        self.assertEqual(response.context["kpi_en_deposito"], 71)
+        self.assertEqual(response.context["kpi_en_mano"], 49)
+        self.assertEqual(response.context["kpi_total"], 120)
+        self.assertContains(response, 'class="siga-kpi-row"')
+
+    def test_kpis_respetan_el_deposito(self):
+        otro = Deposito.objects.create(nombre="Barrancón")
+        response = self._get(f"?deposito={otro.pk}")
+        self.assertEqual(response.context["kpi_total"], 0)
+        self.assertEqual(response.context["existencias"], [])
+
+    def test_peloton_invalido_se_ignora(self):
+        response = self._get("?peloton=abc&tipo=xyz")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.context["existencias"]), 2)
