@@ -1,0 +1,453 @@
+{
+  "ticket": 35,
+  "title": "Usuario de solo consulta (rol CONSULTA)",
+  "compania": null,
+  "setup": "from django.contrib.auth import get_user_model\nU = get_user_model()\nc = ctx['compania']\nc2 = m.Compania.objects.exclude(pk=c.pk).order_by('pk').first() or m.Compania.objects.create(unidad=c.unidad, nombre='QA-35-B')\nd = m.Deposito.objects.order_by('pk').first() or m.Deposito.objects.create(nombre='QA-35-DEP')\nfusil = m.TipoArmamento.objects.create(nombre='QA-35-FUSIL', control='SERIE')\nmun = m.TipoArmamento.objects.create(nombre='QA-35-MUNICION', control='CANTIDAD')\np = m.Peloton.objects.create(compania=c, nombre='QA-35-P1')\ns = m.Soldado.objects.create(apellidos_nombres='QA Lector 35', compania=c, peloton=p, cedula='990000351')\na1 = m.Armamento.objects.create(numero_serie='QA-35-S1', tipo=fusil, compania=c, ubicacion='DEPOSITO', deposito=d)\na2 = m.Armamento.objects.create(numero_serie='QA-35-S2', tipo=fusil, compania=c, ubicacion='DEPOSITO', deposito=d)\na2.entregar(soldado=s, usuario=user)\na3 = m.Armamento.objects.create(numero_serie='QA-35-S3', tipo=fusil, compania=c, ubicacion='DEPOSITO', deposito=d)\na3.prestar(compania=c2, usuario=user)\ne = m.Existencia.objects.create(tipo=mun, compania=c, deposito=d, lote='QA-35-L', cantidad=100)\ne.entregar(soldado=s, cantidad=10, usuario=user)\nasig = m.ExistenciaAsignada.objects.get(existencia=e, soldado=s)\npr = m.Prestamo(tipo=mun, deposito=d, lote='QA-35-L', cantidad=20, compania_origen=c, compania_destino=c2, usuario=user)\npr.full_clean()\npr.save()\nU.objects.create_user(email='qa-admin-35@example.invalid', password='Qa-clave-35-x', role='ADMIN')\nU.objects.create_user(email='qa-enlace-35@example.invalid', password='Qa-clave-35-x', role='ENLACE')\nU.objects.create_user(email='qa-inactivo-35@example.invalid', password='Qa-clave-35-x', role='CONSULTA', is_active=False)\nconteos = lambda: (m.Movimiento.objects.count(), m.MovimientoExistencia.objects.count(), m.Prestamo.objects.count(), m.DevolucionPrestamo.objects.count())\nctx.update(c=c, c2=c2, d=d, mun=mun, s=s, a1=a1, a2=a2, a3=a3, e=e, asig=asig, pr=pr, antes=conteos(), conteos=conteos)",
+  "checks": [
+    {
+      "name": "#35 AC-1 migración accounts.0002_user_role_consulta aplicada en dev",
+      "path": "/health/",
+      "assert": "__import__('django.db.migrations.recorder', fromlist=['MigrationRecorder']).MigrationRecorder.Migration.objects.filter(app='accounts', name='0002_user_role_consulta').exists()"
+    },
+    {
+      "name": "#35 AC-2 ADMIN crea un usuario Consulta con correo fuera de la lista",
+      "method": "post",
+      "path": "/cuenta/usuarios/nuevo/",
+      "data": {
+        "email": "qa-consulta-35@example.invalid",
+        "first_name": "QA",
+        "last_name": "Lector",
+        "role": "CONSULTA",
+        "password": "Qa-clave-35-x",
+        "password_confirmar": "Qa-clave-35-x"
+      },
+      "status": [
+        302
+      ],
+      "assert": "__import__('django.contrib.auth', fromlist=['get_user_model']).get_user_model().objects.get(email='qa-consulta-35@example.invalid').role == 'CONSULTA'"
+    },
+    {
+      "name": "#35 AC-2 la lista de Usuarios muestra al Consulta con su etiqueta",
+      "path": "/cuenta/usuarios/",
+      "contains": [
+        "qa-consulta-35@example.invalid",
+        "siga-badge--consulta\">Consulta<"
+      ]
+    },
+    {
+      "name": "#35 AC-4 ADMIN y ENLACE fuera de AUTHORIZED_EMAILS siguen rechazados",
+      "path": "/health/",
+      "assert": "__import__('django.contrib.auth', fromlist=['authenticate']).authenticate(username='qa-admin-35@example.invalid', password='Qa-clave-35-x') is None and __import__('django.contrib.auth', fromlist=['authenticate']).authenticate(username='qa-enlace-35@example.invalid', password='Qa-clave-35-x') is None"
+    },
+    {
+      "name": "#35 AC-5 Consulta inactivo no se autentica",
+      "path": "/health/",
+      "assert": "__import__('django.contrib.auth', fromlist=['authenticate']).authenticate(username='qa-inactivo-35@example.invalid', password='Qa-clave-35-x') is None"
+    },
+    {
+      "name": "#35 AC-3 authenticate() devuelve al Consulta fuera de la lista",
+      "path": "/health/",
+      "assert": "getattr(__import__('django.contrib.auth', fromlist=['authenticate']).authenticate(username='qa-consulta-35@example.invalid', password='Qa-clave-35-x'), 'role', None) == 'CONSULTA'"
+    },
+    {
+      "name": "(paso) cerrar la sesión del ADMIN",
+      "method": "post",
+      "path": "/cuenta/logout/",
+      "status": [
+        302
+      ]
+    },
+    {
+      "name": "#35 AC-3 login por /cuenta/login/ como Consulta fuera de la lista",
+      "method": "post",
+      "path": "/cuenta/login/",
+      "data": {
+        "username": "qa-consulta-35@example.invalid",
+        "password": "Qa-clave-35-x"
+      },
+      "status": [
+        302
+      ],
+      "assert": "'/cuenta/login/' not in response['Location'] and response.wsgi_request.user.email == 'qa-consulta-35@example.invalid'"
+    },
+    {
+      "name": "#35 AC-6 Consulta elige compañía de trabajo (POST /compania/)",
+      "method": "post",
+      "path": "/compania/",
+      "data": {
+        "compania": "{ctx[c].pk}"
+      },
+      "status": [
+        302
+      ]
+    },
+    {
+      "name": "#35 AC-6 Consulta ve /",
+      "path": "/",
+      "not_contains": [
+        "Traceback"
+      ]
+    },
+    {
+      "name": "#35 AC-6 Consulta ve /armamento/{ctx[a1].pk}/",
+      "path": "/armamento/{ctx[a1].pk}/",
+      "not_contains": [
+        "Traceback"
+      ]
+    },
+    {
+      "name": "#35 AC-6 Consulta ve /movimientos/",
+      "path": "/movimientos/",
+      "not_contains": [
+        "Traceback"
+      ]
+    },
+    {
+      "name": "#35 AC-6 Consulta ve /soldados/",
+      "path": "/soldados/",
+      "not_contains": [
+        "Traceback"
+      ]
+    },
+    {
+      "name": "#35 AC-6 Consulta ve /soldados/{ctx[s].pk}/",
+      "path": "/soldados/{ctx[s].pk}/",
+      "not_contains": [
+        "Traceback"
+      ]
+    },
+    {
+      "name": "#35 AC-6 Consulta ve /municion/",
+      "path": "/municion/",
+      "not_contains": [
+        "Traceback"
+      ]
+    },
+    {
+      "name": "#35 AC-6 Consulta ve /municion/asignadas/",
+      "path": "/municion/asignadas/",
+      "not_contains": [
+        "Traceback"
+      ]
+    },
+    {
+      "name": "#35 AC-6 Consulta ve /prestamos/",
+      "path": "/prestamos/",
+      "not_contains": [
+        "Traceback"
+      ]
+    },
+    {
+      "name": "#35 AC-6 Consulta ve /compania/",
+      "path": "/compania/",
+      "not_contains": [
+        "Traceback"
+      ]
+    },
+    {
+      "name": "#35 AC-6 Consulta ve /ajustes/",
+      "path": "/ajustes/",
+      "not_contains": [
+        "Traceback"
+      ]
+    },
+    {
+      "name": "#35 AC-6 Consulta ve /companias/",
+      "path": "/companias/",
+      "not_contains": [
+        "Traceback"
+      ]
+    },
+    {
+      "name": "#35 AC-6 Consulta ve /cuenta/mi-cuenta/",
+      "path": "/cuenta/mi-cuenta/",
+      "not_contains": [
+        "Traceback"
+      ]
+    },
+    {
+      "name": "#35 AC-7 GET /armamento/{ctx[a1].pk}/entregar/ -> 403",
+      "path": "/armamento/{ctx[a1].pk}/entregar/",
+      "status": [
+        403
+      ]
+    },
+    {
+      "name": "#35 AC-7 POST /armamento/{ctx[a1].pk}/entregar/ -> 403",
+      "method": "post",
+      "path": "/armamento/{ctx[a1].pk}/entregar/",
+      "data": {
+        "soldado": "{ctx[s].pk}"
+      },
+      "status": [
+        403
+      ]
+    },
+    {
+      "name": "#35 AC-7 GET /armamento/{ctx[a2].pk}/devolver/ -> 403",
+      "path": "/armamento/{ctx[a2].pk}/devolver/",
+      "status": [
+        403
+      ]
+    },
+    {
+      "name": "#35 AC-7 POST /armamento/{ctx[a2].pk}/devolver/ -> 403",
+      "method": "post",
+      "path": "/armamento/{ctx[a2].pk}/devolver/",
+      "data": {
+        "deposito": "{ctx[d].pk}"
+      },
+      "status": [
+        403
+      ]
+    },
+    {
+      "name": "#35 AC-7 GET /armamento/{ctx[a1].pk}/prestar/ -> 403",
+      "path": "/armamento/{ctx[a1].pk}/prestar/",
+      "status": [
+        403
+      ]
+    },
+    {
+      "name": "#35 AC-7 POST /armamento/{ctx[a1].pk}/prestar/ -> 403",
+      "method": "post",
+      "path": "/armamento/{ctx[a1].pk}/prestar/",
+      "data": {
+        "compania": "{ctx[c2].pk}"
+      },
+      "status": [
+        403
+      ]
+    },
+    {
+      "name": "#35 AC-7 GET /armamento/{ctx[a3].pk}/devolver-prestamo/ -> 403",
+      "path": "/armamento/{ctx[a3].pk}/devolver-prestamo/",
+      "status": [
+        403
+      ]
+    },
+    {
+      "name": "#35 AC-7 POST /armamento/{ctx[a3].pk}/devolver-prestamo/ -> 403",
+      "method": "post",
+      "path": "/armamento/{ctx[a3].pk}/devolver-prestamo/",
+      "data": {},
+      "status": [
+        403
+      ]
+    },
+    {
+      "name": "#35 AC-7 GET /municion/{ctx[e].pk}/entregar/ -> 403",
+      "path": "/municion/{ctx[e].pk}/entregar/",
+      "status": [
+        403
+      ]
+    },
+    {
+      "name": "#35 AC-7 POST /municion/{ctx[e].pk}/entregar/ -> 403",
+      "method": "post",
+      "path": "/municion/{ctx[e].pk}/entregar/",
+      "data": {
+        "soldado": "{ctx[s].pk}",
+        "cantidad": "5"
+      },
+      "status": [
+        403
+      ]
+    },
+    {
+      "name": "#35 AC-7 GET /municion/asignadas/{ctx[asig].pk}/devolver/ -> 403",
+      "path": "/municion/asignadas/{ctx[asig].pk}/devolver/",
+      "status": [
+        403
+      ]
+    },
+    {
+      "name": "#35 AC-7 POST /municion/asignadas/{ctx[asig].pk}/devolver/ -> 403",
+      "method": "post",
+      "path": "/municion/asignadas/{ctx[asig].pk}/devolver/",
+      "data": {
+        "cantidad": "5",
+        "deposito": "{ctx[d].pk}"
+      },
+      "status": [
+        403
+      ]
+    },
+    {
+      "name": "#35 AC-7 GET /prestamos/nuevo/ -> 403",
+      "path": "/prestamos/nuevo/",
+      "status": [
+        403
+      ]
+    },
+    {
+      "name": "#35 AC-7 POST /prestamos/nuevo/ -> 403",
+      "method": "post",
+      "path": "/prestamos/nuevo/",
+      "data": {
+        "tipo": "{ctx[mun].pk}",
+        "deposito": "{ctx[d].pk}",
+        "compania_origen": "{ctx[c].pk}",
+        "compania_destino": "{ctx[c2].pk}",
+        "lote": "QA-35-L",
+        "cantidad": "5"
+      },
+      "status": [
+        403
+      ]
+    },
+    {
+      "name": "#35 AC-7 GET /prestamos/{ctx[pr].pk}/devolver/ -> 403",
+      "path": "/prestamos/{ctx[pr].pk}/devolver/",
+      "status": [
+        403
+      ]
+    },
+    {
+      "name": "#35 AC-7 POST /prestamos/{ctx[pr].pk}/devolver/ -> 403",
+      "method": "post",
+      "path": "/prestamos/{ctx[pr].pk}/devolver/",
+      "data": {
+        "cantidad": "5"
+      },
+      "status": [
+        403
+      ]
+    },
+    {
+      "name": "#35 AC-7 nada cambió tras los POST (movimientos, ubicaciones, cantidades, préstamos)",
+      "path": "/health/",
+      "assert": "ctx['conteos']() == ctx['antes'] and m.Armamento.objects.get(pk=ctx['a1'].pk).ubicacion == 'DEPOSITO' and m.Armamento.objects.get(pk=ctx['a1'].pk).compania_en_prestamo_id is None and m.Armamento.objects.get(pk=ctx['a2'].pk).soldado_id == ctx['s'].pk and m.Armamento.objects.get(pk=ctx['a3'].pk).compania_en_prestamo_id == ctx['c2'].pk and m.Existencia.objects.get(pk=ctx['e'].pk).cantidad == 70 and m.ExistenciaAsignada.objects.get(pk=ctx['asig'].pk).cantidad == 10 and m.Prestamo.objects.get(pk=ctx['pr'].pk).cantidad_devuelta == 0"
+    },
+    {
+      "name": "#35 AC-8 Consulta recibe 403 en /armamento/nuevo/",
+      "path": "/armamento/nuevo/",
+      "status": [
+        403
+      ]
+    },
+    {
+      "name": "#35 AC-8 Consulta recibe 403 en /soldados/nuevo/",
+      "path": "/soldados/nuevo/",
+      "status": [
+        403
+      ]
+    },
+    {
+      "name": "#35 AC-8 Consulta recibe 403 en /municion/nuevo/",
+      "path": "/municion/nuevo/",
+      "status": [
+        403
+      ]
+    },
+    {
+      "name": "#35 AC-8 Consulta recibe 403 en /companias/nuevo/",
+      "path": "/companias/nuevo/",
+      "status": [
+        403
+      ]
+    },
+    {
+      "name": "#35 AC-8 Consulta recibe 403 en /cuenta/usuarios/",
+      "path": "/cuenta/usuarios/",
+      "status": [
+        403
+      ]
+    },
+    {
+      "name": "#35 AC-9 sin botones de acción en /armamento/{ctx[a1].pk}/",
+      "path": "/armamento/{ctx[a1].pk}/",
+      "not_contains": [
+        "href=\"/armamento/{ctx[a1].pk}/entregar/",
+        "href=\"/armamento/{ctx[a1].pk}/prestar/",
+        "+ Añadir"
+      ]
+    },
+    {
+      "name": "#35 AC-9 sin botones de acción en /armamento/{ctx[a2].pk}/",
+      "path": "/armamento/{ctx[a2].pk}/",
+      "not_contains": [
+        "href=\"/armamento/{ctx[a2].pk}/devolver/",
+        "+ Añadir"
+      ]
+    },
+    {
+      "name": "#35 AC-9 sin botones de acción en /armamento/{ctx[a3].pk}/",
+      "path": "/armamento/{ctx[a3].pk}/",
+      "not_contains": [
+        "href=\"/armamento/{ctx[a3].pk}/devolver-prestamo/",
+        "+ Añadir"
+      ]
+    },
+    {
+      "name": "#35 AC-9 sin botones de acción en /municion/?todas=1",
+      "path": "/municion/?todas=1",
+      "not_contains": [
+        "href=\"/municion/{ctx[e].pk}/entregar/",
+        "href=\"/prestamos/{ctx[pr].pk}/devolver/",
+        "+ Añadir"
+      ]
+    },
+    {
+      "name": "#35 AC-9 sin botones de acción en /municion/asignadas/?todas=1",
+      "path": "/municion/asignadas/?todas=1",
+      "not_contains": [
+        "href=\"/municion/asignadas/{ctx[asig].pk}/devolver/",
+        "+ Añadir"
+      ]
+    },
+    {
+      "name": "#35 AC-9 sin botones de acción en /soldados/{ctx[s].pk}/",
+      "path": "/soldados/{ctx[s].pk}/",
+      "not_contains": [
+        "href=\"/armamento/{ctx[a2].pk}/devolver/",
+        "href=\"/municion/asignadas/{ctx[asig].pk}/devolver/",
+        "+ Añadir"
+      ]
+    },
+    {
+      "name": "#35 AC-9 sin botones de acción en /prestamos/?todas=1",
+      "path": "/prestamos/?todas=1",
+      "not_contains": [
+        "href=\"/prestamos/nuevo/",
+        "href=\"/prestamos/{ctx[pr].pk}/devolver/",
+        "+ Añadir"
+      ]
+    },
+    {
+      "name": "#35 AC-9 sin botones de acción en /?todas=1",
+      "path": "/?todas=1",
+      "not_contains": [
+        "+ Añadir"
+      ]
+    },
+    {
+      "name": "#35 AC-9 sin botones de acción en /soldados/",
+      "path": "/soldados/",
+      "not_contains": [
+        "+ Añadir"
+      ]
+    },
+    {
+      "name": "#35 AC-10 el sidebar muestra el rol Consulta",
+      "path": "/",
+      "contains": [
+        "<span class=\"siga-sidebar__user-role\">Consulta</span>"
+      ]
+    },
+    {
+      "name": "#35 AC-11 Consulta cambia su propia contraseña",
+      "method": "post",
+      "path": "/cuenta/password/",
+      "data": {
+        "old_password": "Qa-clave-35-x",
+        "new_password1": "Qa-nueva-clave-35-y",
+        "new_password2": "Qa-nueva-clave-35-y"
+      },
+      "status": [
+        302
+      ],
+      "assert": "response['Location'].endswith('/cuenta/password/hecho/')"
+    }
+  ]
+}
