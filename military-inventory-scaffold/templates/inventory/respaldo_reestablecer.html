@@ -1,0 +1,25 @@
+{% extends "inventory/base_mobile.html" %}
+{% block title %}Reestablecer respaldo{% endblock %}
+{% block content %}
+<h1 class="siga-page-title">Reestablecer respaldo</h1>
+<div class="siga-page-subtitle">Sube un archivo generado con "Exportar respaldo". Primero se revisa completo: no se cambia nada hasta que confirmes.</div>
+
+{% if errores %}
+<div class="siga-aviso-peligro" role="alert">
+  <strong>No se puede reestablecer este archivo:</strong>
+  <ul class="siga-respaldo-errores">
+    {% for e in errores %}<li>{{ e }}</li>{% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<form method="post" enctype="multipart/form-data">
+  {% csrf_token %}
+  <div class="siga-field">
+    <label for="id_archivo">Archivo de respaldo (.xlsx)</label>
+    <input type="file" name="archivo" id="id_archivo" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
+  </div>
+  <button type="submit" class="siga-btn-primary">Revisar archivo</button>
+</form>
+<a class="siga-btn-secondary" style="display:block; text-decoration:none; margin-top:10px;" href="{% url 'inventory:ajustes' %}">Cancelar</a>
+{% endblock %}

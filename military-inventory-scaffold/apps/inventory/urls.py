@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import crud, views
+from . import crud, views, views_respaldo
 
 app_name = "inventory"
 
@@ -66,6 +66,21 @@ urlpatterns = [
     path("prestamos/<int:pk>/devolver/", views.prestamo_devolver, name="prestamo_devolver"),
     path("compania/", views.elegir_compania, name="elegir_compania"),
     path("ajustes/", views.ajustes, name="ajustes"),
+    path(
+        "ajustes/respaldo/exportar/",
+        views_respaldo.respaldo_exportar,
+        name="respaldo_exportar",
+    ),
+    path(
+        "ajustes/respaldo/reestablecer/",
+        views_respaldo.respaldo_reestablecer,
+        name="respaldo_reestablecer",
+    ),
+    path(
+        "ajustes/respaldo/reestablecer/confirmar/",
+        views_respaldo.respaldo_confirmar,
+        name="respaldo_confirmar",
+    ),
     *_crud_urls("unidades", "unidad", "Unidad"),
     *_crud_urls("companias", "compania", "Compania"),
     *_crud_urls("depositos", "deposito", "Deposito"),

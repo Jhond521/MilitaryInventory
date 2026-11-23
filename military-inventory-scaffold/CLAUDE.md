@@ -86,6 +86,8 @@ apps/inventory/    # domain: Unidad, Compania, Deposito, Peloton, Soldado, TipoA
   views.py         # everything else: armamento_list/_crear/_editar/_entregar/_devolver/_baja,
                    #   movimiento_list, soldado_list/_detalle/_crear/_editar, existencia_list/_crear/_editar,
                    #   prestamo_list/_transferir/_devolver, elegir_compania, ajustes — mounted at "/"
+  respaldo.py      # Excel backup format (MODELOS_RESPALDO) + exportar/leer/probar/restaurar (#33/#34)
+  views_respaldo.py # ADMIN-only export download and the 3-step restore (upload → preview → confirm)
   middleware.py, urls.py, context_processors.py   # compañía de trabajo (RF-02)
   management/commands/seed_initial.py       # idempotent master-data seed
   management/commands/importar_armamento.py # initial Excel load (RF-13, H-13)
@@ -207,6 +209,20 @@ docs/              # PRD (Spanish), backlog (Spanish), ADRs
   equivalent for these checks; a plain `create_user(..., role=User.Role.ADMIN)` also gets
   full access. `is_staff`/`is_superuser` have no functional meaning left in this app now
   that there's no admin site — don't gate anything on them.
+- Backup/restore (RF-26/RF-27, issues #33/#34, ADR-0008) lives in `apps/inventory/respaldo.py`.
+  `MODELOS_RESPALDO` is the single source of truth for both export and restore. A **new
+  `inventory` model must be added there**, or `test_todo_modelo_de_inventory_esta_en_el_respaldo`
+  fails. Columns come from `concrete_fields`, so new fields follow automatically, but they change
+  the migration, so older backups get rejected.
+
+  Restore is a full replace in one transaction. It uses `bulk_create` with explicit ids and
+  `auto_now` switched off, so it deliberately **bypasses** `Prestamo.save()`, `entregar()` and
+  friends, and writes no `Movimiento`. That is the one sanctioned exception to the
+  "every change logs a movement" rule.
+
+  Users are matched by email and never modified or deleted.
+
+  The dry run (`probar`) must not reset sequences: Postgres `setval()` survives a rollback.
 - The UI must stay responsive (mobile-first) and installable as a PWA: keep the web app
   manifest and service worker valid, touch targets ≥ 44px, and a mobile bottom nav. Don't
   ship desktop-only layouts.
