@@ -370,6 +370,16 @@ El corazón del sistema.
     Los KPI En depósito / En mano / Total suman cantidades sobre el alcance (compañía y
     depósito), sin chips ni búsqueda. No hay Estado ni Baja. No hay migraciones.
 
+## Actualizaciones v1.8 (issue #35)
+
+- H-33 — Usuario de solo consulta (RF-25, amplía RF-01/H-03) ✅
+  - **Estado**: Hecho (issue #35). Nuevo rol `User.Role.CONSULTA` ("Consulta"), migración
+    `accounts.0002_user_role_consulta` (solo cambia las opciones de `role`). El administrador
+    los crea desde Usuarios, sin tope. `AllowlistModelBackend` los exime de
+    `AUTHORIZED_EMAILS` según el rol guardado, después de validar la contraseña. Nueva puerta
+    `requiere_operador` (ADMIN o ENLACE) en las 8 vistas de entregar/devolver/prestar; las
+    plantillas ocultan esos botones con `user.puede_operar`. Puede cambiar su contraseña.
+
 ## Fase 2 — Siguiente
 
 - H-20 — Módulo de importación de Excel autoservicio (que David suba y cargue) (RF-13)

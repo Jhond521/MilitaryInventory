@@ -308,6 +308,12 @@ body.siga-app {
   color: #55595f;
 }
 
+/* Rol de solo consulta en la lista de Usuarios (issue #35, RF-25) */
+.siga-badge--consulta {
+  background: #e7ecf2;
+  color: #3d4a5c;
+}
+
 /* Préstamo entre compañías (RF-15) en la lista unificada de Movimientos — issue #16 */
 .siga-badge--prestamo {
   background: #f6edd6;

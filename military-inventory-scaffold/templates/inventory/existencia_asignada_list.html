@@ -27,9 +27,11 @@
       <span>Soldado: <strong>{{ asignada.soldado.nombre_con_grado }}</strong></span>
       {% if asignada.existencia.lote %}<span>Lote: <strong>{{ asignada.existencia.lote }}</strong></span>{% endif %}
     </div>
+    {% if user.puede_operar %}
     <div class="siga-card__meta" style="margin-top:8px;">
       <a href="{% url 'inventory:existencia_devolver' asignada.pk %}">Devolver</a>
     </div>
+    {% endif %}
   </div>
   {% empty %}
   <p class="siga-empty">Nadie tiene consumo asignado en este momento.</p>

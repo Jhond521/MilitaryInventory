@@ -1,10 +1,13 @@
 """Role-based view permission gates (RF-01, RF-10, H-03).
 
 Replaces `admin_mixins.py` (ModelAdmin-shaped) now that the app's own views —
-not the Django admin — are the primary surface. Only two roles exist
+not the Django admin — are the primary surface. Three roles exist
 (`User.Role`): ADMIN has full control over master data; ENLACE can view/
 search everything and register movements, but never create/edit/delete
-master data. `createsuperuser` always sets role=ADMIN (see
+master data; CONSULTA (issue #35) can only view/search. So there are three
+gates: `requiere_autorizado` (any active user — read-only screens),
+`requiere_operador` (ADMIN or ENLACE — entregar/devolver/prestar) and
+`requiere_admin`. `createsuperuser` always sets role=ADMIN (see
 `apps.accounts.models.UserManager`), so these checks don't need to
 special-case `is_superuser` separately from `role`.
 """
@@ -20,6 +23,12 @@ def es_administrador(user) -> bool:
 
 def usuario_autorizado(user) -> bool:
     return bool(user and user.is_authenticated and user.is_active)
+
+
+def puede_operar(user) -> bool:
+    """Registrar movimientos (entregar/devolver/prestar): ADMIN o ENLACE,
+    nunca CONSULTA (issue #35)."""
+    return usuario_autorizado(user) and user.puede_operar
 
 
 def _requiere(test_func):
@@ -44,4 +53,5 @@ def _requiere(test_func):
 
 
 requiere_autorizado = _requiere(usuario_autorizado)
+requiere_operador = _requiere(puede_operar)
 requiere_admin = _requiere(es_administrador)

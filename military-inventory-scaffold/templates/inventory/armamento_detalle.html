@@ -20,6 +20,7 @@
     </div>
   </div>
   <div class="siga-detail-header__actions">
+    {% if user.puede_operar %}
     {% if arma.ubicacion == "DEPOSITO" %}
     {% if puede_entregar %}<a class="siga-btn-primary" style="width:auto; height:auto; padding:0 18px; line-height:42px; text-decoration:none;" href="{% url 'inventory:armamento_entregar' arma.pk %}">Entregar</a>{% endif %}
     {% if arma.compania_en_prestamo %}
@@ -29,6 +30,7 @@
     {% endif %}
     {% else %}
     <a class="siga-btn-primary" style="width:auto; height:auto; padding:0 18px; line-height:42px; text-decoration:none;" href="{% url 'inventory:armamento_devolver' arma.pk %}">Devolver a depósito</a>
+    {% endif %}
     {% endif %}
     {% if user.is_admin_role and not arma.compania_en_prestamo %}
     <a class="siga-btn-secondary" style="width:auto; height:auto; padding:0 18px; line-height:42px; text-decoration:none;" href="{% url 'inventory:armamento_baja' arma.pk %}">Dar de baja</a>

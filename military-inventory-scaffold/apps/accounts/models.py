@@ -1,11 +1,14 @@
 """System users (RF-01).
 
-Only 6 people use SIGA and they authenticate with email + password.
-There are exactly two roles:
+The 6 operators authenticate with email + password and must be in
+settings.AUTHORIZED_EMAILS. There are three roles:
 
-- ADMIN  (administrador): full control over master data, altas/bajas,
+- ADMIN    (administrador): full control over master data, altas/bajas,
   custom fields and users, plus movements.
-- ENLACE (enlace): read/search and register movements only.
+- ENLACE   (enlace): read/search and register movements only.
+- CONSULTA (consulta, issue #35 / RF-25): read/search only — no action at
+  all. Created by an ADMIN in any number, and exempt from the email
+  allowlist (see apps.accounts.backends).
 
 Soldiers are NOT users — see apps.inventory.models.Soldado.
 """
@@ -41,6 +44,7 @@ class User(AbstractUser):
     class Role(models.TextChoices):
         ADMIN = "ADMIN", "Administrador"
         ENLACE = "ENLACE", "Enlace"
+        CONSULTA = "CONSULTA", "Consulta"
 
     username = None  # login is by email
     email = models.EmailField("correo", unique=True)
@@ -63,3 +67,12 @@ class User(AbstractUser):
     @property
     def is_admin_role(self) -> bool:
         return self.role == self.Role.ADMIN
+
+    @property
+    def is_consulta_role(self) -> bool:
+        return self.role == self.Role.CONSULTA
+
+    @property
+    def puede_operar(self) -> bool:
+        """True for the roles that may register movements (ADMIN, ENLACE)."""
+        return self.role in (self.Role.ADMIN, self.Role.ENLACE)

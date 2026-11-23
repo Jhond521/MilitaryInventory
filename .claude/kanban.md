@@ -1,7 +1,12 @@
 # Helper Kanban (GitHub Projects) — referencia para los comandos
 
-Este archivo lo incluyen los comandos de `/enriquecer-todo`, `/desarrollar`, `/publicar-dev` y
-`/desplegar-prod`. Contiene todo lo necesario para leer y mover tarjetas del GitHub Project vía `gh`.
+Este archivo lo incluyen los comandos de `/enriquecer-todo`, `/desarrollar`, `/publicar-dev`,
+`/probar-dev`, `/desplegar-prod` y `/quick-fix`. Contiene todo lo necesario para leer y mover tarjetas
+del GitHub Project vía `gh`.
+
+Ambientes Railway: dev `https://web-dev-62b1.up.railway.app` (servicio `web`, `--environment dev`) ·
+prod `https://web-prod-production-f6b5.up.railway.app` (servicio `web-prod`). El CLI está enlazado a
+production: pasa siempre `--environment dev --service web` para dev.
 
 Repo: `Jhond521/MilitaryInventory` · Ramas: `develop` (dev) / `main` (prod).
 Estados del tablero (en orden): **Backlog → Ready → In progress → In review → Done** (Project #3,

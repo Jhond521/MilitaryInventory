@@ -82,7 +82,7 @@
     <div class="siga-prestamo-nota">
       <span class="siga-badge siga-badge--prestamo">Recibido</span>
       <span>En préstamo de <strong>{{ prestamo.compania_origen.nombre }}</strong>: <strong>{{ prestamo.saldo }}</strong></span>
-      <a href="{% url 'inventory:prestamo_devolver' prestamo.pk %}?next={{ request.get_full_path|urlencode }}">Devolver</a>
+      {% if user.puede_operar %}<a href="{% url 'inventory:prestamo_devolver' prestamo.pk %}?next={{ request.get_full_path|urlencode }}">Devolver</a>{% endif %}
     </div>
     {% endfor %}
     {% for prestamo in existencia.prestamos_realizados %}
@@ -98,7 +98,7 @@
     </div>
     {% endif %}
     <div class="siga-card__meta" style="margin-top:8px;">
-      <a href="{% url 'inventory:existencia_entregar' existencia.pk %}">Entregar</a>
+      {% if user.puede_operar %}<a href="{% url 'inventory:existencia_entregar' existencia.pk %}">Entregar</a>{% endif %}
       {% if user.is_admin_role %}
       <a href="{% url 'inventory:existencia_editar' existencia.pk %}">Editar</a>
       <a href="{% url 'inventory:existencia_borrar' existencia.pk %}" style="color:var(--siga-red-dark);">Borrar</a>

@@ -3,7 +3,7 @@
 {% block content %}
 <div class="siga-card__top" style="margin-bottom:10px;">
   <h1 class="siga-page-title" style="margin:0;">Préstamos</h1>
-  <a class="siga-btn-secondary" style="width:auto; height:auto; padding:8px 14px; line-height:1; text-decoration:none;" href="{% url 'inventory:prestamo_transferir' %}">+ Prestar</a>
+  {% if user.puede_operar %}<a class="siga-btn-secondary" style="width:auto; height:auto; padding:8px 14px; line-height:1; text-decoration:none;" href="{% url 'inventory:prestamo_transferir' %}">+ Prestar</a>{% endif %}
 </div>
 <div class="siga-page-subtitle">
   {% include "inventory/_alcance.html" with con_deposito=True %}
@@ -33,7 +33,7 @@
       {% else %}
       <span><span class="siga-badge siga-badge--prestamo">Pendiente</span> {{ prestamo.saldo }}</span>
       {% endif %}
-      {% if prestamo.saldo %}<a href="{% url 'inventory:prestamo_devolver' prestamo.pk %}">Devolver</a>{% endif %}
+      {% if prestamo.saldo and user.puede_operar %}<a href="{% url 'inventory:prestamo_devolver' prestamo.pk %}">Devolver</a>{% endif %}
     </div>
   </div>
   {% empty %}

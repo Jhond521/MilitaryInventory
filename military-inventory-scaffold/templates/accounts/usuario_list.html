@@ -14,7 +14,7 @@
     </div>
     <div class="siga-card__meta">
       <span>{{ usuario.first_name }} {{ usuario.last_name }}</span>
-      <span>{{ usuario.get_role_display }}</span>
+      <span>{% if usuario.is_consulta_role %}<span class="siga-badge siga-badge--consulta">{{ usuario.get_role_display }}</span>{% else %}{{ usuario.get_role_display }}{% endif %}</span>
     </div>
     <div class="siga-card__meta" style="margin-top:8px;">
       <a href="{% url 'accounts:usuario_editar' usuario.pk %}">Editar</a>

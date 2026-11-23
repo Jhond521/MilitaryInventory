@@ -1,0 +1,39 @@
+{
+  "ticket": 29,
+  "title": "Devolver consumo eligiendo el depósito receptor",
+  "compania": null,
+  "setup": "c = ctx['compania']\nd1 = m.Deposito.objects.order_by('pk').first()\nd2 = m.Deposito.objects.exclude(pk=d1.pk).order_by('pk').first() or m.Deposito.objects.create(nombre='QA-DEP-TMP')\nt = m.TipoArmamento.objects.create(nombre='QA-29-TIPO', control='CANTIDAD')\npl = m.Peloton.objects.filter(compania=c).first() or m.Peloton.objects.create(compania=c, nombre='QA-PEL')\ns = m.Soldado.objects.create(apellidos_nombres='QA Temporal 29', compania=c, peloton=pl, cedula='990000029')\ne = m.Existencia.objects.create(tipo=t, compania=c, deposito=d1, lote='QA-L1', cantidad=50)\ne.entregar(soldado=s, cantidad=10, usuario=user)\nctx.update(t=t, e=e, d1=d1, d2=d2, s=s, a=m.ExistenciaAsignada.objects.get(existencia=e, soldado=s))",
+  "checks": [
+    {
+      "name": "#29 AC-1 la pantalla de devolver consumo ofrece el depósito receptor",
+      "path": "/municion/asignadas/{ctx[a].pk}/devolver/",
+      "contains": ["name=\"deposito\"", "Depósito receptor"]
+    },
+    {
+      "name": "#29 AC-2 devolver al mismo depósito repone la existencia original",
+      "method": "post",
+      "path": "/municion/asignadas/{ctx[a].pk}/devolver/",
+      "data": {"cantidad": "2", "deposito": "{ctx[d1].pk}", "observacion": "qa"},
+      "status": [302],
+      "assert": "m.Existencia.objects.get(pk=ctx['e'].pk).cantidad == 42 and not m.Existencia.objects.filter(tipo=ctx['t'], deposito=ctx['d2']).exists()"
+    },
+    {
+      "name": "#29 AC-3 devolver a otro depósito crea la existencia allí (misma compañía y lote), origen intacto",
+      "method": "post",
+      "path": "/municion/asignadas/{ctx[a].pk}/devolver/",
+      "data": {"cantidad": "4", "deposito": "{ctx[d2].pk}", "observacion": "qa"},
+      "status": [302],
+      "assert": "m.Existencia.objects.get(tipo=ctx['t'], deposito=ctx['d2'], compania=ctx['compania'], lote='QA-L1').cantidad == 4 and m.Existencia.objects.get(pk=ctx['e'].pk).cantidad == 42"
+    },
+    {
+      "name": "#29 AC-4 lo que el soldado tiene en mano se descuenta (10 - 2 - 4 = 4)",
+      "path": "/health/",
+      "assert": "m.ExistenciaAsignada.objects.get(pk=ctx['a'].pk).cantidad == 4"
+    },
+    {
+      "name": "#29 AC-5 queda movimiento de devolución en el depósito que la recibió",
+      "path": "/health/",
+      "assert": "m.MovimientoExistencia.objects.filter(tipo='DEVOLUCION', soldado=ctx['s'], existencia__deposito=ctx['d2'], cantidad=4, usuario=ctx['user']).exists()"
+    }
+  ]
+}

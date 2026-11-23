@@ -31,6 +31,10 @@ repo, típicamente:
 - [ ] UI responsive **mobile-first** y en español, siguiendo `design_specs/`; mantener la **PWA**
       (manifest + service worker) e íconos válidos; objetivos táctiles ≥ 44 px.
 - [ ] **Tests** nuevos (pytest) y no romper los existentes.
+  - Escribe **un test por cada criterio de aceptación** marcado `(verificación: test)`, con docstring
+    `#$ARGUMENTS AC-k`. Así `/probar-dev` encuentra la evidencia de cada criterio.
+  - Los criterios `(verificación: dev)` los prueba `/probar-dev` contra Railway dev. Igual cubre su
+    lógica con tests.
 - [ ] `ruff check .` y `python -m pytest` en verde (o vía `docker compose exec web ...`).
 - [ ] Levantar en local (`docker compose up` o `python manage.py runserver`) y verificar el flujo manualmente.
 
@@ -41,4 +45,6 @@ dejó tests o el linter en rojo.
 - **NO** hagas push ni deploy todavía. Deja el entorno local levantado (`docker compose up`, web en :8000).
 - Haz commits locales con mensajes claros que referencien `#$ARGUMENTS`, pero **quédate en local**.
 - Dame un resumen: qué se implementó, qué archivos cambiaron, cómo probarlo manualmente (pasos/URL),
-  y qué revisar. La tarjeta queda en **In Progress** hasta que yo pruebe y luego corra `/publicar-dev`.
+  y qué revisar. La tarjeta queda en **In progress** hasta que yo pruebe y luego corra `/publicar-dev`.
+  Ese comando la pasa a **In review** y lanza el QA automático (`/probar-dev`), que despliega a prod
+  si todo pasa.

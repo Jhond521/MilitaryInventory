@@ -43,9 +43,11 @@
           <span class="siga-badge siga-badge--en-mano">En mano</span>
         </div>
         <div class="siga-card__tipo">{{ arma.tipo.nombre }}</div>
+        {% if user.puede_operar %}
         <div class="siga-card__meta" style="margin-top:8px;">
           <a href="{% url 'inventory:armamento_devolver' arma.pk %}?next={{ ficha_url|urlencode }}">Devolver</a>
         </div>
+        {% endif %}
       </div>
       {% empty %}
       <p class="siga-empty" style="padding:8px 0;">No tiene armamento a cargo.</p>
@@ -66,9 +68,11 @@
           <span>Depósito: <strong>{{ asignada.existencia.deposito.nombre }}</strong></span>
           {% if asignada.existencia.lote %}<span>Lote: <strong>{{ asignada.existencia.lote }}</strong></span>{% endif %}
         </div>
+        {% if user.puede_operar %}
         <div class="siga-card__meta" style="margin-top:8px;">
           <a href="{% url 'inventory:existencia_devolver' asignada.pk %}?next={{ ficha_url|urlencode }}">Devolver</a>
         </div>
+        {% endif %}
       </div>
       {% empty %}
       <p class="siga-empty" style="padding:8px 0;">No tiene consumo a cargo.</p>
