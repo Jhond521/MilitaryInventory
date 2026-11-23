@@ -16,7 +16,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 
-from apps.accounts.permissions import requiere_admin, requiere_autorizado
+from apps.accounts.permissions import requiere_admin, requiere_autorizado, requiere_operador
 
 from .forms import (
     ArmamentoCrearForm,
@@ -446,7 +446,7 @@ def armamento_baja(request, pk):
     return render(request, "inventory/armamento_baja.html", {"form": form, "arma": armamento})
 
 
-@requiere_autorizado
+@requiere_operador
 def armamento_entregar(request, pk):
     """Flujo guiado de 3 pasos (Arma → Soldado → Confirmar) sobre
     `Armamento.entregar()` (RF-10)."""
@@ -488,7 +488,7 @@ def armamento_entregar(request, pk):
     return render(request, "inventory/armamento_entregar.html", context)
 
 
-@requiere_autorizado
+@requiere_operador
 def armamento_devolver(request, pk):
     """Un solo paso (visualmente simétrico a `armamento_entregar`) sobre
     `Armamento.devolver()` (RF-10) — el depósito no depende de la compañía."""
@@ -522,7 +522,7 @@ def armamento_devolver(request, pk):
     return render(request, "inventory/armamento_devolver.html", context)
 
 
-@requiere_autorizado
+@requiere_operador
 def armamento_prestar(request, pk):
     """Préstamo temporal del arma a otra compañía (RF-23, ADR-0007). Ambos
     roles, igual que el préstamo de munición (RF-15)."""
@@ -547,7 +547,7 @@ def armamento_prestar(request, pk):
     )
 
 
-@requiere_autorizado
+@requiere_operador
 def armamento_devolver_prestamo(request, pk):
     """Devuelve el arma prestada a su compañía dueña (RF-23); solo con el
     arma en depósito."""
@@ -1052,7 +1052,7 @@ def existencia_borrar(request, pk):
     return render(request, "inventory/master_confirm_delete.html", context)
 
 
-@requiere_autorizado
+@requiere_operador
 def existencia_entregar(request, pk):
     """Flujo guiado (Soldado → Confirmar) sobre `Existencia.entregar()`
     (RF-18) — visualmente simétrico a `armamento_entregar`."""
@@ -1093,7 +1093,7 @@ def existencia_entregar(request, pk):
     return render(request, "inventory/existencia_entregar.html", context)
 
 
-@requiere_autorizado
+@requiere_operador
 def existencia_devolver(request, pk):
     """Un solo paso sobre `ExistenciaAsignada.devolver()` (RF-18) —
     simétrico a `armamento_devolver`, incluido el selector de depósito
@@ -1203,7 +1203,7 @@ def prestamo_list(request):
     return render(request, "inventory/prestamo_list.html", context)
 
 
-@requiere_autorizado
+@requiere_operador
 def prestamo_transferir(request):
     """RF-15/H-16 — ambos roles pueden registrar (es "registrar un
     movimiento", no tocar datos maestros), igual que entregar/devolver."""
@@ -1236,7 +1236,7 @@ def prestamo_transferir(request):
     return render(request, "inventory/prestamo_form.html", {"form": form})
 
 
-@requiere_autorizado
+@requiere_operador
 def prestamo_devolver(request, pk):
     """Devolución total o parcial de un préstamo a la compañía de origen
     (RF-22, ADR-0006). Ambos roles, igual que prestar (RF-15)."""

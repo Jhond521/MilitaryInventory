@@ -2,14 +2,19 @@
 
 | | |
 |---|---|
-| **Estado** | En revisión (v1.7 — selección global de compañía y/o depósito) |
+| **Estado** | En revisión (v1.8 — usuario de solo consulta) |
 | **Autor** | John Cuervo (para David Bolaños — Batallón de Selva No. 52) |
-| **Última actualización** | 2026-10-21 |
-| **Versión** | v1.7 |
+| **Última actualización** | 2026-11-23 |
+| **Versión** | v1.8 |
 
 > **Terminología** (issue #26, 2026-10-21): en la interfaz, el módulo de existencias por
 > cantidad (munición, cascos sin serie, granadas, etc.) se llama **Consumo**. En este
 > documento "munición" sigue nombrando ese mismo material.
+>
+> **Cambios v1.8** (issue #35, 2026-11-23): se agrega **RF-25**, un tercer rol **Consulta**
+> (solo lectura). Lo crea un administrador, sin tope de cantidad, y no necesita estar en la
+> lista de correos. Ve todo y no ejecuta ninguna acción. La lista de correos sigue aplicando
+> a administradores y enlaces.
 >
 > **Cambios v1.7** (issue #25, 2026-10-21): se agrega **RF-24**. La selección de
 > trabajo al ingresar ya no es solo de compañía: el usuario elige **compañía y/o
@@ -90,12 +95,15 @@ Los soldados **no** son usuarios: son registros a los que se les asigna material
 | Auxiliar de bodegas | Apoyo en la gestión. | **Administrador** |
 | Bodegueros / administradores de depósito (2) | Uno por cada depósito físico (Apiay y Caruru). | **Administrador** |
 | Enlaces (2) | Encargados de los movimientos de material. | **Restringido (enlace)** |
+| Consulta (sin tope) | Personas que solo necesitan ver el inventario (RF-25). | **Consulta** |
 
 - **Administrador**: control total — crear/editar datos maestros (compañías,
   depósitos, tipos, campos personalizados, usuarios), altas y bajas de material,
   y registrar movimientos.
 - **Enlace (restringido)**: ver/buscar y **registrar movimientos** (entregas,
   devoluciones y préstamos de munición). No crea ni borra datos maestros.
+- **Consulta** (RF-25): solo ver y buscar. No registra movimientos ni toca datos
+  maestros. No está sujeto a la lista de correos: lo crea un administrador.
 
 ## 4. Objetivos y criterios de éxito
 
@@ -141,7 +149,8 @@ Los soldados **no** son usuarios: son registros a los que se les asigna material
 **Criterios de aceptación**:
 
 - [ ] Solo los correos de la lista autorizada pueden autenticarse; otro correo se rechaza.
-- [ ] Cada usuario tiene un rol: **administrador** o **enlace**.
+- [ ] Cada usuario tiene un rol: **administrador**, **enlace** o **consulta** (RF-25).
+- [ ] Excepción: un usuario **consulta** activo puede autenticarse aunque su correo no esté en la lista.
 - [ ] El rol determina qué acciones habilita la interfaz.
 
 ### RF-02 — Selección de compañía de trabajo al ingresar
@@ -422,12 +431,29 @@ para que todo el sistema se filtre por esa combinación. Amplía RF-02.
   pero se pueden cambiar.
 - [ ] "Ver todas" quita ambos filtros. Sigue siendo contexto, no permiso (S-2).
 
+### RF-25 — Usuario de solo consulta
+**Prioridad**: Media
+**Descripción**: Como administrador, quiero crear usuarios de solo consulta, sin
+límite de cantidad, para dar visibilidad del inventario sin agregar sus correos a la
+lista ni permitirles registrar nada. (Issue #35.)
+**Criterios de aceptación**:
+
+- [ ] Existe el rol **Consulta**. Solo un administrador crea, edita o desactiva estas cuentas,
+  desde la pantalla de Usuarios.
+- [ ] Un usuario consulta activo entra aunque su correo no esté en la lista. Administradores y
+  enlaces siguen necesitando estar en la lista.
+- [ ] Ve todas las pantallas de lectura (Inventario, Movimientos, Soldados, Consumo,
+  Préstamos, Ajustes y datos maestros) y elige su compañía y/o depósito de trabajo.
+- [ ] No puede entregar, devolver ni prestar (armas o consumo), ni crear, editar o borrar
+  nada: esas rutas responden 403 y la interfaz no le muestra los botones.
+- [ ] Puede cambiar su propia contraseña.
+
 ## 7. Requerimientos no funcionales
 
 | ID | Categoría | Requerimiento | Cómo se verifica |
 |---|---|---|---|
 | RNF-01 | Rendimiento | Búsqueda por serie < 2 s con ~1.800+ ítems. | Prueba con la carga real. |
-| RNF-02 | Seguridad | Acceso solo por lista de correos; acciones por rol; HTTPS. | Correo no autorizado (rechazado); acción de enlace sobre datos maestros (bloqueada). |
+| RNF-02 | Seguridad | Acceso por lista de correos (salvo el rol consulta, que crea un administrador, RF-25); acciones por rol; HTTPS. | Correo no autorizado (rechazado); acción de enlace sobre datos maestros (bloqueada). |
 | RNF-03 | Trazabilidad | Todo movimiento (entrega/devolución/préstamo/baja) queda con usuario y fecha/hora, sin borrado silencioso. | Revisar historial tras cada tipo de movimiento. |
 | RNF-04 | Usabilidad / Móvil | Interfaz en español, responsive (escritorio y celular) e instalable como PWA, usable por personal no técnico. | Prueba en celular por las 6 personas; instalar en pantalla de inicio. |
 | RNF-05 | Disponibilidad | Accesible por internet; tolerante a conectividad intermitente (Apiay/Caruru). | Verificar acceso desde ambas sedes. |
@@ -477,7 +503,7 @@ información se respalda. Los elementos dados de baja se conservan (no se elimin
 
 | Fase | Contenido | Requerimientos |
 |---|---|---|
-| v1 (MVP) | Acceso + roles, selección de compañía, CRUD de datos maestros, pelotones, material serializado (alta/ubicación/estado/movimientos/baja), existencias por cantidad y préstamo de munición, entrega/devolución de existencias a un soldado, grado del soldado, búsqueda, campos personalizados, carga inicial serializada, ficha del soldado, cédula del soldado, devolución de préstamos de munición, préstamo temporal de armamento, selección global de compañía y/o depósito, y app **móvil responsive e instalable (PWA)**. | RF-01 a RF-24 |
+| v1 (MVP) | Acceso + roles, selección de compañía, CRUD de datos maestros, pelotones, material serializado (alta/ubicación/estado/movimientos/baja), existencias por cantidad y préstamo de munición, entrega/devolución de existencias a un soldado, grado del soldado, búsqueda, campos personalizados, carga inicial serializada, ficha del soldado, cédula del soldado, devolución de préstamos de munición, préstamo temporal de armamento, selección global de compañía y/o depósito, usuario de solo consulta, y app **móvil responsive e instalable (PWA)**. | RF-01 a RF-25 |
 | Siguiente | Importador de Excel autoservicio, carga de munición inicial, reportes/exportes, tablero de resumen por compañía, acuse de entrega. | — |
 | Algún día | Multi-unidad con configurador, app móvil, escaneo de serie. | — |
 

@@ -69,8 +69,9 @@ docker compose up
 
 ```
 config/            # Django project: settings, urls (incl. /manifest.json, /sw.js), wsgi/asgi — no admin.site
-apps/accounts/     # custom User (email login), roles (ADMIN/ENLACE), email allowlist backend
-  permissions.py   #   es_administrador/usuario_autorizado + requiere_admin/requiere_autorizado decorators (H-03)
+apps/accounts/     # custom User (email login), roles (ADMIN/ENLACE/CONSULTA), email allowlist backend
+  permissions.py   #   es_administrador/puede_operar/usuario_autorizado + requiere_admin/requiere_operador/
+                   #   requiere_autorizado decorators (H-03, issue #35)
   views.py, urls.py, forms.py # login/logout/password-change (over django.contrib.auth.views) +
                    #   usuario_list/_crear/_editar/_restablecer_password (ADMIN-only) — mounted at /cuenta/
 apps/inventory/    # domain: Unidad, Compania, Deposito, Peloton, Soldado, TipoArmamento,
@@ -183,13 +184,20 @@ docs/              # PRD (Spanish), backlog (Spanish), ADRs
   choices. Don't add a scoped list view without applying `_alcance()`. The list subtitle is
   `templates/inventory/_alcance.html`.
 - Access is restricted to `settings.AUTHORIZED_EMAILS`; the `AllowlistModelBackend`
-  rejects logins outside the list even if a user row exists.
+  rejects logins outside the list even if a user row exists — **except** for role
+  `CONSULTA` (read-only, RF-25, issue #35), which an ADMIN creates in any number. The
+  exemption is checked on the stored role after the password check, so only ADMIN-created
+  accounts get it; keep every user-management view `@requiere_admin`.
 - Role gates (`apps/accounts/permissions.py`, RF-01/RF-10, H-03) check `user.role`
   directly via `es_administrador(user)`/`usuario_autorizado(user)` — no Django
   groups/permissions are ever assigned. Every view that touches master data or a
-  sensitive action must be decorated `@requiere_admin`; every other authenticated view
-  must be `@requiere_autorizado` (there is no undecorated view — an undecorated one is a
-  bug). The generic CRUD in `apps/inventory/crud.py` uses the class-based equivalents
+  sensitive action must be decorated `@requiere_admin`; every view that registers a
+  movement (entregar/devolver/prestar of armas or consumo) must be `@requiere_operador`
+  (ADMIN or ENLACE — never CONSULTA); every other authenticated, read-only view must be
+  `@requiere_autorizado` (there is no undecorated view — an undecorated one is a bug).
+  A new action view left on `@requiere_autorizado` lets CONSULTA users run it. In
+  templates, hide movement buttons behind `user.puede_operar` (admin-only ones behind
+  `user.is_admin_role`). The generic CRUD in `apps/inventory/crud.py` uses the class-based equivalents
   (`AdminMixin`/`AutorizadoMixin`, built on `UserPassesTestMixin`). **Don't use
   `django.contrib.auth.decorators.user_passes_test` directly** — it always redirects to
   login on failure, even for an already-authenticated user, which loops forever against
