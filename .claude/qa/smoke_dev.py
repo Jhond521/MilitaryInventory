@@ -25,7 +25,13 @@
 #       "status": [200],                      # accepted status codes (default [200])
 #       "contains": ["siga-kpi-row"],         # substrings that must be in the body
 #       "not_contains": ["Traceback"],
-#       "assert": "response.context is None or True"   # optional python expr; must be truthy
+#       "assert": "response.context is None or True",  # optional python expr; must be truthy
+#       "files": {"archivo": "xlsx"},         # optional uploads: field -> ctx key holding
+#                                             # bytes; or [ctx key, filename]
+#       "save": "export",                     # optional: ctx[key] = response.content
+#       "max_seconds": 20,                    # optional: the request must take less
+#       "login_as": "enlace"                  # optional: force_login(ctx[key]) BEFORE the
+#                                             # request (null/"" = log out)
 #     }
 #   ]
 # }
@@ -35,10 +41,12 @@
 # `SPEC` is defined by the line prepended by /probar-dev.
 # ruff: noqa: F821
 import json
+import time
 import traceback
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import transaction
 from django.test import Client
 from django.test.utils import setup_test_environment
@@ -81,18 +89,24 @@ def _run(spec):
             client = Client(HTTP_HOST=host)
             client.force_login(user)
 
-            session = client.session
             compania = (
                 m.Compania.objects.filter(nombre=spec["compania"]).first()
                 if spec.get("compania")
                 else m.Compania.objects.order_by("pk").first()
             )
-            if compania:
-                session[SESSION_KEY] = compania.pk
-            if spec.get("deposito"):
-                deposito = m.Deposito.objects.get(nombre=spec["deposito"])
-                session[SESSION_KEY_DEPOSITO] = deposito.pk
-            session.save()
+            deposito = (
+                m.Deposito.objects.get(nombre=spec["deposito"]) if spec.get("deposito") else None
+            )
+
+            def _sesion_de_trabajo():
+                session = client.session
+                if compania:
+                    session[SESSION_KEY] = compania.pk
+                if deposito:
+                    session[SESSION_KEY_DEPOSITO] = deposito.pk
+                session.save()
+
+            _sesion_de_trabajo()
 
             ctx = {"compania": compania, "user": user}
             if spec.get("setup"):
@@ -104,9 +118,23 @@ def _run(spec):
                     path = _fmt(check["path"], ctx)
                     method = check.get("method", "get").lower()
                     data = _fmt(check.get("data", {}), ctx)
+                    if "login_as" in check:
+                        client.logout()
+                        if check["login_as"]:
+                            client.force_login(ctx[check["login_as"]])
+                            _sesion_de_trabajo()
+                    for field, source in check.get("files", {}).items():
+                        key, filename = source if isinstance(source, list) else (source, f"{source}.xlsx")
+                        data[field] = SimpleUploadedFile(filename, ctx[key])
+                    inicio = time.perf_counter()
                     response = getattr(client, method)(path, data, secure=True)
+                    segundos = time.perf_counter() - inicio
                     body = response.content.decode("utf-8", "replace")
+                    if check.get("save"):
+                        ctx[check["save"]] = response.content
                     problems = []
+                    if check.get("max_seconds") and segundos >= check["max_seconds"]:
+                        problems.append(f"tardó {segundos:.1f} s (máx {check['max_seconds']} s)")
                     if response.status_code not in check.get("status", [200]):
                         problems.append(f"status {response.status_code}")
                     for text in _fmt(check.get("contains", []), ctx):
@@ -119,9 +147,10 @@ def _run(spec):
                         env = {"response": response, "body": body, "m": m, "ctx": ctx}
                         if not eval(check["assert"], env):
                             problems.append(f"assert falso: {check['assert']}")
-                    results.append(
-                        {"name": name, "ok": not problems, "detail": "; ".join(problems) or "ok"}
-                    )
+                    detail = "; ".join(problems) or "ok"
+                    if check.get("max_seconds"):
+                        detail += f" ({segundos:.2f} s)"
+                    results.append({"name": name, "ok": not problems, "detail": detail})
                 except Exception as exc:  # noqa: BLE001 — report, never crash the run
                     results.append(
                         {"name": name, "ok": False, "detail": f"{type(exc).__name__}: {exc}"}

@@ -1,0 +1,99 @@
+{
+  "ticket": 33,
+  "title": "Backup solo para admins (exportar respaldo a Excel)",
+  "compania": null,
+  "setup": "import io, json as _json, zipfile\nfrom django.contrib.auth import get_user_model\nfrom django.db.models import Max\nfrom openpyxl import load_workbook\nfrom apps.inventory import respaldo as R\nU = get_user_model()\nc = ctx['compania']\nc2 = m.Compania.objects.exclude(pk=c.pk).order_by('pk').first() or m.Compania.objects.create(unidad=c.unidad, nombre='QA-RESP-B')\nd = m.Deposito.objects.order_by('pk').first() or m.Deposito.objects.create(nombre='QA-RESP-DEP')\nfusil = m.TipoArmamento.objects.create(nombre='QA-RESP-FUSIL', control='SERIE')\nmun = m.TipoArmamento.objects.create(nombre='QA-RESP-MUN', control='CANTIDAD')\np = m.Peloton.objects.create(compania=c, nombre='QA-RESP-P1')\np2 = m.Peloton.objects.create(compania=c2, nombre='QA-RESP-P2')\ns = m.Soldado.objects.create(apellidos_nombres='Peña Núñez QA', compania=c, peloton=p, cedula='990003301')\ns_null = m.Soldado.objects.create(apellidos_nombres='QA Sin Cédula', compania=c, peloton=p, cedula=None)\ns_borrable = m.Soldado.objects.create(apellidos_nombres='QA Borrable', compania=c, peloton=p, cedula='990003303')\ns2 = m.Soldado.objects.create(apellidos_nombres='QA Otra Compañía', compania=c2, peloton=p2, cedula='990003304')\na_mano = m.Armamento.objects.create(numero_serie='QA-RESP-MANO', tipo=fusil, compania=c, ubicacion='DEPOSITO', deposito=d, datos_extra={'Señal': 'Ñandú', 'año': 2026})\na_mano.entregar(soldado=s, usuario=user, observacion='=SUMA(A1:A9)+1 Peña')\na_libre = m.Armamento.objects.create(numero_serie='QA-RESP-LIBRE', tipo=fusil, compania=c, ubicacion='DEPOSITO', deposito=d)\na_prest = m.Armamento.objects.create(numero_serie='QA-RESP-PREST', tipo=fusil, compania=c, ubicacion='DEPOSITO', deposito=d)\na_prest.prestar(compania=c2, usuario=user)\ncarga = m.Armamento.objects.bulk_create([m.Armamento(numero_serie=f'QA-RESP-L{i:04d}', tipo=fusil, compania=c, ubicacion='DEPOSITO', deposito=d) for i in range(1041)])\nm.Existencia.objects.bulk_create([m.Existencia(tipo=mun, compania=c, deposito=d, lote=f'QA-RESP-LOTE{i:03d}', cantidad=100) for i in range(463)])\nm.Movimiento.objects.bulk_create([m.Movimiento(armamento=carga[i % 1041], tipo='ENTREGA', soldado=s, usuario=user, observacion='QA carga') for i in range(3000)])\ne = m.Existencia.objects.create(tipo=mun, compania=c, deposito=d, lote='QA-RESP-L', cantidad=100)\ne.entregar(soldado=s, cantidad=10, usuario=user)\npr = m.Prestamo(tipo=mun, deposito=d, lote='QA-RESP-L', cantidad=20, compania_origen=c, compania_destino=c2, usuario=user)\npr.full_clean()\npr.save()\nenlace = U.objects.create_user(email='qa-enlace-resp@example.invalid', password='Qa-clave-resp-x', role='ENLACE')\nconsulta = U.objects.create_user(email='qa-consulta-resp@example.invalid', password='Qa-clave-resp-x', role='CONSULTA')\n\ndef conteos():\n    return {h: mod.objects.count() for h, mod in R.MODELOS_RESPALDO}\n\ndef libro(b):\n    return load_workbook(io.BytesIO(b))\n\ndef meta(wb):\n    return {k: v for k, v in wb['_meta'].iter_rows(min_row=2, values_only=True)}\n\ndef filas(wb, hoja):\n    rows = list(wb[hoja].iter_rows(values_only=True))\n    return [dict(zip(rows[0], r)) for r in rows[1:]]\n\ndef hojas_xml(b):\n    z = zipfile.ZipFile(io.BytesIO(b))\n    return b''.join(z.read(n) for n in z.namelist() if n.startswith('xl/'))\n\ndef check(cond, msg):\n    if not cond:\n        raise AssertionError(msg)\n    return True\n\nctx.update(R=R, U=U, c=c, c2=c2, d=d, fusil=fusil, mun=mun, p=p, s=s, s_null=s_null, s_borrable=s_borrable, s2=s2, a_mano=a_mano, a_libre=a_libre, a_prest=a_prest, e=e, pr=pr, enlace=enlace, consulta=consulta, conteos=conteos, libro=libro, meta=meta, filas=filas, hojas_xml=hojas_xml, check=check, antes=conteos())\n\ndef ac3(resp):\n    disp = resp['Content-Disposition']\n    import re\n    check(resp['Content-Type'] == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', resp['Content-Type'])\n    check(re.fullmatch(r'attachment; filename=\"SIGA-respaldo-\\d{8}-\\d{4}\\.xlsx\"', disp), disp)\n    libro(resp.content)\n    return True\n\ndef ac4(b):\n    wb = libro(b)\n    check(wb.sheetnames == ['_meta'] + R.HOJAS, f'hojas {wb.sheetnames}')\n    for h, mod in R.MODELOS_RESPALDO:\n        cab = list(next(wb[h].iter_rows(max_row=1, values_only=True)))\n        check(cab == R.columnas(mod) and cab[0] == 'id', f'{h}: {cab}')\n    return True\n\ndef ac5(b):\n    wb = libro(b)\n    mt = meta(wb)\n    for h, mod in R.MODELOS_RESPALDO:\n        n = wb[h].max_row - 1\n        check(n == mod.objects.count() == int(mt[f'filas_{h}']), f'{h}: hoja {n}, BD {mod.objects.count()}, meta {mt.get(f\"filas_{h}\")}')\n    check(int(mt['formato']) == 1, mt.get('formato'))\n    check(mt['generado_por'] == user.email, mt.get('generado_por'))\n    from datetime import datetime\n    check(datetime.fromisoformat(mt['generado']).tzinfo is not None, mt.get('generado'))\n    ult = R.ultimas_migraciones()\n    check(mt['migracion_inventory'] == ult['inventory'] and mt['migracion_accounts'] == ult['accounts'], (mt.get('migracion_inventory'), mt.get('migracion_accounts')))\n    return True\n\ndef ac6(b):\n    wb = libro(b)\n    arma = next(f for f in filas(wb, 'Armamento') if f['numero_serie'] == 'QA-RESP-MANO')\n    check(arma['compania_id'] == c.pk and arma['soldado_id'] == s.pk and arma['tipo_id'] == fusil.pk and arma['deposito_id'] is None, arma)\n    pf = next(f for f in filas(wb, 'Prestamo') if f['id'] == pr.pk)\n    check((pf['compania_origen_id'], pf['compania_destino_id'], pf['deposito_id'], pf['tipo_id'], pf['usuario_id']) == (c.pk, c2.pk, d.pk, mun.pk, user.pk), pf)\n    hoja_de = {mod: h for h, mod in R.MODELOS_RESPALDO}\n    ids = {h: {f['id'] for f in filas(wb, h)} for h in R.HOJAS}\n    for h, mod in R.MODELOS_RESPALDO:\n        fks = [f for f in R.campos(mod) if f.is_relation]\n        for fila in filas(wb, h):\n            for f in fks:\n                v = fila[f.attname]\n                check(v is None or v in ids[hoja_de[f.related_model]], f'{h}.{f.attname}={v} no existe en {hoja_de[f.related_model]}')\n    return True\n\ndef ac7(b):\n    wb = libro(b)\n    sol = {f['id']: f for f in filas(wb, 'Soldado')}\n    check(sol[s.pk]['apellidos_nombres'] == 'Peña Núñez QA', sol[s.pk])\n    check(sol[s_null.pk]['cedula'] is None, sol[s_null.pk])\n    arma = next(f for f in filas(wb, 'Armamento') if f['numero_serie'] == 'QA-RESP-MANO')\n    check('Ñandú' in arma['datos_extra'] and _json.loads(arma['datos_extra']) == {'Señal': 'Ñandú', 'año': 2026}, arma['datos_extra'])\n    mov = next(f for f in filas(wb, 'Movimiento') if f['armamento_id'] == a_mano.pk)\n    check(mov['observacion'] == '=SUMA(A1:A9)+1 Peña', mov['observacion'])\n    from datetime import datetime\n    check(datetime.fromisoformat(mov['fecha']).tzinfo is not None, mov['fecha'])\n    check(b'<f>' not in hojas_xml(b) and b'<f ' not in hojas_xml(b), 'hay fórmulas en el libro')\n    return True\n\ndef ac8(b):\n    wb = libro(b)\n    cab = list(next(wb['Usuario'].iter_rows(max_row=1, values_only=True)))\n    check(cab == ['id', 'email', 'first_name', 'last_name', 'role', 'is_active', 'date_joined'], cab)\n    x = hojas_xml(b)\n    check(b'pbkdf2' not in x and b'argon2' not in x and b'bcrypt' not in x and b'password' not in x, 'hay hash o columna password')\n    return True\n\ndef ac10(b):\n    wb = libro(b)\n    check(s2.pk in {f['id'] for f in filas(wb, 'Soldado')} and c2.pk in {f['id'] for f in filas(wb, 'Compania')}, 'faltan registros de otra compañía')\n    return True\n\nctx.update(ac3=ac3, ac4=ac4, ac5=ac5, ac6=ac6, ac7=ac7, ac8=ac8, ac10=ac10, movs_antes=m.Movimiento.objects.count() + m.MovimientoExistencia.objects.count())",
+  "checks": [
+    {
+      "name": "#33 AC-1 ADMIN ve la tarjeta Exportar respaldo en /ajustes/",
+      "path": "/ajustes/",
+      "contains": [
+        "Exportar respaldo",
+        "href=\"/ajustes/respaldo/exportar/\""
+      ]
+    },
+    {
+      "name": "#33 AC-3/AC-11 ADMIN exporta: 200, XLSX, nombre SIGA-respaldo-AAAAMMDD-HHMM.xlsx, < 20 s con carga real",
+      "path": "/ajustes/respaldo/exportar/",
+      "max_seconds": 20,
+      "save": "export",
+      "assert": "ctx['ac3'](response)"
+    },
+    {
+      "name": "#33 AC-4 hojas _meta + 15 modelos en orden, fila 1 = campos técnicos desde id",
+      "path": "/health/",
+      "assert": "ctx['ac4'](ctx['export'])"
+    },
+    {
+      "name": "#33 AC-5 filas por hoja = BD = _meta; _meta con formato, fecha, correo y migraciones",
+      "path": "/health/",
+      "assert": "ctx['ac5'](ctx['export'])"
+    },
+    {
+      "name": "#33 AC-6 relaciones por id (arma EN_MANO, préstamo) y todo *_id existe en su hoja",
+      "path": "/health/",
+      "assert": "ctx['ac6'](ctx['export'])"
+    },
+    {
+      "name": "#33 AC-7 tildes/ñ, texto con = sin fórmula, datos_extra JSON sin escapar, fechas ISO con zona, cédula null vacía",
+      "path": "/health/",
+      "assert": "ctx['ac7'](ctx['export'])"
+    },
+    {
+      "name": "#33 AC-8 hoja Usuario sin password ni hash, columnas exactas",
+      "path": "/health/",
+      "assert": "ctx['ac8'](ctx['export'])"
+    },
+    {
+      "name": "#33 AC-9 exportar no cambia conteos ni crea movimientos",
+      "path": "/health/",
+      "assert": "ctx['conteos']() == ctx['antes'] and m.Movimiento.objects.count() + m.MovimientoExistencia.objects.count() == ctx['movs_antes']"
+    },
+    {
+      "name": "#33 AC-10 incluye otras compañías aunque haya compañía de trabajo",
+      "path": "/health/",
+      "assert": "ctx['ac10'](ctx['export'])"
+    },
+    {
+      "name": "#33 AC-1 ENLACE no ve la tarjeta Exportar respaldo",
+      "login_as": "enlace",
+      "path": "/ajustes/",
+      "not_contains": [
+        "Exportar respaldo",
+        "/ajustes/respaldo/exportar/"
+      ]
+    },
+    {
+      "name": "#33 AC-2 ENLACE GET exportar -> 403",
+      "path": "/ajustes/respaldo/exportar/",
+      "status": [
+        403
+      ]
+    },
+    {
+      "name": "#33 AC-1 CONSULTA no ve la tarjeta Exportar respaldo",
+      "login_as": "consulta",
+      "path": "/ajustes/",
+      "not_contains": [
+        "Exportar respaldo",
+        "/ajustes/respaldo/exportar/"
+      ]
+    },
+    {
+      "name": "#33 AC-2 CONSULTA GET exportar -> 403",
+      "path": "/ajustes/respaldo/exportar/",
+      "status": [
+        403
+      ]
+    },
+    {
+      "name": "#33 AC-2 sin sesión, exportar redirige al login",
+      "login_as": "",
+      "path": "/ajustes/respaldo/exportar/",
+      "status": [
+        302
+      ],
+      "assert": "'/cuenta/login/' in response['Location']"
+    }
+  ]
+}

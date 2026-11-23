@@ -1,0 +1,361 @@
+{
+  "ticket": 34,
+  "title": "Reestablecer backup (restauración por reemplazo completo)",
+  "compania": null,
+  "setup": "import io, json as _json, zipfile\nfrom django.contrib.auth import get_user_model\nfrom django.db.models import Max\nfrom openpyxl import load_workbook\nfrom apps.inventory import respaldo as R\nU = get_user_model()\nc = ctx['compania']\nc2 = m.Compania.objects.exclude(pk=c.pk).order_by('pk').first() or m.Compania.objects.create(unidad=c.unidad, nombre='QA-RESP-B')\nd = m.Deposito.objects.order_by('pk').first() or m.Deposito.objects.create(nombre='QA-RESP-DEP')\nfusil = m.TipoArmamento.objects.create(nombre='QA-RESP-FUSIL', control='SERIE')\nmun = m.TipoArmamento.objects.create(nombre='QA-RESP-MUN', control='CANTIDAD')\np = m.Peloton.objects.create(compania=c, nombre='QA-RESP-P1')\np2 = m.Peloton.objects.create(compania=c2, nombre='QA-RESP-P2')\ns = m.Soldado.objects.create(apellidos_nombres='Peña Núñez QA', compania=c, peloton=p, cedula='990003301')\ns_null = m.Soldado.objects.create(apellidos_nombres='QA Sin Cédula', compania=c, peloton=p, cedula=None)\ns_borrable = m.Soldado.objects.create(apellidos_nombres='QA Borrable', compania=c, peloton=p, cedula='990003303')\ns2 = m.Soldado.objects.create(apellidos_nombres='QA Otra Compañía', compania=c2, peloton=p2, cedula='990003304')\na_mano = m.Armamento.objects.create(numero_serie='QA-RESP-MANO', tipo=fusil, compania=c, ubicacion='DEPOSITO', deposito=d, datos_extra={'Señal': 'Ñandú', 'año': 2026})\na_mano.entregar(soldado=s, usuario=user, observacion='=SUMA(A1:A9)+1 Peña')\na_libre = m.Armamento.objects.create(numero_serie='QA-RESP-LIBRE', tipo=fusil, compania=c, ubicacion='DEPOSITO', deposito=d)\na_prest = m.Armamento.objects.create(numero_serie='QA-RESP-PREST', tipo=fusil, compania=c, ubicacion='DEPOSITO', deposito=d)\na_prest.prestar(compania=c2, usuario=user)\ncarga = m.Armamento.objects.bulk_create([m.Armamento(numero_serie=f'QA-RESP-L{i:04d}', tipo=fusil, compania=c, ubicacion='DEPOSITO', deposito=d) for i in range(1041)])\nm.Existencia.objects.bulk_create([m.Existencia(tipo=mun, compania=c, deposito=d, lote=f'QA-RESP-LOTE{i:03d}', cantidad=100) for i in range(463)])\nm.Movimiento.objects.bulk_create([m.Movimiento(armamento=carga[i % 1041], tipo='ENTREGA', soldado=s, usuario=user, observacion='QA carga') for i in range(3000)])\ne = m.Existencia.objects.create(tipo=mun, compania=c, deposito=d, lote='QA-RESP-L', cantidad=100)\ne.entregar(soldado=s, cantidad=10, usuario=user)\npr = m.Prestamo(tipo=mun, deposito=d, lote='QA-RESP-L', cantidad=20, compania_origen=c, compania_destino=c2, usuario=user)\npr.full_clean()\npr.save()\nenlace = U.objects.create_user(email='qa-enlace-resp@example.invalid', password='Qa-clave-resp-x', role='ENLACE')\nconsulta = U.objects.create_user(email='qa-consulta-resp@example.invalid', password='Qa-clave-resp-x', role='CONSULTA')\n\ndef conteos():\n    return {h: mod.objects.count() for h, mod in R.MODELOS_RESPALDO}\n\ndef libro(b):\n    return load_workbook(io.BytesIO(b))\n\ndef meta(wb):\n    return {k: v for k, v in wb['_meta'].iter_rows(min_row=2, values_only=True)}\n\ndef filas(wb, hoja):\n    rows = list(wb[hoja].iter_rows(values_only=True))\n    return [dict(zip(rows[0], r)) for r in rows[1:]]\n\ndef hojas_xml(b):\n    z = zipfile.ZipFile(io.BytesIO(b))\n    return b''.join(z.read(n) for n in z.namelist() if n.startswith('xl/'))\n\ndef check(cond, msg):\n    if not cond:\n        raise AssertionError(msg)\n    return True\n\nctx.update(R=R, U=U, c=c, c2=c2, d=d, fusil=fusil, mun=mun, p=p, s=s, s_null=s_null, s_borrable=s_borrable, s2=s2, a_mano=a_mano, a_libre=a_libre, a_prest=a_prest, e=e, pr=pr, enlace=enlace, consulta=consulta, conteos=conteos, libro=libro, meta=meta, filas=filas, hojas_xml=hojas_xml, check=check, antes=conteos())\n\ndef variantes(b):\n    def mod(fn, nombre):\n        wb = libro(b)\n        fn(wb)\n        out = io.BytesIO()\n        wb.save(out)\n        ctx[nombre] = out.getvalue()\n    def col(ws, nombre):\n        return [c.value for c in ws[1]].index(nombre) + 1\n    def fila_de(ws, colname, valor):\n        k = col(ws, colname)\n        return next(r for r in range(2, ws.max_row + 1) if ws.cell(r, k).value == valor)\n    def set_meta(wb, clave, valor):\n        ws = wb['_meta']\n        r = next(r for r in range(2, ws.max_row + 1) if ws.cell(r, 1).value == clave)\n        ws.cell(r, 2).value = valor\n    def sin_meta(wb):\n        del wb['_meta']\n    def sin_hoja(wb):\n        del wb['Prestamo']\n    def sin_columna(wb):\n        ws = wb['Soldado']\n        ws.delete_cols(col(ws, 'cedula'))\n    def fk_rota(wb):\n        ws = wb['Armamento']\n        ws.cell(fila_de(ws, 'numero_serie', 'QA-RESP-MANO'), col(ws, 'compania_id')).value = 999999999\n    def serie_dup(wb):\n        ws = wb['Armamento']\n        ws.cell(fila_de(ws, 'numero_serie', 'QA-RESP-LIBRE'), col(ws, 'numero_serie')).value = 'QA-RESP-MANO'\n    def fecha_mala(wb):\n        ws = wb['Movimiento']\n        ws.cell(fila_de(ws, 'armamento_id', a_mano.pk), col(ws, 'fecha')).value = 'no-es-fecha'\n    ctx['inv_a'] = b'esto no es un excel'\n    mod(sin_meta, 'inv_b')\n    mod(lambda wb: set_meta(wb, 'formato', 2), 'inv_b2')\n    mod(lambda wb: set_meta(wb, 'migracion_inventory', '0001_otra'), 'inv_c')\n    mod(sin_hoja, 'inv_d')\n    mod(sin_columna, 'inv_d2')\n    mod(fk_rota, 'inv_e')\n    mod(serie_dup, 'inv_f')\n    mod(fecha_mala, 'inv_g')\n    return True\n\ndef cambiar():\n    # Changes the restore must undo: new arma, an entrega, a deleted soldier, a loan.\n    nuevo = m.Armamento.objects.create(numero_serie='QA-RESP-NUEVA', tipo=fusil, compania=c, ubicacion='DEPOSITO', deposito=d)\n    m.Armamento.objects.get(pk=a_libre.pk).entregar(soldado=s, usuario=user)\n    m.Soldado.objects.get(pk=s_borrable.pk).delete()\n    pr2 = m.Prestamo(tipo=mun, deposito=d, lote='QA-RESP-L', cantidad=5, compania_origen=c, compania_destino=c2, usuario=user)\n    pr2.full_clean()\n    pr2.save()\n    ctx.update(nuevo_pk=nuevo.pk, pr2_pk=pr2.pk)\n    check(ctx['conteos']() != ctx['antes'], 'los cambios no cambiaron los conteos')\n    return True\n\ndef revertido():\n    check(ctx['conteos']() == ctx['antes'], f\"conteos {ctx['conteos']()} != {ctx['antes']}\")\n    check(not m.Armamento.objects.filter(pk=ctx['nuevo_pk']).exists(), 'el arma nueva sigue')\n    check(not m.Prestamo.objects.filter(pk=ctx['pr2_pk']).exists(), 'el préstamo nuevo sigue')\n    al = m.Armamento.objects.get(pk=a_libre.pk)\n    check(al.ubicacion == 'DEPOSITO' and al.soldado_id is None and al.deposito_id == d.pk, 'el arma entregada no volvió al depósito')\n    check(m.Soldado.objects.filter(pk=s_borrable.pk, cedula='990003303').exists(), 'el soldado borrado no volvió')\n    am = m.Armamento.objects.get(pk=a_mano.pk)\n    check(am.soldado_id == s.pk and am.datos_extra == {'Señal': 'Ñandú', 'año': 2026}, 'arma en mano cambió')\n    check(m.Armamento.objects.get(pk=a_prest.pk).compania_en_prestamo_id == c2.pk, 'préstamo de arma perdido')\n    check(m.Existencia.objects.get(pk=e.pk).cantidad == ctx['saldo_e'], 'saldo de existencia cambió')\n    check(m.Movimiento.objects.get(armamento=a_mano, tipo='ENTREGA').observacion == '=SUMA(A1:A9)+1 Peña', 'observación con = cambió')\n    check(m.Soldado.objects.get(pk=s.pk).apellidos_nombres == 'Peña Núñez QA', 'tildes perdidas')\n    return True\n\ndef secuencias():\n    nuevo = m.Soldado.objects.create(apellidos_nombres='QA Post Restauración', compania=c, peloton=p, cedula='990003309')\n    check(nuevo.pk > ctx['max_soldado'], f'soldado id {nuevo.pk} <= {ctx[\"max_soldado\"]}')\n    arma = m.Armamento.objects.get(pk=a_libre.pk)\n    arma.entregar(soldado=nuevo, usuario=user)\n    mov = m.Movimiento.objects.filter(armamento=arma).latest('pk')\n    check(mov.pk > ctx['max_mov'], f'movimiento id {mov.pk} <= {ctx[\"max_mov\"]}')\n    return True\n\nctx.update(variantes=variantes, cambiar=cambiar, revertido=revertido, secuencias=secuencias, saldo_e=m.Existencia.objects.get(pk=e.pk).cantidad, max_soldado=m.Soldado.objects.aggregate(x=Max('pk'))['x'], max_mov=m.Movimiento.objects.aggregate(x=Max('pk'))['x'])",
+  "checks": [
+    {
+      "name": "#34 AC-1 ADMIN ve la tarjeta Reestablecer respaldo en /ajustes/",
+      "path": "/ajustes/",
+      "contains": [
+        "Reestablecer respaldo",
+        "href=\"/ajustes/respaldo/reestablecer/\""
+      ]
+    },
+    {
+      "name": "(paso) exportar el estado actual con #33 (archivo de esta misma corrida)",
+      "path": "/ajustes/respaldo/exportar/",
+      "save": "xlsx",
+      "assert": "ctx['variantes'](ctx['xlsx'])"
+    },
+    {
+      "name": "#34 AC-2/AC-7 GET del formulario de subida como ADMIN",
+      "path": "/ajustes/respaldo/reestablecer/",
+      "contains": [
+        "name=\"archivo\""
+      ]
+    },
+    {
+      "name": "#34 AC-6 (a) no es .xlsx: 400 con hoja/fila/columna y nada cambia",
+      "method": "post",
+      "path": "/ajustes/respaldo/reestablecer/",
+      "files": {
+        "archivo": [
+          "inv_a",
+          "respaldo.txt"
+        ]
+      },
+      "status": [
+        400
+      ],
+      "contains": [
+        "No se puede reestablecer este archivo",
+        "no es un Excel (.xlsx) válido"
+      ],
+      "assert": "ctx['conteos']() == ctx['antes']"
+    },
+    {
+      "name": "#34 AC-6 (b) falta la hoja _meta: 400 con hoja/fila/columna y nada cambia",
+      "method": "post",
+      "path": "/ajustes/respaldo/reestablecer/",
+      "files": {
+        "archivo": "inv_b"
+      },
+      "status": [
+        400
+      ],
+      "contains": [
+        "No se puede reestablecer este archivo",
+        "Falta la hoja «_meta»"
+      ],
+      "assert": "ctx['conteos']() == ctx['antes']"
+    },
+    {
+      "name": "#34 AC-6 (b) formato ≠ 1: 400 con hoja/fila/columna y nada cambia",
+      "method": "post",
+      "path": "/ajustes/respaldo/reestablecer/",
+      "files": {
+        "archivo": "inv_b2"
+      },
+      "status": [
+        400
+      ],
+      "contains": [
+        "No se puede reestablecer este archivo",
+        "Formato de respaldo «2» no soportado"
+      ],
+      "assert": "ctx['conteos']() == ctx['antes']"
+    },
+    {
+      "name": "#34 AC-6 (c) migración distinta: 400 con hoja/fila/columna y nada cambia",
+      "method": "post",
+      "path": "/ajustes/respaldo/reestablecer/",
+      "files": {
+        "archivo": "inv_c"
+      },
+      "status": [
+        400
+      ],
+      "contains": [
+        "No se puede reestablecer este archivo",
+        "otra versión de la base",
+        "0001_otra"
+      ],
+      "assert": "ctx['conteos']() == ctx['antes']"
+    },
+    {
+      "name": "#34 AC-6 (d) falta una hoja: 400 con hoja/fila/columna y nada cambia",
+      "method": "post",
+      "path": "/ajustes/respaldo/reestablecer/",
+      "files": {
+        "archivo": "inv_d"
+      },
+      "status": [
+        400
+      ],
+      "contains": [
+        "No se puede reestablecer este archivo",
+        "Faltan hojas: Prestamo"
+      ],
+      "assert": "ctx['conteos']() == ctx['antes']"
+    },
+    {
+      "name": "#34 AC-6 (d) falta una columna: 400 con hoja/fila/columna y nada cambia",
+      "method": "post",
+      "path": "/ajustes/respaldo/reestablecer/",
+      "files": {
+        "archivo": "inv_d2"
+      },
+      "status": [
+        400
+      ],
+      "contains": [
+        "No se puede reestablecer este archivo",
+        "Hoja Soldado, fila 1: columnas incorrectas"
+      ],
+      "assert": "ctx['conteos']() == ctx['antes']"
+    },
+    {
+      "name": "#34 AC-6 (e) compania_id inexistente: 400 con hoja/fila/columna y nada cambia",
+      "method": "post",
+      "path": "/ajustes/respaldo/reestablecer/",
+      "files": {
+        "archivo": "inv_e"
+      },
+      "status": [
+        400
+      ],
+      "contains": [
+        "No se puede reestablecer este archivo",
+        "Hoja Armamento, fila",
+        "columna compania_id: el id 999999999 no existe"
+      ],
+      "assert": "ctx['conteos']() == ctx['antes']"
+    },
+    {
+      "name": "#34 AC-6 (f) numero_serie duplicado: 400 con hoja/fila/columna y nada cambia",
+      "method": "post",
+      "path": "/ajustes/respaldo/reestablecer/",
+      "files": {
+        "archivo": "inv_f"
+      },
+      "status": [
+        400
+      ],
+      "contains": [
+        "No se puede reestablecer este archivo",
+        "Hoja Armamento, fila",
+        "columna numero_serie: valor repetido"
+      ],
+      "assert": "ctx['conteos']() == ctx['antes']"
+    },
+    {
+      "name": "#34 AC-6 (g) fecha ilegible: 400 con hoja/fila/columna y nada cambia",
+      "method": "post",
+      "path": "/ajustes/respaldo/reestablecer/",
+      "files": {
+        "archivo": "inv_g"
+      },
+      "status": [
+        400
+      ],
+      "contains": [
+        "No se puede reestablecer este archivo",
+        "Hoja Movimiento, fila",
+        "columna fecha",
+        "no es una fecha y hora válida"
+      ],
+      "assert": "ctx['conteos']() == ctx['antes']"
+    },
+    {
+      "name": "#34 AC-7 archivo válido -> vista previa con conteos, fecha, correo y aviso; nada cambió",
+      "method": "post",
+      "path": "/ajustes/respaldo/reestablecer/",
+      "files": {
+        "archivo": "xlsx"
+      },
+      "contains": [
+        "Confirmar restauración",
+        "Se reemplazarán TODOS los datos actuales",
+        "{ctx[user].email}",
+        "Actual → respaldo",
+        "Armamento",
+        "Movimiento",
+        "name=\"confirmacion\""
+      ],
+      "assert": "ctx['conteos']() == ctx['antes'] and str(ctx['antes']['Armamento']) + ' → ' + str(ctx['antes']['Armamento']) in body"
+    },
+    {
+      "name": "#34 AC-8 palabra incorrecta -> vuelve la vista previa con el error, nada cambia",
+      "method": "post",
+      "path": "/ajustes/respaldo/reestablecer/confirmar/",
+      "data": {
+        "confirmacion": "reestablecer"
+      },
+      "contains": [
+        "Escribe exactamente REESTABLECER para confirmar",
+        "Confirmar restauración"
+      ],
+      "assert": "ctx['conteos']() == ctx['antes']"
+    },
+    {
+      "name": "(paso) cambiar datos: arma nueva, entrega, soldado borrado, préstamo de consumo",
+      "path": "/health/",
+      "assert": "ctx['cambiar']()"
+    },
+    {
+      "name": "#34 AC-13 REESTABLECER con carga real: 302 a /ajustes/ en < 25 s",
+      "method": "post",
+      "path": "/ajustes/respaldo/reestablecer/confirmar/",
+      "data": {
+        "confirmacion": "REESTABLECER"
+      },
+      "status": [
+        302
+      ],
+      "max_seconds": 25,
+      "assert": "response['Location'].endswith('/ajustes/')"
+    },
+    {
+      "name": "#34 AC-3/AC-4/AC-11 los datos quedan exactamente como el archivo (cambios revertidos, saldos, ubicaciones, textos)",
+      "path": "/health/",
+      "assert": "ctx['revertido']()"
+    },
+    {
+      "name": "#34 AC-12 mensaje 'Respaldo del AAAA-MM-DD HH:MM reestablecido: N registros' y sesión activa",
+      "path": "/ajustes/",
+      "contains": [
+        "reestablecido:",
+        " registros"
+      ],
+      "assert": "__import__('re').search(r'Respaldo del \\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2} reestablecido: \\d+ registros', body)"
+    },
+    {
+      "name": "#34 AC-12 el ADMIN sigue autenticado: GET / -> 200",
+      "path": "/",
+      "status": [
+        200
+      ]
+    },
+    {
+      "name": "#34 AC-5 secuencias reajustadas: soldado y movimiento nuevos con id > máximo del archivo",
+      "path": "/health/",
+      "assert": "ctx['secuencias']()"
+    },
+    {
+      "name": "#34 AC-3 re-exportar tras restaurar: mismas hojas y conteos que el primer archivo (más lo creado en AC-5)",
+      "path": "/ajustes/respaldo/exportar/",
+      "save": "export2",
+      "assert": "ctx['libro'](ctx['export2']).sheetnames == ctx['libro'](ctx['xlsx']).sheetnames"
+    },
+    {
+      "name": "#34 AC-1 ENLACE no ve la tarjeta Reestablecer respaldo",
+      "login_as": "enlace",
+      "path": "/ajustes/",
+      "not_contains": [
+        "Reestablecer respaldo",
+        "/ajustes/respaldo/reestablecer/"
+      ]
+    },
+    {
+      "name": "#34 AC-2 ENLACE GET subir -> 403",
+      "path": "/ajustes/respaldo/reestablecer/",
+      "status": [
+        403
+      ]
+    },
+    {
+      "name": "#34 AC-2 ENLACE POST subir con archivo válido -> 403, nada cambia",
+      "method": "post",
+      "path": "/ajustes/respaldo/reestablecer/",
+      "files": {
+        "archivo": "xlsx"
+      },
+      "status": [
+        403
+      ],
+      "assert": "ctx['conteos']()['Armamento'] == ctx['antes']['Armamento']"
+    },
+    {
+      "name": "#34 AC-2 ENLACE POST confirmar REESTABLECER -> 403",
+      "method": "post",
+      "path": "/ajustes/respaldo/reestablecer/confirmar/",
+      "data": {
+        "confirmacion": "REESTABLECER"
+      },
+      "status": [
+        403
+      ]
+    },
+    {
+      "name": "#34 AC-1 CONSULTA no ve la tarjeta Reestablecer respaldo",
+      "login_as": "consulta",
+      "path": "/ajustes/",
+      "not_contains": [
+        "Reestablecer respaldo",
+        "/ajustes/respaldo/reestablecer/"
+      ]
+    },
+    {
+      "name": "#34 AC-2 CONSULTA GET subir -> 403",
+      "path": "/ajustes/respaldo/reestablecer/",
+      "status": [
+        403
+      ]
+    },
+    {
+      "name": "#34 AC-2 CONSULTA POST subir con archivo válido -> 403, nada cambia",
+      "method": "post",
+      "path": "/ajustes/respaldo/reestablecer/",
+      "files": {
+        "archivo": "xlsx"
+      },
+      "status": [
+        403
+      ],
+      "assert": "ctx['conteos']()['Armamento'] == ctx['antes']['Armamento']"
+    },
+    {
+      "name": "#34 AC-2 CONSULTA POST confirmar REESTABLECER -> 403",
+      "method": "post",
+      "path": "/ajustes/respaldo/reestablecer/confirmar/",
+      "data": {
+        "confirmacion": "REESTABLECER"
+      },
+      "status": [
+        403
+      ]
+    },
+    {
+      "name": "#34 AC-2 sin sesión, subir redirige al login",
+      "login_as": "",
+      "path": "/ajustes/respaldo/reestablecer/",
+      "status": [
+        302
+      ],
+      "assert": "'/cuenta/login/' in response['Location']"
+    },
+    {
+      "name": "#34 AC-2 sin sesión, POST confirmar redirige al login",
+      "method": "post",
+      "path": "/ajustes/respaldo/reestablecer/confirmar/",
+      "data": {
+        "confirmacion": "REESTABLECER"
+      },
+      "status": [
+        302
+      ],
+      "assert": "'/cuenta/login/' in response['Location']"
+    }
+  ]
+}
