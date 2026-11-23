@@ -1,0 +1,41 @@
+{% extends "inventory/base_mobile.html" %}
+{% block title %}Confirmar restauración{% endblock %}
+{% block content %}
+<h1 class="siga-page-title">Confirmar restauración</h1>
+<div class="siga-page-subtitle">
+  Respaldo del {% if generado %}{{ generado|date:"Y-m-d H:i" }}{% else %}?{% endif %}{% if generado_por %}, generado por {{ generado_por }}{% endif %}. El archivo es válido.
+</div>
+
+<div class="siga-aviso-peligro" role="alert">
+  <strong>Se reemplazarán TODOS los datos actuales</strong> (inventario, soldados, consumo, préstamos y movimientos) por los del respaldo. No se puede deshacer.
+  Los usuarios no se borran ni se modifican.
+  <div style="margin-top:8px;">Recomendado: <a href="{% url 'inventory:respaldo_exportar' %}">exporta primero el estado actual</a>.</div>
+</div>
+
+<div class="siga-summary siga-respaldo-conteos">
+  <div class="siga-summary__row">
+    <span class="label">Tabla</span>
+    <span class="value">Actual → respaldo</span>
+  </div>
+  {% for f in filas %}
+  <div class="siga-summary__row">
+    <span class="label">{{ f.hoja }}</span>
+    <span class="value">{{ f.actual }} → {{ f.archivo }}</span>
+  </div>
+  {% endfor %}
+</div>
+
+<form method="post" action="{% url 'inventory:respaldo_confirmar' %}">
+  {% csrf_token %}
+  <div class="siga-field">
+    <label for="id_confirmacion">Para confirmar, escribe {{ palabra }}</label>
+    <input type="text" name="confirmacion" id="id_confirmacion" autocomplete="off" autocapitalize="characters" required>
+    {% if error %}<div class="siga-field-error">{{ error }}</div>{% endif %}
+  </div>
+  <button type="submit" class="siga-btn-primary" style="background:var(--siga-red-dark);">Reemplazar todos los datos</button>
+</form>
+<form method="post" action="{% url 'inventory:respaldo_confirmar' %}">
+  {% csrf_token %}
+  <button type="submit" name="cancelar" value="1" class="siga-btn-secondary" style="margin-top:10px; width:100%;">Cancelar</button>
+</form>
+{% endblock %}

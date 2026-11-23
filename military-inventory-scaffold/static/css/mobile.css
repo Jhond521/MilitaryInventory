@@ -234,6 +234,37 @@ body.siga-app {
   padding: 14px;
 }
 
+/* Backup cards in Ajustes (issues #33/#34). */
+.siga-card__sub {
+  display: block;
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--siga-text-muted);
+}
+
+.siga-card--peligro {
+  border-color: var(--siga-red-dark);
+}
+
+.siga-card--peligro strong {
+  color: var(--siga-red-dark);
+}
+
+.siga-aviso-peligro {
+  background: var(--siga-badge-en-mano-bg);
+  color: var(--siga-red-dark);
+  border: 1px solid var(--siga-red-dark);
+  border-radius: 10px;
+  padding: 12px;
+  margin: 0 0 14px;
+  font-size: 14px;
+}
+
+.siga-aviso-peligro ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
 .siga-card__top {
   display: flex;
   align-items: center;

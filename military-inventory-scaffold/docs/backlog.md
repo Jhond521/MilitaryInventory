@@ -380,6 +380,19 @@ El corazón del sistema.
     `requiere_operador` (ADMIN o ENLACE) en las 8 vistas de entregar/devolver/prestar; las
     plantillas ocultan esos botones con `user.puede_operar`. Puede cambiar su contraseña.
 
+## Actualizaciones v1.9 (issues #33 y #34)
+
+- H-34 — Exportar respaldo en Excel (RF-26, RNF-06) ✅
+  - **Estado**: Hecho (issue #33). La tarjeta "Exportar respaldo" de Ajustes (solo ADMIN)
+    descarga un `.xlsx` con `_meta` y 15 hojas. El formato vive en
+    `apps/inventory/respaldo.py` (`MODELOS_RESPALDO`) y lo comparte la restauración. No hay
+    migraciones.
+- H-35 — Reestablecer respaldo (RF-27, RNF-06) ✅
+  - **Estado**: Hecho (issue #34). La tarjeta "Reestablecer respaldo" (solo ADMIN) sigue tres
+    pasos: subir y validar (en memoria y en seco con rollback), vista previa y confirmación
+    `REESTABLECER`. Reemplaza todo en una transacción, sin lógica de negocio (ADR-0008). Los
+    usuarios se cruzan por correo. No hay migraciones.
+
 ## Fase 2 — Siguiente
 
 - H-20 — Módulo de importación de Excel autoservicio (que David suba y cargue) (RF-13)
@@ -415,7 +428,7 @@ El corazón del sistema.
     actualizar pip (el soporte de `--group` requiere pip ≥25.1). No necesita Postgres ni
     variables de entorno — corre igual que en local, con el fallback a SQLite y los
     valores por defecto de `AUTHORIZED_EMAILS`/`SECRET_KEY` ya presentes en `settings.py`.
-- [ ] T-04 — Definir política de respaldo del Postgres (RNF-06)
+- [ ] T-04 — Definir política de respaldo del Postgres (RNF-06). El respaldo manual en Excel ya existe (H-34/H-35). David confirmó que no hace falta un respaldo automático (2026-11-23).
 - [ ] T-05 — Cerrar la lista de 6 correos y el rol de cada persona (P-1, P-2)
 - [x] T-06 — Habilitar PWA: web app manifest + service worker, íconos (escudo), responsive mobile-first, navegación inferior (RF-17, RNF-04)
   - **Notas técnicas**: manifest/service worker ya existían (T-07); esta historia agregó

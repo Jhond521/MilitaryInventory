@@ -2,14 +2,19 @@
 
 | | |
 |---|---|
-| **Estado** | En revisión (v1.8 — usuario de solo consulta) |
+| **Estado** | En revisión (v1.9 — respaldo en Excel) |
 | **Autor** | John Cuervo (para David Bolaños — Batallón de Selva No. 52) |
 | **Última actualización** | 2026-11-23 |
-| **Versión** | v1.8 |
+| **Versión** | v1.9 |
 
 > **Terminología** (issue #26, 2026-10-21): en la interfaz, el módulo de existencias por
 > cantidad (munición, cascos sin serie, granadas, etc.) se llama **Consumo**. En este
 > documento "munición" sigue nombrando ese mismo material.
+>
+> **Cambios v1.9** (issues #33 y #34, 2026-11-23): se agregan **RF-26** (exportar un
+> respaldo completo en Excel) y **RF-27** (reestablecer ese respaldo). Ambos son solo para
+> administradores y cubren RNF-06. No hay respaldo automático: lo genera David o el
+> administrador que él designe.
 >
 > **Cambios v1.8** (issue #35, 2026-11-23): se agrega **RF-25**, un tercer rol **Consulta**
 > (solo lectura). Lo crea un administrador, sin tope de cantidad, y no necesita estar en la
@@ -448,6 +453,36 @@ lista ni permitirles registrar nada. (Issue #35.)
   nada: esas rutas responden 403 y la interfaz no le muestra los botones.
 - [ ] Puede cambiar su propia contraseña.
 
+### RF-26 — Exportar respaldo en Excel
+**Prioridad**: Media
+**Descripción**: Como administrador, quiero descargar un Excel con todos los datos del
+sistema, para tener un respaldo que pueda volver a cargar. (Issue #33.)
+**Criterios de aceptación**:
+
+- [ ] En Ajustes, solo el administrador ve "Exportar respaldo". Las demás personas reciben 403.
+- [ ] El archivo `SIGA-respaldo-AAAAMMDD-HHMM.xlsx` trae una hoja `_meta` (formato, fecha,
+  quién lo generó, versión de la base y conteos) y una hoja por tabla, relacionadas por ID.
+  Incluye todas las compañías, sin importar la compañía de trabajo.
+- [ ] Los usuarios van sin contraseña. Un texto que empieza por `=` sale como texto, no como
+  fórmula. Exportar no cambia nada.
+
+### RF-27 — Reestablecer respaldo
+**Prioridad**: Media
+**Descripción**: Como administrador, quiero cargar un respaldo de RF-26 para dejar el
+sistema exactamente como estaba en ese momento. (Issue #34.)
+**Criterios de aceptación**:
+
+- [ ] Solo el administrador puede hacerlo. Primero se revisa todo el archivo y los errores
+  se muestran con hoja, fila y columna, sin cambiar nada.
+- [ ] Una vista previa muestra los conteos actuales y los del respaldo. Para confirmar hay
+  que escribir `REESTABLECER`. Se recomienda exportar antes el estado actual, pero no se
+  obliga.
+- [ ] Es un reemplazo completo y todo o nada: conserva IDs, fechas, saldos y ubicaciones, y
+  no recalcula ni registra movimientos nuevos.
+- [ ] Los usuarios se cruzan por correo: no se borran ni se modifican, y los que faltan se
+  crean inactivos.
+- [ ] Un respaldo de otra versión de la base se rechaza.
+
 ## 7. Requerimientos no funcionales
 
 | ID | Categoría | Requerimiento | Cómo se verifica |
@@ -457,7 +492,7 @@ lista ni permitirles registrar nada. (Issue #35.)
 | RNF-03 | Trazabilidad | Todo movimiento (entrega/devolución/préstamo/baja) queda con usuario y fecha/hora, sin borrado silencioso. | Revisar historial tras cada tipo de movimiento. |
 | RNF-04 | Usabilidad / Móvil | Interfaz en español, responsive (escritorio y celular) e instalable como PWA, usable por personal no técnico. | Prueba en celular por las 6 personas; instalar en pantalla de inicio. |
 | RNF-05 | Disponibilidad | Accesible por internet; tolerante a conectividad intermitente (Apiay/Caruru). | Verificar acceso desde ambas sedes. |
-| RNF-06 | Respaldo | Respaldo periódico del inventario. | Confirmar respaldo y restauración de prueba. |
+| RNF-06 | Respaldo | Respaldo del inventario: el administrador lo exporta en Excel y lo reestablece (RF-26, RF-27). | Confirmar respaldo y restauración de prueba. |
 
 ## 8. Flujo principal
 
@@ -503,7 +538,7 @@ información se respalda. Los elementos dados de baja se conservan (no se elimin
 
 | Fase | Contenido | Requerimientos |
 |---|---|---|
-| v1 (MVP) | Acceso + roles, selección de compañía, CRUD de datos maestros, pelotones, material serializado (alta/ubicación/estado/movimientos/baja), existencias por cantidad y préstamo de munición, entrega/devolución de existencias a un soldado, grado del soldado, búsqueda, campos personalizados, carga inicial serializada, ficha del soldado, cédula del soldado, devolución de préstamos de munición, préstamo temporal de armamento, selección global de compañía y/o depósito, usuario de solo consulta, y app **móvil responsive e instalable (PWA)**. | RF-01 a RF-25 |
+| v1 (MVP) | Acceso + roles, selección de compañía, CRUD de datos maestros, pelotones, material serializado (alta/ubicación/estado/movimientos/baja), existencias por cantidad y préstamo de munición, entrega/devolución de existencias a un soldado, grado del soldado, búsqueda, campos personalizados, carga inicial serializada, ficha del soldado, cédula del soldado, devolución de préstamos de munición, préstamo temporal de armamento, selección global de compañía y/o depósito, usuario de solo consulta, respaldo en Excel (exportar y reestablecer), y app **móvil responsive e instalable (PWA)**. | RF-01 a RF-27 |
 | Siguiente | Importador de Excel autoservicio, carga de munición inicial, reportes/exportes, tablero de resumen por compañía, acuse de entrega. | — |
 | Algún día | Multi-unidad con configurador, app móvil, escaneo de serie. | — |
 

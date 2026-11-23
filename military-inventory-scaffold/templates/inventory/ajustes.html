@@ -13,6 +13,14 @@
   <a class="siga-card" href="{% url 'inventory:prestamo_list' %}"><strong>Préstamos de consumo</strong></a>
   {% if user.is_admin_role %}
   <a class="siga-card" href="{% url 'accounts:usuario_list' %}"><strong>Usuarios</strong></a>
+  <a class="siga-card" href="{% url 'inventory:respaldo_exportar' %}">
+    <strong>Exportar respaldo</strong>
+    <span class="siga-card__sub">Descarga un Excel con todos los datos.</span>
+  </a>
+  <a class="siga-card siga-card--peligro" href="{% url 'inventory:respaldo_reestablecer' %}">
+    <strong>Reestablecer respaldo</strong>
+    <span class="siga-card__sub">Reemplaza todos los datos con un respaldo.</span>
+  </a>
   {% endif %}
 </div>
 {% endblock %}
